@@ -1,0 +1,147 @@
+import { Fragment, useEffect, useState } from "react";
+import ReactDOM from "react-dom/client";
+import "./index.scss";
+import { HelmetProvider } from "react-helmet-async";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { RouteData } from "./data/Routingdata.jsx";
+import Scrolltotop from "./components/Scrolltotop.jsx";
+import { Provider, useDispatch, useSelector } from "react-redux";
+import store from "./redux/Store.jsx";
+import {
+  App,
+  ProtectedRoute,
+  PublicRoute,
+  Signin,
+  Error404,
+  NoAccess,
+  SessionsExpired,
+} from "./pages";
+import { Helmet } from "react-helmet";
+import { bootstrapSession } from "./redux/actions/authActions.jsx";
+import { disableReactDevTools } from "@fvilers/disable-react-devtools";
+import NoInternetConnection from "./components/NoInternetConnection.jsx";
+
+// Session bootstrap: if a refresh token survived the reload, /auth/me is
+// called (the interceptor silently refreshes the expired access token) and the
+// user + flattened permissions are rehydrated before any route renders.
+const AuthProvider = ({ children }) => {
+  const dispatch = useDispatch();
+  useEffect(() => {
+    dispatch(bootstrapSession());
+  }, [dispatch]);
+  return children;
+};
+
+const ThemeWrapper = ({ children }) => {
+  const theme = useSelector((state) => state.theme);
+  return (
+    <Fragment>
+      <HelmetProvider>
+        <Helmet>
+          <html
+            dir={"rtl"}
+            data-theme-mode={theme?.datathememode}
+            data-header-styles={theme.dataheaderstyles}
+            data-vertical-style={theme.dataverticalstyle}
+            data-nav-layout={theme.datanavlayout}
+            data-menu-styles={theme.datamenustyles}
+            data-toggled={theme.toggled}
+            data-nav-style={theme.datanavstyle}
+            hor-style={theme.horstyle}
+            data-page-style={theme.datapagestyle}
+            data-width={theme.datawidth}
+            data-menu-position={theme.datamenuposition}
+            data-header-position={theme.dataheaderposition}
+            data-icon-overlay={theme.iconoverlay}
+            data-bg-img={theme.bgimg}
+          ></html>
+        </Helmet>
+      </HelmetProvider>
+      {children}
+    </Fragment>
+  );
+};
+
+if (process.env.NODE_ENV === "production") {
+  disableReactDevTools();
+}
+
+const AppWrapper = () => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const updateOnlineStatus = () => setIsOnline(navigator.onLine);
+
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
+
+  return (
+    <Fragment>
+      {!isOnline && <NoInternetConnection />}
+      <Routes>
+        <Route
+          path={`${import.meta.env.BASE_URL}/signin`}
+          element={<PublicRoute element={<Signin />} />}
+        />
+        <Route
+          path={`${import.meta.env.BASE_URL}`}
+          element={
+            <ProtectedRoute element={<App />} requiredPermissions={[]} />
+          }
+        >
+          {RouteData.map((idx) => (
+            <Route
+              key={idx.id}
+              path={idx.path}
+              element={
+                <ProtectedRoute
+                  element={idx.element}
+                  requiredPermissions={idx.requiredPermissions}
+                />
+              }
+            />
+          ))}
+        </Route>
+        <Route
+          path={`${import.meta.env.BASE_URL}/no_access`}
+          element={<NoAccess />}
+        />
+        <Route
+          path={`${import.meta.env.BASE_URL}/404`}
+          element={<Error404 />}
+        />
+        <Route
+          path={`${import.meta.env.BASE_URL}/session-expired`}
+          element={<SessionsExpired />}
+        />
+        <Route path="*" element={<Error404 />} />
+      </Routes>
+    </Fragment>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <Fragment>
+    <Provider store={store}>
+      <AuthProvider>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <ThemeWrapper>
+            <Scrolltotop />
+            <AppWrapper />
+          </ThemeWrapper>
+        </BrowserRouter>
+      </AuthProvider>
+    </Provider>
+  </Fragment>
+);

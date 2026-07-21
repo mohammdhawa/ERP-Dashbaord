@@ -1,0 +1,64 @@
+@import url("https://fonts.googleapis.com/css2?family=Alexandria:wght@100..900&family=Almarai:wght@300;400;700;800&family=Readex+Pro:wght@160..700&family=Rubik:ital,wght@0,300..900;1,300..900&family=Tajawal:wght@200;300;400;500;700;800;900&family=Zain:wght@200;300;400;700;800;900&display=swap");
+@import "variables";
+
+
+/* BOOTSTRAP */
+@import "bootstrap/accordion";
+@import "bootstrap/alerts";
+@import "bootstrap/badge";
+@import "bootstrap/breadcrumb";
+@import "bootstrap/buttons";
+@import "bootstrap/cards";
+@import "bootstrap/dropdown";
+@import "bootstrap/forms";
+@import "bootstrap/input_group";
+@import "bootstrap/list_group";
+@import "bootstrap/modals";
+@import "bootstrap/navbar";
+@import "bootstrap/navs_tabs";
+@import "bootstrap/pagination";
+@import "bootstrap/popovers";
+@import "bootstrap/progress";
+@import "bootstrap/tables";
+@import "bootstrap/toast";
+@import "bootstrap/tooltips";
+
+/* CUSTOM */
+@import "custom/authentication";
+@import "custom/custom";
+@import "custom/dashboard_styles";
+@import "custom/error";
+@import "custom/global";
+@import "custom/header";
+@import "custom/image";
+@import "custom/plugins";
+@import "custom/widgets";
+
+/* MENU-STYLES */
+@import "menu-styles/closed_menu";
+@import "menu-styles/detached_menu";
+@import "menu-styles/double_menu";
+@import "menu-styles/horizontal";
+@import "menu-styles/icon_click";
+@import "menu-styles/icon_hover";
+@import "menu-styles/icon_overlay";
+@import "menu-styles/icontext";
+@import "menu-styles/menu_click";
+@import "menu-styles/menu_hover";
+@import "menu-styles/vertical";
+
+/* PAGES */
+@import "pages/chat";
+@import "pages/ecommerce";
+@import "pages/file-manager";
+@import "pages/landing";
+@import "pages/mail";
+@import "pages/task";
+
+/* UTILITIES */
+@import "util/avatars";
+@import "util/background";
+@import "util/border";
+@import "util/opacity";
+@import "util/typography";
+
