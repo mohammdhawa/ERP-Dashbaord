@@ -32,14 +32,21 @@ const Roles = () => {
     {
       key: "name",
       label: "الدور",
-      render: (value) =>
-        value === "admin" ? (
-          <span className="badge bg-danger-transparent fs-12">
-            {value} <i className="ri-shield-star-line align-middle"></i>
+      // Show the Arabic label preferentially, keep the stable machine name
+      // visible beneath it. System roles get a badge and cannot be mutated.
+      render: (value, role) => (
+        <div className="d-flex flex-column">
+          <span className="fw-semibold">
+            {role.label || value}
+            {role.is_system && (
+              <span className="badge bg-danger-transparent fs-11 ms-1">
+                نظام <i className="ri-shield-star-line align-middle"></i>
+              </span>
+            )}
           </span>
-        ) : (
-          <span className="fw-semibold">{value}</span>
-        ),
+          <code className="fs-11 text-muted">{value}</code>
+        </div>
+      ),
     },
     {
       key: "description",
@@ -120,9 +127,12 @@ const Roles = () => {
                     setModalOpen(true);
                   },
                   handleDelete: (id) => dispatch(deleteRole(id)),
-                  // The seeded admin role is protected server-side (422);
-                  // hide its delete action entirely.
-                  hideDelete: (role) => role.name === "admin",
+                  // System roles (is_system) cannot be renamed/edited/deleted
+                  // (server 409). Disable both controls; assignment stays open.
+                  disableUpdate: (role) => role.is_system,
+                  disabledUpdateReason: "دور نظام لا يمكن تعديله",
+                  disableDelete: (role) => role.is_system,
+                  disabledDeleteReason: "دور نظام لا يمكن حذفه",
                 }}
               />
             </Card.Body>

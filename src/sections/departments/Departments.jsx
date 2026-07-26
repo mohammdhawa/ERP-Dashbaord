@@ -15,7 +15,34 @@ const DepartmentFormModal = lazy(() => import("./DepartmentFormModal"));
 
 const columns = [
   { key: "id", label: "#" },
-  { key: "name", label: "اسم القسم" },
+  { key: "name", label: "اسم الوحدة" },
+  {
+    key: "level_label",
+    label: "المستوى",
+    // Server-resolved Arabic tier label — never mapped from `level` locally.
+    render: (value) =>
+      value ? (
+        <span className="badge bg-primary-transparent">{value}</span>
+      ) : (
+        <span className="text-muted">—</span>
+      ),
+  },
+  {
+    key: "code",
+    label: "الرمز",
+    render: (value) =>
+      value ? value : <span className="text-muted">—</span>,
+  },
+  {
+    key: "is_active",
+    label: "الحالة",
+    render: (value) =>
+      value ? (
+        <span className="badge bg-success-transparent">مُفعّلة</span>
+      ) : (
+        <span className="badge bg-danger-transparent">معطّلة</span>
+      ),
+  },
   {
     key: "manager_id",
     label: "المدير",
@@ -47,6 +74,14 @@ const Departments = () => {
     dispatch(fetchDepartments(page));
   }, [dispatch, page]);
 
+  // If a deletion (here or elsewhere) shrinks the tree so the current page no
+  // longer exists, snap back to the nearest valid page from server metadata.
+  useEffect(() => {
+    if (meta && meta.last_page >= 1 && page > meta.last_page) {
+      setPage(meta.last_page);
+    }
+  }, [meta, page]);
+
   const openCreate = () => {
     setEditingDepartment(null);
     setModalOpen(true);
@@ -62,13 +97,17 @@ const Departments = () => {
   return (
     <Fragment>
       <Helmet>
-        <title>الراقي ERP | الأقسام</title>
+        <title>الراقي ERP | الوحدات التنظيمية</title>
       </Helmet>
-      <PageHeader homepage="الأقسام" activepage="المؤسسة" page="الأقسام">
+      <PageHeader
+        homepage="الوحدات التنظيمية"
+        activepage="المؤسسة"
+        page="الوحدات التنظيمية"
+      >
         <ProtectedElement
           element={
             <button onClick={openCreate} className="btn btn-secondary btn-wave">
-              <i className="ri-add-line align-middle me-1"></i> إضافة قسم
+              <i className="ri-add-line align-middle me-1"></i> إضافة وحدة تنظيمية
             </button>
           }
           requiredPermissions={["departments.create"]}

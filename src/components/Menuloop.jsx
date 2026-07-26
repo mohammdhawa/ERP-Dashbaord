@@ -2,21 +2,20 @@ import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
 import { useSelector } from "react-redux";
+import { hasPermission } from "../data/permissionsCatalog";
 
 const Menuloop = ({ MENUITEMS, toggleSidemenu, level }) => {
   const { permissions } = useSelector((state) => state.auth);
 
-  const hasAllPermissions = (requiredPermissions) => {
-    if (!requiredPermissions || requiredPermissions.length === 0) return true;
-    return requiredPermissions.some((perm) => permissions?.includes(perm));
-  };
-
+  // Hide a parent group unless at least one child is reachable, so empty
+  // sections never render for users lacking access to any item inside.
   const hasAnySubMenuAccess = MENUITEMS.children?.some((child) =>
-    hasAllPermissions(child.requiredPermissions)
+    hasPermission(permissions, child.requiredPermissions)
   );
 
   const shouldRenderMainMenu =
-    hasAllPermissions(MENUITEMS.requiredPermissions) && hasAnySubMenuAccess;
+    hasPermission(permissions, MENUITEMS.requiredPermissions) &&
+    hasAnySubMenuAccess;
 
   if (!shouldRenderMainMenu) {
     return null;
@@ -72,8 +71,7 @@ const Menuloop = ({ MENUITEMS, toggleSidemenu, level }) => {
         )}
 
         {MENUITEMS.children?.map((firstlevel) =>
-          hasAllPermissions(firstlevel.requiredPermissions) ||
-          !firstlevel.requiredPermissions?.length ? (
+          hasPermission(permissions, firstlevel.requiredPermissions) ? (
             <li
               className={`${firstlevel.menutitle ? "slide__category" : ""} 
                   ${firstlevel?.type === "empty" ? "slide" : ""} 

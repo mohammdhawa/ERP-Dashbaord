@@ -3,13 +3,14 @@ import { Card, Col, Row } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet";
 import { useSelector } from "react-redux";
+import { hasPermission } from "../../data/permissionsCatalog";
 
 // Phase-1 landing page: a permission-aware launcher into the ERP modules.
 // (No aggregate/statistics endpoints exist yet in the Phase-1 API.)
 const MODULES = [
   {
-    title: "الأقسام",
-    description: "إدارة أقسام المؤسسة ومدرائها",
+    title: "الوحدات التنظيمية",
+    description: "إدارة الوحدات التنظيمية للمؤسسة ومدرائها",
     icon: "ri-community-line",
     color: "primary",
     path: "/departments",
@@ -53,8 +54,8 @@ const Dashboard = () => {
   const { user, permissions } = useSelector((state) => state.auth);
   const { unreadCount } = useSelector((state) => state.notifications);
 
-  const visibleModules = MODULES.filter(
-    (m) => !m.permission || permissions.includes(m.permission)
+  const visibleModules = MODULES.filter((m) =>
+    hasPermission(permissions, m.permission)
   );
 
   return (

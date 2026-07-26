@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Card, Col, Form, Row, Spinner } from "react-bootstrap";
+import { Alert, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
 import { assignRole, unassignRole } from "../../redux/actions/rolesActions";
@@ -26,7 +26,11 @@ const AssignRoleCard = () => {
     value: u.id,
     label: `${u.name} (${u.email})`,
   }));
-  const roleOptions = roles.map((r) => ({ value: r.id, label: r.name }));
+  // Prefer the Arabic label for display, keep the machine name for clarity.
+  const roleOptions = roles.map((r) => ({
+    value: r.id,
+    label: r.label ? `${r.label} (${r.name})` : r.name,
+  }));
 
   const resolvedUserId = canListUsers
     ? selectedUser?.value
@@ -70,13 +74,20 @@ const AssignRoleCard = () => {
                 isClearable
               />
             ) : (
-              <Form.Control
-                type="number"
-                min={1}
-                placeholder="معرّف المستخدم (ID)"
-                value={manualUserId}
-                onChange={(e) => setManualUserId(e.target.value)}
-              />
+              <>
+                <Alert variant="warning" className="py-2 px-3 mb-2">
+                  <i className="ri-information-line align-middle me-1"></i>
+                  قائمة المستخدمين غير متاحة — تتطلب صلاحية{" "}
+                  <code>auth.users.view</code>. أدخل معرّف المستخدم يدويًا.
+                </Alert>
+                <Form.Control
+                  type="number"
+                  min={1}
+                  placeholder="معرّف المستخدم (ID)"
+                  value={manualUserId}
+                  onChange={(e) => setManualUserId(e.target.value)}
+                />
+              </>
             )}
           </Col>
           <Col sm={12} md={4}>

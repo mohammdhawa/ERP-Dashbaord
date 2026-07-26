@@ -44,7 +44,14 @@ const Users = () => {
 
   const columns = [
     { key: "id", label: "#" },
-    { key: "name", label: "الاسم" },
+    {
+      key: "name",
+      // No stored account name — this is the linked employee's name, null when
+      // the account is not linked to an employee.
+      label: "الاسم",
+      render: (value) =>
+        value ? value : <span className="text-muted">غير مرتبط</span>,
+    },
     {
       key: "email",
       label: "البريد الإلكتروني",

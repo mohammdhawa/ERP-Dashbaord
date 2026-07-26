@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(Get-ChildItem -Recurse src | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\(\"$PWD\\\\\", \"\"\\) })",
+      "PowerShell(npm install --no-audit --no-fund)",
+      "PowerShell(npm run build)",
+      "PowerShell(npm run dev)",
+      "Bash(npm run *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(grep -oiE \"[a-z-]+/[a-z-]+$|no-unused-vars|no-undef|react-hooks[a-z/-]*\")"
+    ]
+  }
+}

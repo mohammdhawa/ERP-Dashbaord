@@ -6,6 +6,8 @@ import {
   createEmployee,
   updateEmployee,
 } from "../../redux/actions/employeesActions";
+import { hasPermission } from "../../data/permissionsCatalog";
+import { useResourceOptions } from "../departments/useResourceOptions";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "نشط" },
@@ -13,8 +15,15 @@ const STATUS_OPTIONS = [
   { value: "terminated", label: "منتهي الخدمة" },
 ];
 
+const departmentToOption = (d) => ({
+  value: d.id,
+  label: d.name || `قسم #${d.id}`,
+});
+
 const emptyForm = {
+  employee_number: "",
   name: "",
+  national_id: "",
   phone: "",
   email: "",
   address: "",
@@ -29,7 +38,18 @@ const emptyForm = {
 const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.employees);
+  const { permissions } = useSelector((state) => state.auth);
   const isEdit = Boolean(employee);
+
+  // Department picker is only allowed to read the documented `/departments`
+  // pages when the user owns `departments.view`; otherwise we fall back to a
+  // raw id input (never an invented lookup endpoint).
+  const canReadDepartments = hasPermission(permissions, "departments.view");
+  const departments = useResourceOptions(
+    "/departments",
+    departmentToOption,
+    open && canReadDepartments
+  );
 
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
@@ -39,7 +59,9 @@ const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
       setForm(
         employee
           ? {
+              employee_number: employee.employee_number || "",
               name: employee.name || "",
+              national_id: employee.national_id || "",
               phone: employee.phone || "",
               email: employee.email || "",
               address: employee.address || "",
@@ -69,8 +91,10 @@ const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
       clientErrors.email = ["يرجى إدخال بريد إلكتروني صالح."];
     if (form.phone && form.phone.length > 50)
       clientErrors.phone = ["رقم الهاتف طويل جداً (الحد الأقصى 50)."];
-    if (form.salary !== "" && Number(form.salary) < 0)
-      clientErrors.salary = ["يجب أن يكون الراتب صفراً أو أكثر."];
+    // Validate salary as a non-negative decimal WITHOUT coercing it to a float
+    // (that would alter the intended decimal value we send back to the server).
+    if (form.salary !== "" && !/^\d+(\.\d{1,2})?$/.test(String(form.salary).trim()))
+      clientErrors.salary = ["يجب أن يكون الراتب رقماً موجباً (منزلتان عشريتان بحد أقصى)."];
     return clientErrors;
   };
 
@@ -85,16 +109,26 @@ const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
     // Optional fields are nullable server-side: send null instead of "".
     const payload = {
       name: form.name.trim(),
-      phone: form.phone || null,
-      email: form.email || null,
-      address: form.address || null,
+      national_id: form.national_id.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      address: form.address.trim() || null,
       department_id:
-        form.department_id === "" ? null : Number(form.department_id),
-      job_title: form.job_title || null,
+        form.department_id === "" || form.department_id == null
+          ? null
+          : Number(form.department_id),
+      job_title: form.job_title.trim() || null,
       hire_date: form.hire_date || null,
-      salary: form.salary === "" ? null : Number(form.salary),
+      // Keep salary as its exact decimal STRING; a numeric string satisfies the
+      // server's `numeric` rule while preserving precision (no float rounding).
+      salary: String(form.salary).trim() === "" ? null : String(form.salary).trim(),
       status: form.status,
     };
+
+    // `employee_number` is auto-generated when omitted — send it only when the
+    // user supplied one, otherwise leave it off entirely.
+    const trimmedNumber = form.employee_number.trim();
+    if (trimmedNumber !== "") payload.employee_number = trimmedNumber;
 
     try {
       if (isEdit) {
@@ -128,6 +162,45 @@ const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
       <Modal.Body>
         <form className="d-flex flex-column gap-3" onSubmit={handleSubmit}>
           <Row className="g-3">
+            <Col sm={12} md={6}>
+              <Form.Label htmlFor="emp-number">
+                الرقم الوظيفي <span className="text-muted">(يُنشأ تلقائياً)</span>
+              </Form.Label>
+              <Form.Control
+                id="emp-number"
+                type="text"
+                maxLength={50}
+                dir="ltr"
+                placeholder="اتركه فارغاً للإنشاء التلقائي"
+                value={form.employee_number}
+                onChange={(e) => setField("employee_number", e.target.value)}
+                isInvalid={!!fieldError("employee_number")}
+              />
+              {fieldError("employee_number") && (
+                <div className="text-danger small mt-1">
+                  {fieldError("employee_number")}
+                </div>
+              )}
+            </Col>
+            <Col sm={12} md={6}>
+              <Form.Label htmlFor="emp-national-id">رقم الهوية</Form.Label>
+              <Form.Control
+                id="emp-national-id"
+                type="text"
+                maxLength={50}
+                dir="ltr"
+                placeholder="رقم الهوية الوطنية"
+                value={form.national_id}
+                onChange={(e) => setField("national_id", e.target.value)}
+                isInvalid={!!fieldError("national_id")}
+              />
+              {fieldError("national_id") && (
+                <div className="text-danger small mt-1">
+                  {fieldError("national_id")}
+                </div>
+              )}
+            </Col>
+
             <Col sm={12} md={6}>
               <Form.Label htmlFor="emp-name">الاسم الكامل *</Form.Label>
               <Form.Control
@@ -215,16 +288,53 @@ const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
             </Col>
 
             <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-department">رقم القسم</Form.Label>
-              <Form.Control
-                id="emp-department"
-                type="number"
-                min={1}
-                placeholder="معرّف القسم (ID)"
-                value={form.department_id}
-                onChange={(e) => setField("department_id", e.target.value)}
-                isInvalid={!!fieldError("department_id")}
-              />
+              <Form.Label htmlFor="emp-department">
+                القسم <span className="text-muted">(اختياري)</span>
+              </Form.Label>
+              {canReadDepartments && !departments.error ? (
+                <>
+                  <Select
+                    inputId="emp-department"
+                    classNamePrefix="Select2"
+                    options={departments.options}
+                    value={
+                      departments.options.find(
+                        (o) => o.value === Number(form.department_id)
+                      ) || null
+                    }
+                    onChange={(opt) =>
+                      setField("department_id", opt ? opt.value : "")
+                    }
+                    isClearable
+                    isLoading={departments.loading}
+                    placeholder="بدون قسم"
+                    noOptionsMessage={() => "لا توجد أقسام"}
+                    menuPosition="fixed"
+                  />
+                  {departments.incomplete && (
+                    <div className="text-warning small mt-1">
+                      تعذّر تحميل كل الأقسام، القائمة غير مكتملة.
+                    </div>
+                  )}
+                </>
+              ) : (
+                // Truthful fallback: no `departments.view` (or the load failed)
+                // → accept a raw department id instead of an invented lookup.
+                <>
+                  <Form.Control
+                    id="emp-department"
+                    type="number"
+                    min={1}
+                    placeholder="معرّف القسم (ID)"
+                    value={form.department_id}
+                    onChange={(e) => setField("department_id", e.target.value)}
+                    isInvalid={!!fieldError("department_id")}
+                  />
+                  <div className="text-muted small mt-1">
+                    تعذّر تحميل قائمة الأقسام، أدخل المعرّف يدويًا.
+                  </div>
+                </>
+              )}
               {fieldError("department_id") && (
                 <div className="text-danger small mt-1">
                   {fieldError("department_id")}

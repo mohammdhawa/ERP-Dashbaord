@@ -54,3 +54,14 @@ export const permissionLabel = (name) => {
   }
   return name;
 };
+
+// Single permission-check convention for the whole UI. `required` is a stable
+// machine name (string) or a list of them; access is granted when the user
+// holds ANY of them. Empty/undefined = auth-only (no RBAC permission needed).
+// `held` is the flattened permission array from auth state.
+export const hasPermission = (held, required) => {
+  if (required == null) return true;
+  const list = Array.isArray(required) ? required : [required];
+  if (list.length === 0) return true;
+  return list.some((perm) => held?.includes(perm));
+};

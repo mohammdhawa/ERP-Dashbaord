@@ -654,28 +654,22 @@ const Sidebar = () => {
             <img
               src={ALLImages("hBlackLogo")}
               alt="logo"
-              className="desktop-logo"
-              style={{
-                transform: "scale(1.3)",
-              }}
+              className="desktop-logo brand-logo-full"
             />
             <img
               src={ALLImages("sWhiteLogo")}
               alt="logo"
-              className="toggle-dark"
+              className="toggle-dark brand-logo-mark"
             />
             <img
               src={ALLImages("hWhiteLogo")}
               alt="logo"
-              className="desktop-dark"
-              style={{
-                transform: "scale(1.3)",
-              }}
+              className="desktop-dark brand-logo-full"
             />
             <img
               src={ALLImages("sBlackLogo")}
               alt="logo"
-              className="toggle-logo"
+              className="toggle-logo brand-logo-mark"
             />
           </Link>
         </div>

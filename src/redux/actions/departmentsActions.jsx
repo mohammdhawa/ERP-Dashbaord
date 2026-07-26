@@ -74,7 +74,7 @@ export const updateDepartment = (id, data, currentPage) => async (dispatch) => {
 
 export const deleteDepartment = (id, currentPage, itemsOnPage) => async (dispatch) => {
   const confirm = await Swal.fire({
-    title: "هل أنت متأكد من حذف هذا القسم؟",
+    title: "هل أنت متأكد من حذف هذه الوحدة التنظيمية؟",
     text: "لن تتمكن من التراجع عن هذا الإجراء!",
     icon: "warning",
     showCancelButton: true,

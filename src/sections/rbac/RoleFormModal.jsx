@@ -14,21 +14,29 @@ const RoleFormModal = ({ open, close, role }) => {
   const isEdit = Boolean(role);
 
   const [name, setName] = useState("");
+  const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState([]);
+  // Sync semantics: on UPDATE we send `permissions` ONLY when the matrix was
+  // touched. Untouched → key omitted → set left unchanged. Touched but empty →
+  // `permissions: []` → all permissions cleared. On CREATE we always send it.
+  const [permsDirty, setPermsDirty] = useState(false);
   const [errors, setErrors] = useState({});
-  const isAdminRole = role?.name === "admin";
+  const isSystemRole = Boolean(role?.is_system);
 
   useEffect(() => {
     if (open) {
       setName(role?.name || "");
+      setLabel(role?.label || "");
       setDescription(role?.description || "");
       setSelected(role?.permissions || []);
+      setPermsDirty(false);
       setErrors({});
     }
   }, [open, role]);
 
   const togglePermission = (permName) => {
+    setPermsDirty(true);
     setSelected((prev) =>
       prev.includes(permName)
         ? prev.filter((p) => p !== permName)
@@ -37,6 +45,7 @@ const RoleFormModal = ({ open, close, role }) => {
   };
 
   const toggleGroup = (group) => {
+    setPermsDirty(true);
     const names = group.permissions.map((p) => p.name);
     const allSelected = names.every((n) => selected.includes(n));
     setSelected((prev) =>
@@ -55,9 +64,14 @@ const RoleFormModal = ({ open, close, role }) => {
 
     const payload = {
       name: name.trim(),
+      label: label.trim() || null,
       description: description.trim() || null,
-      permissions: selected,
     };
+    // Include `permissions` on create always, and on edit only when the matrix
+    // changed — omitting it leaves the role's set untouched; [] clears it.
+    if (!isEdit || permsDirty) {
+      payload.permissions = selected;
+    }
 
     try {
       if (isEdit) {
@@ -85,11 +99,19 @@ const RoleFormModal = ({ open, close, role }) => {
     >
       <Modal.Header closeButton>
         <Modal.Title as="h6">
-          {isEdit ? `تعديل الدور: ${role?.name}` : "إنشاء دور جديد"}
+          {isEdit
+            ? `تعديل الدور: ${role?.label || role?.name}`
+            : "إنشاء دور جديد"}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <form className="d-flex flex-column gap-3" onSubmit={handleSubmit}>
+          {isSystemRole && (
+            <Alert variant="info" className="py-2 px-3 mb-0">
+              <i className="ri-shield-star-line align-middle me-1"></i>
+              دور نظام — لا يمكن إعادة تسميته أو تعديله أو حذفه.
+            </Alert>
+          )}
           <Row className="g-3">
             <Col sm={12} md={6}>
               <Form.Label htmlFor="role-name">اسم الدور *</Form.Label>
@@ -99,7 +121,7 @@ const RoleFormModal = ({ open, close, role }) => {
                 maxLength={255}
                 placeholder="مثال: hr_clerk"
                 value={name}
-                disabled={isAdminRole}
+                disabled={isSystemRole}
                 onChange={(e) => {
                   setName(e.target.value);
                   setErrors((prev) => ({ ...prev, name: null }));
@@ -112,6 +134,24 @@ const RoleFormModal = ({ open, close, role }) => {
               )}
             </Col>
             <Col sm={12} md={6}>
+              <Form.Label htmlFor="role-label">الاسم المعروض</Form.Label>
+              <Form.Control
+                id="role-label"
+                type="text"
+                maxLength={255}
+                placeholder="مثال: موظف إدخال بيانات"
+                value={label}
+                disabled={isSystemRole}
+                onChange={(e) => setLabel(e.target.value)}
+                isInvalid={!!fieldError("label")}
+              />
+              {fieldError("label") && (
+                <div className="text-danger small mt-1">
+                  {fieldError("label")}
+                </div>
+              )}
+            </Col>
+            <Col sm={12}>
               <Form.Label htmlFor="role-description">الوصف</Form.Label>
               <Form.Control
                 id="role-description"
@@ -119,6 +159,7 @@ const RoleFormModal = ({ open, close, role }) => {
                 maxLength={255}
                 placeholder="وصف مختصر للدور"
                 value={description}
+                disabled={isSystemRole}
                 onChange={(e) => setDescription(e.target.value)}
                 isInvalid={!!fieldError("description")}
               />
@@ -132,9 +173,10 @@ const RoleFormModal = ({ open, close, role }) => {
 
           <div>
             <Form.Label className="mb-2">الصلاحيات</Form.Label>
-            {/* Visual warning per spec: submitting an empty matrix on edit
-                strips the role of ALL its permissions (sync semantics). */}
-            {isEdit && selected.length === 0 && (
+            {/* Visual warning per spec: clearing the matrix on edit and saving
+                strips the role of ALL its permissions (sync semantics). Only
+                relevant once the matrix has actually been touched. */}
+            {isEdit && permsDirty && selected.length === 0 && (
               <Alert variant="warning" className="py-2 px-3 mb-2">
                 <i className="ri-alert-line align-middle me-1"></i>
                 تحذير: حفظ الدور بدون أي صلاحية محددة سيؤدي إلى{" "}
@@ -156,6 +198,7 @@ const RoleFormModal = ({ open, close, role }) => {
                         className="fw-semibold mb-2"
                         label={group.module}
                         checked={allChecked}
+                        disabled={isSystemRole}
                         onChange={() => toggleGroup(group)}
                       />
                       <div className="d-flex flex-column gap-1 ps-3">
@@ -173,6 +216,7 @@ const RoleFormModal = ({ open, close, role }) => {
                               </span>
                             }
                             checked={selected.includes(perm.name)}
+                            disabled={isSystemRole}
                             onChange={() => togglePermission(perm.name)}
                           />
                         ))}
@@ -198,7 +242,7 @@ const RoleFormModal = ({ open, close, role }) => {
               <button
                 className="btn btn-secondary fw-md w-100"
                 type="submit"
-                disabled={saving || !name.trim()}
+                disabled={saving || !name.trim() || isSystemRole}
               >
                 {saving ? (
                   <Spinner animation="border" size="sm" />

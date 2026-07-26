@@ -2,7 +2,6 @@ import React, { Fragment, useEffect, useState, Suspense, lazy } from "react";
 import { Helmet } from "react-helmet";
 import { Card, Col, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import moment from "moment";
 import { PageHeader } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
@@ -20,18 +19,33 @@ const STATUS_BADGES = {
   terminated: { className: "bg-danger-transparent", label: "منتهي الخدمة" },
 };
 
-// salary arrives as a decimal STRING ("85000.00") — format defensively.
+// salary arrives as a decimal STRING ("85000.00"). Group thousands with pure
+// string ops — never Number()/toLocaleString, which would round-trip the value
+// through a binary float and can lose decimal precision.
 const formatSalary = (salary) => {
   if (salary === null || salary === undefined || salary === "") return "—";
-  const numeric = Number(salary);
-  return Number.isNaN(numeric)
-    ? String(salary)
-    : numeric.toLocaleString("en-US", { minimumFractionDigits: 2 });
+  const str = String(salary);
+  if (!/^-?\d+(\.\d+)?$/.test(str)) return str;
+  const [intPart, decPart] = str.split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return decPart != null ? `${grouped}.${decPart}` : grouped;
 };
 
 const columns = [
   { key: "id", label: "#" },
+  {
+    key: "employee_number",
+    label: "الرقم الوظيفي",
+    render: (value) =>
+      value ? <span dir="ltr">{value}</span> : <span className="text-muted">—</span>,
+  },
   { key: "name", label: "الاسم" },
+  {
+    key: "national_id",
+    label: "رقم الهوية",
+    render: (value) =>
+      value ? <span dir="ltr">{value}</span> : <span className="text-muted">—</span>,
+  },
   {
     key: "job_title",
     label: "المسمى الوظيفي",
@@ -60,8 +74,11 @@ const columns = [
   },
   {
     key: "hire_date",
+    // Plain YYYY-MM-DD date — render verbatim, no Date/moment parsing that
+    // would shift it across a timezone boundary.
     label: "تاريخ التعيين",
-    render: (value) => (value ? moment(value).format("YYYY-MM-DD") : "—"),
+    render: (value) =>
+      value ? <span dir="ltr">{value}</span> : <span className="text-muted">—</span>,
   },
   {
     key: "status",
@@ -86,6 +103,14 @@ const Employees = () => {
   useEffect(() => {
     dispatch(fetchEmployees(page));
   }, [dispatch, page]);
+
+  // If a soft delete shrinks the list so the current page no longer exists,
+  // snap back to the last valid page reported by the server.
+  useEffect(() => {
+    if (meta && meta.last_page >= 1 && page > meta.last_page) {
+      setPage(meta.last_page);
+    }
+  }, [meta, page]);
 
   const openCreate = () => {
     setEditingEmployee(null);

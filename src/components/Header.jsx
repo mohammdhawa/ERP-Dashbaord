@@ -29,20 +29,35 @@ const Header = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const theme = useSelector((state) => state.theme);
-  const { user } = useSelector((state) => state.auth);
+  const { user, initialized } = useSelector((state) => state.auth);
   const { unreadCount, items: notifications } = useSelector(
     (state) => state.notifications
   );
 
-  // Navbar badge: poll the unread count every 60 seconds while logged in.
+  // Navbar badge: poll the unread count every 60s, but only for an
+  // authenticated, initialized session. We skip polls while the tab is hidden
+  // and guard against overlapping requests; a returning tab polls immediately.
   useEffect(() => {
-    if (!user) return;
-    dispatch(fetchUnreadCount());
-    const interval = setInterval(() => {
-      dispatch(fetchUnreadCount());
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [dispatch, user]);
+    if (!user || !initialized) return;
+    let inFlight = false;
+    const poll = () => {
+      if (document.hidden || inFlight) return;
+      inFlight = true;
+      Promise.resolve(dispatch(fetchUnreadCount())).finally(() => {
+        inFlight = false;
+      });
+    };
+    poll();
+    const interval = setInterval(poll, 60_000);
+    const onVisibility = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [dispatch, user, initialized]);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   useEffect(() => {
@@ -280,22 +295,22 @@ const Header = () => {
                     <img
                       src={ALLImages("hBlackLogo")}
                       alt="logo"
-                      className="desktop-logo"
+                      className="desktop-logo brand-logo-full"
                     />
                     <img
                       src={ALLImages("sBlackLogo")}
                       alt="logo"
-                      className="toggle-logo"
+                      className="toggle-logo brand-logo-mark"
                     />
                     <img
                       src={ALLImages("hWhiteLogo")}
                       alt="logo"
-                      className="desktop-dark"
+                      className="desktop-dark brand-logo-full"
                     />
                     <img
                       src={ALLImages("sWhiteLogo")}
                       alt="logo"
-                      className="toggle-dark"
+                      className="toggle-dark brand-logo-mark"
                     />
                   </Link>
                 </div>
@@ -344,12 +359,18 @@ const Header = () => {
                 variant=""
                 as="a"
                 id="dropdown-notifications"
+                aria-label={
+                  unreadCount > 0
+                    ? `الإشعارات، ${unreadCount} غير مقروءة`
+                    : "الإشعارات"
+                }
               >
-                <i className="bi bi-bell header-link-icon"></i>
+                <i className="bi bi-bell header-link-icon" aria-hidden="true"></i>
                 {unreadCount > 0 && (
                   <span
                     className="badge bg-danger rounded-pill position-absolute"
                     style={{ top: "0.4rem", insetInlineEnd: "0.1rem", fontSize: "0.6rem" }}
+                    aria-hidden="true"
                   >
                     {unreadCount > 99 ? "+99" : unreadCount}
                   </span>

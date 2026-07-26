@@ -27987,6 +27987,26 @@ h6 {
   height: 300px;
 }
 
+.header-logo .brand-logo-full {
+  width: min(11.5rem, 100%);
+  height: auto !important;
+  max-height: 3rem;
+  object-fit: contain;
+}
+
+.header-logo .brand-logo-mark {
+  width: 2.25rem;
+  height: 2.25rem !important;
+  object-fit: contain;
+}
+
+.signin-brand-logo {
+  width: min(16rem, 75vw);
+  height: auto !important;
+  max-height: 4.5rem;
+  object-fit: contain;
+}
+
 /* End::Heading tags */
 
 /*# sourceMappingURL=styles.css.map */

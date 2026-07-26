@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { Loader } from "../../components";
+import { hasPermission } from "../../data/permissionsCatalog";
 
 // Route-level RBAC gate. `requiredPermissions` are permission strings from the
 // Phase-1 catalogue (e.g. "hr.employees.view"); an empty array = auth only.
@@ -17,11 +18,7 @@ const ProtectedRoute = ({ element, requiredPermissions = [] }) => {
     return <Navigate to="/signin" replace />;
   }
 
-  const hasPermission =
-    requiredPermissions.length === 0 ||
-    requiredPermissions.some((perm) => permissions.includes(perm));
-
-  if (!hasPermission) {
+  if (!hasPermission(permissions, requiredPermissions)) {
     return <Navigate to="/no_access" replace />;
   }
   return element;

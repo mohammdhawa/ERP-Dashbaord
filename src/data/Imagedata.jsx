@@ -1,10 +1,6 @@
 //Brand logo
-import hBlackLogo from "../../src/assets/images/logo/Horizontal_Black.png";
-import hWhiteLogo from "../../src/assets/images/logo/Horizontal_White.png";
-import sBlackLogo from "../../src/assets/images/logo/Solo_Black.png";
-import sWhiteLogo from "../../src/assets/images/logo/Solo_White.png";
-import sYellowLogo from "../../src/assets/images/logo/Solo_Yellow.png";
-import sPurpleLogo from "../../src/assets/images/logo/Solo_Purple.svg";
+import logo01 from "../assets/images/logo/logo01.png";
+import logo02 from "../assets/images/logo/logo02.png";
 import NoUserProfile from "../assets/images/NoUserProfile.jpg";
 import NotFoundPage from "../assets/images/NotFoundPage.svg";
 import NoAccess from "../assets/images/NoAccess.svg";
@@ -16,17 +12,17 @@ import upgradeStars from "../assets/images/upgradeStars.gif";
 
 function ALLImages(img) {
   const i = {
-    hBlackLogo,
-    hWhiteLogo,
-    sBlackLogo,
-    sWhiteLogo,
-    sYellowLogo,
+    hBlackLogo: logo01,
+    hWhiteLogo: logo01,
+    sBlackLogo: logo02,
+    sWhiteLogo: logo02,
+    sYellowLogo: logo02,
     upgradeStars,
     NotFoundPage,
     NoAccess,
     SessionExpired,
     NoInternet,
-    sPurpleLogo,
+    sPurpleLogo: logo02,
     NoUserProfile,
   };
   return i[img];

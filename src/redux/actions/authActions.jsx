@@ -34,6 +34,9 @@ export const loginRateLimited = (payload) => ({
   type: "LOGIN_RATE_LIMITED",
   payload,
 });
+// Cooldown elapsed → drop the stale rate-limit message so it doesn't linger as
+// a red error once the user is allowed to retry.
+export const clearRateLimit = () => ({ type: "LOGIN_RATE_LIMIT_CLEARED" });
 
 export const bootstrapStart = () => ({ type: "AUTH_BOOTSTRAP_START" });
 export const bootstrapSuccess = (user) => ({

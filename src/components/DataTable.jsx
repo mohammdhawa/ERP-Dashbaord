@@ -175,23 +175,32 @@ const DataTable = ({
                           ) : (
                             <></>
                           )}
-                          {functions?.handleUpdate ? (
+                          {functions?.handleUpdate &&
+                          !functions?.hideUpdate?.(item) ? (
                             <ProtectedElement
                               element={
                                 <OverlayTrigger
                                   placement={"top"}
                                   overlay={
-                                    <Tooltip id="tooltip-top">تعديل</Tooltip>
+                                    <Tooltip id="tooltip-top">
+                                      {functions?.disableUpdate?.(item)
+                                        ? functions?.disabledUpdateReason ||
+                                          "لا يمكن التعديل"
+                                        : "تعديل"}
+                                    </Tooltip>
                                   }
                                 >
-                                  <button
-                                    onClick={() => {
-                                      functions?.handleUpdate(item);
-                                    }}
-                                    className="btn  btn-sm btn-success-light btn-wave"
-                                  >
-                                    <i className="ri-pencil-line align-middle"></i>
-                                  </button>
+                                  <span>
+                                    <button
+                                      onClick={() => {
+                                        functions?.handleUpdate(item);
+                                      }}
+                                      disabled={functions?.disableUpdate?.(item)}
+                                      className="btn  btn-sm btn-success-light btn-wave"
+                                    >
+                                      <i className="ri-pencil-line align-middle"></i>
+                                    </button>
+                                  </span>
                                 </OverlayTrigger>
                               }
                               requiredPermissions={

@@ -54,15 +54,21 @@ export const fetchUnreadCount = () => async (dispatch) => {
   }
 };
 
-// Idempotent server-side; we optimistically decrement the badge.
-export const markNotificationRead = (notificationId) => async (dispatch) => {
-  try {
-    const response = await api.post(
-      `/auth/notifications/${notificationId}/read`
-    );
-    dispatch(markReadSuccess(response.data.data));
-  } catch (error) {
-    // 404 = doesn't exist OR belongs to another user (indistinguishable by design)
-    toastNotify(parseApiError(error).message, "error");
-  }
-};
+// Idempotent server-side. On success we sync the item + badge from the
+// returned object. On failure (incl. 404 = missing OR not owned, which are
+// indistinguishable by design) we show a generic safe message and re-sync the
+// current page + badge so the UI reflects the real server state.
+export const markNotificationRead =
+  (notificationId, refetchPage = 1) =>
+  async (dispatch) => {
+    try {
+      const response = await api.post(
+        `/auth/notifications/${notificationId}/read`
+      );
+      dispatch(markReadSuccess(response.data.data));
+    } catch {
+      toastNotify("تعذّر تحديث الإشعار، يرجى المحاولة مرة أخرى.", "error");
+      dispatch(fetchNotifications(refetchPage));
+      dispatch(fetchUnreadCount());
+    }
+  };

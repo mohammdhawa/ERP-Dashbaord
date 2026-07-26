@@ -26,7 +26,7 @@ export const MENUITEMS = [
         active: false,
         selected: false,
         dirchange: false,
-        title: "الأقسام",
+        title: "الوحدات التنظيمية",
         requiredPermissions: ["departments.view"],
       },
     ],

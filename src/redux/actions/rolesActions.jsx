@@ -98,7 +98,8 @@ export const deleteRole = (roleId) => async (dispatch) => {
     dispatch(deleteRoleSuccess(roleId));
     toastNotify(response.data.message, "success");
   } catch (error) {
-    // 422 covers the protected seeded admin role ("لا يمكن حذف دور المدير").
+    // 409 protects system roles (is_system): "لا يمكن تعديل أو حذف دور نظام."
+    // Surface the server's Arabic conflict/validation message verbatim.
     toastNotify(parseApiError(error).message, "error");
   }
 };

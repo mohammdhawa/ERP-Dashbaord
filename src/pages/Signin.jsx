@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Card, Col, Container, Form, Row, Spinner } from "react-bootstrap";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { login } from "../redux/actions/authActions";
+import { login, clearRateLimit } from "../redux/actions/authActions";
 import ALLImages from "../data/Imagedata";
 import { ThemeChanger } from "../redux/actions/themeActions";
 
@@ -32,6 +32,18 @@ const Signin = () => {
     const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
     return () => clearInterval(timer);
   }, [cooldown > 0]);
+
+  // Falling edge of the countdown: once it lapses, drop the stale rate-limit
+  // message so it doesn't reappear as a red error while the user can retry.
+  const wasCoolingRef = useRef(false);
+  useEffect(() => {
+    if (cooldown > 0) {
+      wasCoolingRef.current = true;
+    } else if (wasCoolingRef.current) {
+      wasCoolingRef.current = false;
+      dispatch(clearRateLimit());
+    }
+  }, [cooldown, dispatch]);
 
   // Server 422 bag → field highlighting (keys mirror Laravel's error bag).
   const serverFieldError = (field) => fieldErrors?.[field]?.[0] || "";
@@ -129,16 +141,14 @@ const Signin = () => {
             <div className="mb-4 d-flex justify-content-center">
               <Link to={`${import.meta.env.BASE_URL}`}>
                 <img
-                  src={ALLImages("sBlackLogo")}
+                  src={ALLImages("hBlackLogo")}
                   alt="logo"
-                  className="desktop-logo"
-                  style={{ width: "3rem", height: "3rem" }}
+                  className="desktop-logo signin-brand-logo"
                 />
                 <img
-                  src={ALLImages("sWhiteLogo")}
+                  src={ALLImages("hWhiteLogo")}
                   alt="logo"
-                  className="desktop-dark"
-                  style={{ width: "3rem", height: "3rem" }}
+                  className="desktop-dark signin-brand-logo"
                 />
               </Link>
             </div>

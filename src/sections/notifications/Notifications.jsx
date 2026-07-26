@@ -25,7 +25,7 @@ const referenceLink = (reference) => {
 const Notifications = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { items, meta, fetchLoading, unreadCount } = useSelector(
+  const { items, meta, fetchLoading, error, unreadCount } = useSelector(
     (state) => state.notifications
   );
   const [page, setPage] = useState(1);
@@ -36,9 +36,10 @@ const Notifications = () => {
   }, [dispatch, page]);
 
   const handleClick = (notify) => {
-    // Idempotent on the server; only fire for unread to save a request.
+    // Idempotent on the server; only fire for unread to save a request. Pass
+    // the current page so a failed mark-read re-syncs the page being viewed.
     if (!notify.is_read) {
-      dispatch(markNotificationRead(notify.id));
+      dispatch(markNotificationRead(notify.id, page));
     }
     const link = referenceLink(notify.reference);
     if (link) navigate(link);
@@ -61,6 +62,20 @@ const Notifications = () => {
             <Card.Body className="p-0">
               {fetchLoading ? (
                 <Loader />
+              ) : error ? (
+                <div className="p-5 text-center" role="alert">
+                  <span className="avatar avatar-xl avatar-rounded bg-danger-transparent">
+                    <i className="ri-error-warning-line fs-2"></i>
+                  </span>
+                  <h6 className="fw-medium mt-3">{error}</h6>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm mt-2"
+                    onClick={() => dispatch(fetchNotifications(page))}
+                  >
+                    إعادة المحاولة
+                  </button>
+                </div>
               ) : items.length === 0 ? (
                 <div className="p-5 text-center">
                   <span className="avatar avatar-xl avatar-rounded bg-secondary-transparent">
@@ -69,7 +84,7 @@ const Notifications = () => {
                   <h6 className="fw-medium mt-3">لا يوجد إشعارات</h6>
                 </div>
               ) : (
-                <ul className="list-group list-group-flush">
+                <ul className="list-group list-group-flush" aria-label="الإشعارات">
                   {items.map((notify) => {
                     const link = referenceLink(notify.reference);
                     return (

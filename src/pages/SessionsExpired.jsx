@@ -11,7 +11,7 @@ const SessionsExpired = () => {
     <Fragment>
       <HelmetProvider>
         <Helmet>
-          <title>Syria Souq | Session Expired</title>
+          <title>الراقي ERP | انتهت صلاحية الجلسة</title>
         </Helmet>
       </HelmetProvider>
       <div
