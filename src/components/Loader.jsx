@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { Helmet } from "react-helmet";
+import ALLImages from "../data/Imagedata";
 
 const Loader = () => {
   return (
@@ -8,39 +9,39 @@ const Loader = () => {
         <title>Loading..</title>
         <style>
           {`
+            .brand-loader-logo {
+              display: block;
+              width: 108px;
+              height: 108px;
+              object-fit: contain;
+              transform-origin: center;
+              animation:
+                brand-loader-spin 1.4s linear infinite,
+                brand-loader-pulse 0.7s ease-in-out infinite alternate;
+            }
 
-      .run-animation path.icn {
-        stroke: #fff;
-        stroke-width: 1px;
-        fill: #2c87c0;
-        animation: draw 1s ease-in forwards;
-      }
-      @keyframes draw {
-        to {
-          fill: #ffffff;
-        }
-      }
-      .run-animation path {
-        stroke:var(--primary-color);
-        stroke-width: 4px;
-        stroke-dasharray: 900;
-        stroke-dashoffset: 900;
-        fill: none;
-        animation: dash 1s ease-in  infinite alternate;
-      }
-    
-      @keyframes dash {
-        from {
-          stroke-dashoffset:900;
-        }
-        to {
-          stroke-dashoffset: 0;
-        }
-      }
-    `}
+            @keyframes brand-loader-spin {
+              to {
+                transform: rotate(360deg);
+              }
+            }
+
+            @keyframes brand-loader-pulse {
+              from { opacity: 0.6; }
+              to { opacity: 1; }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+              .brand-loader-logo {
+                animation: none;
+              }
+            }
+          `}
         </style>
       </Helmet>
       <div
+        role="status"
+        aria-label="Loading"
         style={{
           position: "absolute",
           top: "0",
@@ -54,31 +55,12 @@ const Loader = () => {
           backdropFilter: "blur(3px)",
         }}
       >
-        <div style={{ padding: "2rem" }} id="logo" className="run-animation">
-          <svg
-            width="120"
-            height="106"
-            viewBox="0 0 273 242"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M172.949 104C181.617 110.072 183.639 123.247 177.283 132.413C175.607 134.876 173.527 137.11 171.331 139.172C142.323 166.096 113.257 192.962 84.0755 220H49C90.4897 181.219 131.633 142.667 172.949 104.057V104Z"
-              fill="#A084F9"
-            />
-            <path
-              d="M224.827 96C237.604 103.515 246.755 112.681 247.906 127.541C248.597 136.195 245.432 143.71 239.561 149.859C233.691 156.064 227.245 161.758 220.971 167.565C202.093 185.043 183.216 202.408 164.223 220H129C134.698 214.762 140.05 209.809 145.403 204.856C169.23 182.766 193.058 160.676 216.942 138.7C222.525 133.576 225.288 127.655 224.885 120.026C224.539 113.194 224.827 106.362 224.827 99.4729C224.827 98.562 224.827 97.5941 224.827 96Z"
-              fill="#A084F9"
-            />
-            <path
-              d="M139.943 22.6277C132.142 29.9884 124.342 37.4062 116.484 44.7669C95.3766 64.6809 74.2694 84.5948 53.0475 104.395C49.0326 108.161 47.0824 112.44 47.1972 117.918C47.3692 125.221 47.1972 132.525 47.1972 140C46.681 140 46.2795 140 46.05 139.886C37.4466 135.15 30.4491 128.873 26.9503 119.515C23.0501 109.245 25.1149 99.7727 32.1124 91.6702C36.9303 86.0783 42.5513 81.1712 47.9428 76.0928C66.4116 58.7466 84.8804 41.4574 103.292 24.0542C104.783 22.6277 106.332 22 108.454 22C117.918 22.0571 127.382 22 136.845 22C137.82 22 138.738 22 139.713 22L140 22.6277H139.943Z"
-              fill="#A084F9"
-            />
-            <path
-              d="M221.942 22.0573C181.579 59.2483 141.619 96.0382 101.544 133C95.3741 126.582 93.7595 119.361 95.893 111.224C97.1039 106.64 99.5834 102.8 103.043 99.5911C116.305 87.1559 129.625 74.8353 142.945 62.4001C156.9 49.3918 170.796 36.3836 184.693 23.318C185.154 22.9169 185.615 22.5157 186.192 22H222L221.942 22.0573Z"
-              fill="#A084F9"
-            />
-          </svg>
+        <div style={{ padding: "2rem" }} id="logo">
+          <img
+            src={ALLImages("sYellowLogo")}
+            alt=""
+            className="brand-loader-logo"
+          />
         </div>
       </div>
     </Fragment>
