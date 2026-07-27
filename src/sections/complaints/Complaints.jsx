@@ -121,6 +121,7 @@ const Complaints = () => {
                 columns={ComplaintsColumns}
                 data={complaints}
                 itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
                 currentPage={activePage}
                 totalPages={totalPages}
                 pageName="complaint"

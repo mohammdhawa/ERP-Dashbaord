@@ -377,6 +377,7 @@ const FAQs = () => {
                     columns={faqsColumns}
                     data={filteredData}
                     itemsPerPage={itemsPerPage}
+                    onItemsPerPageChange={setItemsPerPage}
                     pageName={"faq"}
                     functions={{
                       handleDelete: handleDelete,

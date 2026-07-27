@@ -192,6 +192,7 @@ const Features = () => {
           <DataTable
             columns={featuresColumns}
             itemsPerPage={itemsPerPage}
+            onItemsPerPageChange={setItemsPerPage}
             data={filteredData}
             functions={{
               handleDelete,

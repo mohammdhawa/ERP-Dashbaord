@@ -24,7 +24,13 @@ const employeeToOption = (e) => ({
 });
 
 // Create + edit in one modal: `department` null → create, otherwise edit.
-const DepartmentFormModal = ({ open, close, department, currentPage }) => {
+const DepartmentFormModal = ({
+  open,
+  close,
+  department,
+  currentPage,
+  itemsPerPage,
+}) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.departments);
   const { permissions } = useSelector((state) => state.auth);
@@ -119,9 +125,11 @@ const DepartmentFormModal = ({ open, close, department, currentPage }) => {
 
     try {
       if (isEdit) {
-        await dispatch(updateDepartment(department.id, payload, currentPage));
+        await dispatch(
+          updateDepartment(department.id, payload, currentPage, itemsPerPage)
+        );
       } else {
-        await dispatch(createDepartment(payload, currentPage));
+        await dispatch(createDepartment(payload, currentPage, itemsPerPage));
       }
       close();
     } catch (parsed) {

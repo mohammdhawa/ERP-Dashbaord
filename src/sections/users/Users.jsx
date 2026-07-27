@@ -322,6 +322,7 @@ const Users = () => {
                 columns={usersColumns}
                 data={users}
                 itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
                 currentPage={activePage}
                 totalPages={totalPages}
                 pageName="user"

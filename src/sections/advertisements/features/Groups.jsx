@@ -164,6 +164,7 @@ const Groups = () => {
           <DataTable
             columns={featuresGroupsColumns}
             itemsPerPage={itemsPerPage}
+            onItemsPerPageChange={setItemsPerPage}
             data={filteredData}
             functions={{
               handleDelete: handleDelete,

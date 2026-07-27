@@ -29,17 +29,18 @@ const Notifications = () => {
     (state) => state.notifications
   );
   const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Paginated 15/page, newest first (server ordering).
+  // Server-paginated, newest first (server ordering).
   useEffect(() => {
-    dispatch(fetchNotifications(page));
-  }, [dispatch, page]);
+    dispatch(fetchNotifications(page, itemsPerPage));
+  }, [dispatch, page, itemsPerPage]);
 
   const handleClick = (notify) => {
     // Idempotent on the server; only fire for unread to save a request. Pass
     // the current page so a failed mark-read re-syncs the page being viewed.
     if (!notify.is_read) {
-      dispatch(markNotificationRead(notify.id, page));
+      dispatch(markNotificationRead(notify.id, page, itemsPerPage));
     }
     const link = referenceLink(notify.reference);
     if (link) navigate(link);
@@ -71,7 +72,9 @@ const Notifications = () => {
                   <button
                     type="button"
                     className="btn btn-primary btn-sm mt-2"
-                    onClick={() => dispatch(fetchNotifications(page))}
+                    onClick={() =>
+                      dispatch(fetchNotifications(page, itemsPerPage))
+                    }
                   >
                     إعادة المحاولة
                   </button>
@@ -162,6 +165,11 @@ const Notifications = () => {
                   onPageChange={setPage}
                   currentData={items}
                   dataCount={meta.total}
+                  itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={(value) => {
+                    setPage(1);
+                    setItemsPerPage(value);
+                  }}
                 />
               </Card.Footer>
             )}

@@ -307,6 +307,8 @@ const Subscribers = () => {
                 <DataTableServer
                   columns={subscribersColumns}
                   data={subscriptions}
+                  itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={setItemsPerPage}
                   currentPage={activePage}
                   totalPages={totalPages}
                   pageName="subscription"

@@ -107,6 +107,7 @@ const CustomerMessages = () => {
                   columns={CustomersMessagesColumns}
                   data={transformedMessages}
                   itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={setItemsPerPage}
                   currentPage={activePage}
                   totalPages={totalPages}
                   pageName="message"

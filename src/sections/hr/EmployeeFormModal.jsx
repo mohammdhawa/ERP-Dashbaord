@@ -35,7 +35,13 @@ const emptyForm = {
 };
 
 // Employee file — full field set from §8 (create + edit in one modal).
-const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
+const EmployeeFormModal = ({
+  open,
+  close,
+  employee,
+  currentPage,
+  itemsPerPage,
+}) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.employees);
   const { permissions } = useSelector((state) => state.auth);
@@ -132,9 +138,11 @@ const EmployeeFormModal = ({ open, close, employee, currentPage }) => {
 
     try {
       if (isEdit) {
-        await dispatch(updateEmployee(employee.id, payload, currentPage));
+        await dispatch(
+          updateEmployee(employee.id, payload, currentPage, itemsPerPage)
+        );
       } else {
-        await dispatch(createEmployee(payload, currentPage));
+        await dispatch(createEmployee(payload, currentPage, itemsPerPage));
       }
       close();
     } catch (parsed) {

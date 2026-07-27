@@ -732,6 +732,7 @@ const Packages = () => {
                   columns={packagesColumns}
                   data={filteredData}
                   itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={setItemsPerPage}
                   dele
                   pageName={"package"}
                   functions={{

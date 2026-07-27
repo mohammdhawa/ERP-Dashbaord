@@ -22,10 +22,12 @@ export const saveEmployeeFailure = (error) => ({
   payload: error,
 });
 
-export const fetchEmployees = (page = 1) => async (dispatch) => {
+export const fetchEmployees = (page = 1, perPage = 10) => async (dispatch) => {
   dispatch(fetchEmployeesStart());
   try {
-    const response = await api.get("/hr/employees", { params: { page } });
+    const response = await api.get("/hr/employees", {
+      params: { page, per_page: perPage },
+    });
     dispatch(
       fetchEmployeesSuccess({
         items: response.data.data,
@@ -39,13 +41,14 @@ export const fetchEmployees = (page = 1) => async (dispatch) => {
   }
 };
 
-export const createEmployee = (data, currentPage) => async (dispatch) => {
+export const createEmployee =
+  (data, currentPage, perPage = 10) => async (dispatch) => {
   dispatch(saveEmployeeStart());
   try {
     const response = await api.post("/hr/employees", data);
     dispatch(saveEmployeeSuccess());
     toastNotify(response.data.message, "success");
-    dispatch(fetchEmployees(currentPage));
+    dispatch(fetchEmployees(currentPage, perPage));
     return response.data.data;
   } catch (error) {
     const parsed = parseApiError(error);
@@ -54,13 +57,14 @@ export const createEmployee = (data, currentPage) => async (dispatch) => {
   }
 };
 
-export const updateEmployee = (id, data, currentPage) => async (dispatch) => {
+export const updateEmployee =
+  (id, data, currentPage, perPage = 10) => async (dispatch) => {
   dispatch(saveEmployeeStart());
   try {
     const response = await api.put(`/hr/employees/${id}`, data);
     dispatch(saveEmployeeSuccess());
     toastNotify(response.data.message, "success");
-    dispatch(fetchEmployees(currentPage));
+    dispatch(fetchEmployees(currentPage, perPage));
     return response.data.data;
   } catch (error) {
     const parsed = parseApiError(error);
@@ -69,7 +73,8 @@ export const updateEmployee = (id, data, currentPage) => async (dispatch) => {
   }
 };
 
-export const deleteEmployee = (id, currentPage, itemsOnPage) => async (dispatch) => {
+export const deleteEmployee =
+  (id, currentPage, itemsOnPage, perPage = 10) => async (dispatch) => {
   const confirm = await Swal.fire({
     title: "هل أنت متأكد من حذف هذا الموظف؟",
     text: "لن تتمكن من التراجع عن هذا الإجراء!",
@@ -91,7 +96,7 @@ export const deleteEmployee = (id, currentPage, itemsOnPage) => async (dispatch)
     toastNotify(response.data.message, "success");
     const nextPage =
       itemsOnPage === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
-    dispatch(fetchEmployees(nextPage));
+    dispatch(fetchEmployees(nextPage, perPage));
   } catch (error) {
     toastNotify(parseApiError(error).message, "error");
   }

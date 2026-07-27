@@ -27,10 +27,13 @@ export const markReadSuccess = (notification) => ({
   payload: notification,
 });
 
-export const fetchNotifications = (page = 1) => async (dispatch) => {
+export const fetchNotifications =
+  (page = 1, perPage = 10) => async (dispatch) => {
   dispatch(fetchNotificationsStart());
   try {
-    const response = await api.get("/auth/notifications", { params: { page } });
+    const response = await api.get("/auth/notifications", {
+      params: { page, per_page: perPage },
+    });
     dispatch(
       fetchNotificationsSuccess({
         items: response.data.data,
@@ -59,7 +62,7 @@ export const fetchUnreadCount = () => async (dispatch) => {
 // indistinguishable by design) we show a generic safe message and re-sync the
 // current page + badge so the UI reflects the real server state.
 export const markNotificationRead =
-  (notificationId, refetchPage = 1) =>
+  (notificationId, refetchPage = 1, perPage = 10) =>
   async (dispatch) => {
     try {
       const response = await api.post(
@@ -68,7 +71,7 @@ export const markNotificationRead =
       dispatch(markReadSuccess(response.data.data));
     } catch {
       toastNotify("تعذّر تحديث الإشعار، يرجى المحاولة مرة أخرى.", "error");
-      dispatch(fetchNotifications(refetchPage));
+      dispatch(fetchNotifications(refetchPage, perPage));
       dispatch(fetchUnreadCount());
     }
   };

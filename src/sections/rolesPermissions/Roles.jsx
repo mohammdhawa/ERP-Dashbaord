@@ -314,6 +314,7 @@ const Roles = () => {
           <DataTable
             data={filteredData}
             itemsPerPage={itemsPerPage}
+            onItemsPerPageChange={setItemsPerPage}
             columns={rolesColumns}
             pageName={"role"}
             functions={{

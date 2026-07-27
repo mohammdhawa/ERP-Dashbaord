@@ -97,12 +97,13 @@ const Employees = () => {
   const dispatch = useDispatch();
   const { items, meta, fetchLoading } = useSelector((state) => state.employees);
   const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
 
   useEffect(() => {
-    dispatch(fetchEmployees(page));
-  }, [dispatch, page]);
+    dispatch(fetchEmployees(page, itemsPerPage));
+  }, [dispatch, page, itemsPerPage]);
 
   // If a soft delete shrinks the list so the current page no longer exists,
   // snap back to the last valid page reported by the server.
@@ -121,7 +122,7 @@ const Employees = () => {
     setModalOpen(true);
   };
   const handleDelete = (id) => {
-    dispatch(deleteEmployee(id, page, items.length));
+    dispatch(deleteEmployee(id, page, items.length, itemsPerPage));
   };
 
   return (
@@ -156,6 +157,8 @@ const Employees = () => {
                 totalPages={meta?.last_page || 1}
                 dataCount={meta?.total || 0}
                 onPageChange={setPage}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
                 updatePermission="hr.employees.update"
                 deletePermission="hr.employees.delete"
                 functions={{
@@ -174,6 +177,7 @@ const Employees = () => {
           close={() => setModalOpen(false)}
           employee={editingEmployee}
           currentPage={page}
+          itemsPerPage={itemsPerPage}
         />
       </Suspense>
     </Fragment>

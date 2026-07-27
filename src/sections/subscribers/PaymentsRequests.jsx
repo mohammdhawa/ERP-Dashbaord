@@ -32,7 +32,7 @@ const PaymentsRequests = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [activePage, setActivePage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
@@ -285,6 +285,8 @@ const PaymentsRequests = () => {
               <DataTableServer
                 columns={paymentsRequestsColumns}
                 data={requests}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
                 currentPage={activePage}
                 totalPages={totalPages}
                 pageName="payments_requests"
@@ -409,4 +411,4 @@ const PaymentsRequests = () => {
   );
 };
 
-export default PaymentsRequests; 
+export default PaymentsRequests;

@@ -2,24 +2,50 @@ import React from "react";
 import { Pagination } from "react-bootstrap";
 import Select from "react-select";
 
+const ROW_COUNT_OPTIONS = [10, 50, 100].map((value) => ({
+  value,
+  label: `${value}`,
+}));
+
 const TablePagination = ({
   currentPage,
   totalPages,
   onPageChange,
   currentData,
   dataCount,
+  itemsPerPage = 10,
+  onItemsPerPageChange,
 }) => {
   const maxVisiblePages = 5;
+  const normalizedCurrentPage = Number(currentPage) || 1;
+  const normalizedTotalPages = Math.max(1, Number(totalPages) || 1);
+  const normalizedItemsPerPage = Number(itemsPerPage) || 10;
+  const displayedRows = currentData?.length || 0;
+  const firstDisplayedRow =
+    (normalizedCurrentPage - 1) * normalizedItemsPerPage + 1;
+  const lastDisplayedRow = Math.min(
+    firstDisplayedRow + displayedRows - 1,
+    dataCount
+  );
 
-  const pageOptions = Array.from({ length: totalPages }, (_, i) => ({
-    value: i + 1,
-    label: `${i + 1}`,
-  }));
+  const pageOptions = Array.from(
+    { length: normalizedTotalPages },
+    (_, index) => ({
+      value: index + 1,
+      label: `${index + 1}`,
+    })
+  );
 
   const getPaginationItems = () => {
-    let paginationItems = [];
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    const paginationItems = [];
+    let startPage = Math.max(
+      1,
+      normalizedCurrentPage - Math.floor(maxVisiblePages / 2)
+    );
+    const endPage = Math.min(
+      normalizedTotalPages,
+      startPage + maxVisiblePages - 1
+    );
 
     if (endPage - startPage < maxVisiblePages - 1) {
       startPage = Math.max(1, endPage - maxVisiblePages + 1);
@@ -27,58 +53,57 @@ const TablePagination = ({
 
     if (startPage > 1) {
       paginationItems.push(1);
-      if (startPage > 2) {
-        paginationItems.push("...");
-      }
+      if (startPage > 2) paginationItems.push("...");
     }
 
     for (let page = startPage; page <= endPage; page++) {
       paginationItems.push(page);
     }
 
-    if (endPage < totalPages) {
-      if (endPage < totalPages - 1) {
-        paginationItems.push("...");
-      }
-      paginationItems.push(totalPages);
+    if (endPage < normalizedTotalPages) {
+      if (endPage < normalizedTotalPages - 1) paginationItems.push("...");
+      paginationItems.push(normalizedTotalPages);
     }
 
     return paginationItems;
   };
 
-  const handlePageSelect = (selectedOption) => {
-    if (selectedOption) {
-      onPageChange(selectedOption.value);
-    }
-  };
   return dataCount ? (
-    <div className="d-flex mt-3 align-items-center justify-content-between flex-wrap">
-      <p className="m-0">
-        <strong>{currentData?.length}</strong> من <strong>{dataCount}</strong>
-      </p>
+    <div className="table-pagination-bar">
+      <div className="table-pagination-summary">
+        <span className="table-pagination-summary-icon" aria-hidden="true">
+          <i className="ri-list-check-2"></i>
+        </span>
+        <span>
+          عرض <strong>{firstDisplayedRow}</strong>–<strong>{lastDisplayedRow}</strong>{" "}
+          من <strong>{dataCount}</strong> سجل
+        </span>
+      </div>
 
       <nav
-        aria-label="Page navigation"
-        className="pagination-style-4 align-items-center justify-content-center z-0"
+        aria-label="التنقل بين صفحات الجدول"
+        className="pagination-style-4 table-pagination-pages z-0"
       >
-        <Pagination className="flex-wrap m-0">
+        <Pagination className="m-0">
           <Pagination.Item
-            disabled={currentPage <= 10}
-            onClick={() => onPageChange(currentPage - 10)}
+            aria-label="الانتقال عشر صفحات للخلف"
+            disabled={normalizedCurrentPage <= 10}
+            onClick={() => onPageChange(normalizedCurrentPage - 10)}
           >
             <i className="ri-arrow-right-double-line align-middle"></i>
           </Pagination.Item>
           <Pagination.Item
-            disabled={currentPage === 1}
-            onClick={() => onPageChange(currentPage - 1)}
+            aria-label="الصفحة السابقة"
+            disabled={normalizedCurrentPage === 1}
+            onClick={() => onPageChange(normalizedCurrentPage - 1)}
           >
             <i className="ri-arrow-left-s-line align-middle"></i>
           </Pagination.Item>
 
           {getPaginationItems().map((page, index) => (
             <Pagination.Item
-              key={index}
-              active={page === currentPage}
+              key={`${page}-${index}`}
+              active={page === normalizedCurrentPage}
               onClick={() => typeof page === "number" && onPageChange(page)}
               disabled={typeof page === "string"}
             >
@@ -87,39 +112,63 @@ const TablePagination = ({
           ))}
 
           <Pagination.Item
-            disabled={currentPage === totalPages}
-            onClick={() => onPageChange(currentPage + 1)}
+            aria-label="الصفحة التالية"
+            disabled={normalizedCurrentPage === normalizedTotalPages}
+            onClick={() => onPageChange(normalizedCurrentPage + 1)}
           >
             <i className="ri-arrow-right-s-line align-middle"></i>
           </Pagination.Item>
           <Pagination.Item
-            disabled={currentPage > totalPages - 10}
-            onClick={() => onPageChange(currentPage + 10)}
+            aria-label="الانتقال عشر صفحات للأمام"
+            disabled={normalizedCurrentPage > normalizedTotalPages - 10}
+            onClick={() => onPageChange(normalizedCurrentPage + 10)}
           >
             <i className="ri-arrow-left-double-line align-middle"></i>
           </Pagination.Item>
         </Pagination>
       </nav>
-      <span className="m-0 d-flex align-items-center gap-2">
-        صفحة
-        <div style={{ minWidth: "100px" }}>
+
+      <div className="table-pagination-controls">
+        <label className="table-pagination-control">
+          <span>عدد الصفوف</span>
+          <select
+            className="form-select table-pagination-native-select"
+            value={normalizedItemsPerPage}
+            onChange={(event) =>
+              onItemsPerPageChange?.(Number(event.target.value))
+            }
+            aria-label="عدد الصفوف في الصفحة"
+          >
+            {ROW_COUNT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="table-pagination-control">
+          <span>الصفحة</span>
           <Select
+            className="table-pagination-select table-pagination-select--page"
             classNamePrefix="Select2"
             options={pageOptions}
-            value={pageOptions.find((option) => option.value === currentPage)}
-            onChange={handlePageSelect}
-            placeholder="اختر الصفحة"
-            isSearchable={true}
+            value={pageOptions.find(
+              (option) => option.value === normalizedCurrentPage
+            )}
+            onChange={(option) => option && onPageChange(option.value)}
+            isSearchable
             menuPosition="fixed"
             maxMenuHeight={150}
+            aria-label="اختيار صفحة الجدول"
           />
-        </div>
-        من <strong>{totalPages}</strong>
-      </span>
+          <span className="table-pagination-total">
+            من <strong>{normalizedTotalPages}</strong>
+          </span>
+        </label>
+      </div>
     </div>
-  ) : (
-    <></>
-  );
+  ) : null;
 };
 
 export default TablePagination;

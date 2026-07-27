@@ -4,7 +4,7 @@ import ProtectedElement from "../pages/layout/ProtectedElement";
 import { MutatingDots } from "react-loader-spinner";
 import TablePaginationServer from "./TablePaginationServer";
 
-// Server-paginated table (Format A lists: 15/page + `meta` block).
+// Server-paginated table (Format A lists: configurable page size + `meta`).
 // - updatePermission / deletePermission: full permission strings from the
 //   catalogue (e.g. "departments.update") gating the action buttons.
 // - functions.hideDelete(item) / functions.disableDelete(item): per-row
@@ -15,6 +15,8 @@ const DataTableServer = ({
   currentPage,
   totalPages,
   onPageChange,
+  itemsPerPage = 10,
+  onItemsPerPageChange,
   functions,
   renderActions,
   loading,
@@ -172,6 +174,11 @@ const DataTableServer = ({
           onPageChange={onPageChange}
           currentData={data}
           dataCount={dataCount}
+          itemsPerPage={itemsPerPage}
+          onItemsPerPageChange={(value) => {
+            onPageChange(1);
+            onItemsPerPageChange?.(value);
+          }}
         />
       )}
     </Fragment>

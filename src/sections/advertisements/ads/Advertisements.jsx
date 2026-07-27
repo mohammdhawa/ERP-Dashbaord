@@ -204,6 +204,7 @@ const Advertisements = () => {
               columns={adsColumns}
               data={advertisements}
               itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={setItemsPerPage}
               currentPage={activePage}
               totalPages={totalPages}
               pageName="ad"

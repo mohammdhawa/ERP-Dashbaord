@@ -66,13 +66,14 @@ const Departments = () => {
     (state) => state.departments
   );
   const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState(null);
 
   // Server-side pagination: every page change is a fresh `?page=N` request.
   useEffect(() => {
-    dispatch(fetchDepartments(page));
-  }, [dispatch, page]);
+    dispatch(fetchDepartments(page, itemsPerPage));
+  }, [dispatch, page, itemsPerPage]);
 
   // If a deletion (here or elsewhere) shrinks the tree so the current page no
   // longer exists, snap back to the nearest valid page from server metadata.
@@ -91,7 +92,7 @@ const Departments = () => {
     setModalOpen(true);
   };
   const handleDelete = (id) => {
-    dispatch(deleteDepartment(id, page, items.length));
+    dispatch(deleteDepartment(id, page, items.length, itemsPerPage));
   };
 
   return (
@@ -126,6 +127,8 @@ const Departments = () => {
                 totalPages={meta?.last_page || 1}
                 dataCount={meta?.total || 0}
                 onPageChange={setPage}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
                 updatePermission="departments.update"
                 deletePermission="departments.delete"
                 functions={{
@@ -144,6 +147,7 @@ const Departments = () => {
           close={() => setModalOpen(false)}
           department={editingDepartment}
           currentPage={page}
+          itemsPerPage={itemsPerPage}
         />
       </Suspense>
     </Fragment>

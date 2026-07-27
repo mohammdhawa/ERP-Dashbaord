@@ -309,6 +309,7 @@ const Brands = () => {
                   columns={vehicleBrandsColumns}
                   data={filteredData}
                   itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={setItemsPerPage}
                   pageName={"vehicleBrands"}
                   functions={{
                     handleDelete: handleDelete,

@@ -111,6 +111,7 @@ const Permissions = () => {
             data={filteredData}
             columns={permissionsColumns}
             itemsPerPage={itemsPerPage}
+            onItemsPerPageChange={setItemsPerPage}
             functions={{
               handleDetail: handleShowDetails,
             }}

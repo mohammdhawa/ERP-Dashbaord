@@ -11,7 +11,8 @@ import { MutatingDots } from "react-loader-spinner";
 const DataTable = ({
   columns,
   data,
-  itemsPerPage,
+  itemsPerPage = 10,
+  onItemsPerPageChange,
   functions,
   renderActions,
   loading,
@@ -20,18 +21,18 @@ const DataTable = ({
 }) => {
   const [dataCount, setDataCount] = useState(data?.length);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(itemsPerPage);
   const [sortedData, setSortedData] = useState(data);
   const [sortConfig, setSortConfig] = useState({
     key: null,
     direction: "default",
   });
 
-  const totalPages = Math.max(1, Math.ceil(data?.length / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil(data?.length / pageSize));
 
   useEffect(() => {
-    const firstItemIndex = (currentPage - 1) * itemsPerPage;
-    const newPage = Math.floor(firstItemIndex / itemsPerPage) + 1;
-    setCurrentPage(newPage);
+    setPageSize(itemsPerPage);
+    setCurrentPage(1);
   }, [itemsPerPage]);
 
   useEffect(() => {
@@ -46,12 +47,18 @@ const DataTable = ({
   }, [data]);
 
   const currentData = sortedData?.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   );
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (value) => {
+    setPageSize(value);
+    setCurrentPage(1);
+    onItemsPerPageChange?.(value);
   };
 
   const handleSort = (key) => {
@@ -272,7 +279,8 @@ const DataTable = ({
         totalPages={totalPages}
         onPageChange={handlePageChange}
         dataCount={dataCount}
-        itemsPerPage={itemsPerPage}
+        itemsPerPage={pageSize}
+        onItemsPerPageChange={handleItemsPerPageChange}
         currentData={currentData}
       />
     </Fragment>

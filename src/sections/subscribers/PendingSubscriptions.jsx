@@ -33,7 +33,7 @@ const PendingSubscriptions = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [activePage, setActivePage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
@@ -269,6 +269,8 @@ const PendingSubscriptions = () => {
               <DataTableServer
                 columns={paymentsRequestsColumns}
                 data={requests}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={setItemsPerPage}
                 currentPage={activePage}
                 totalPages={totalPages}
                 pageName="pending_subscriptions"
@@ -397,4 +399,4 @@ const PendingSubscriptions = () => {
   );
 };
 
-export default PendingSubscriptions; 
+export default PendingSubscriptions;

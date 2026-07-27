@@ -301,6 +301,7 @@ const Models = () => {
                   columns={vehicleModelsColumns}
                   data={filteredData}
                   itemsPerPage={itemsPerPage}
+                  onItemsPerPageChange={setItemsPerPage}
                   pageName="vehicleModels"
                   functions={{
                     handleDelete: handleDelete,

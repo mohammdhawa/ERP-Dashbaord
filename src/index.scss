@@ -1,4 +1,5 @@
 @use "./assets/scss/variables" as *;
+@use "./assets/scss/custom/table-pagination";
 @import "./assets/css/bootstrap.css";
 @import "simplebar-react/dist/simplebar.min.css";
 @import "@simonwep/pickr/dist/themes/classic.min.css";
