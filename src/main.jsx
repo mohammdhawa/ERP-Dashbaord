@@ -17,7 +17,14 @@ import {
   SessionsExpired,
 } from "./pages";
 import { Helmet } from "react-helmet";
-import { bootstrapSession } from "./redux/actions/authActions.jsx";
+import {
+  bootstrapSession,
+  logoutSuccess,
+} from "./redux/actions/authActions.jsx";
+import {
+  onTokensChangedInAnotherTab,
+  REFRESH_KEY,
+} from "./utils/tokenStore.js";
 import { disableReactDevTools } from "@fvilers/disable-react-devtools";
 import NoInternetConnection from "./components/NoInternetConnection.jsx";
 
@@ -29,6 +36,21 @@ const AuthProvider = ({ children }) => {
   useEffect(() => {
     dispatch(bootstrapSession());
   }, [dispatch]);
+
+  // Tokens are shared across tabs, so a sign-out in one tab ends the session in
+  // all of them. Without this, the other tabs keep rendering a logged-in UI and
+  // only discover the truth on their next request — which then looks like a
+  // random failure rather than "you logged out".
+  useEffect(
+    () =>
+      onTokensChangedInAnotherTab(({ key, newValue }) => {
+        if (key === REFRESH_KEY && !newValue) {
+          dispatch(logoutSuccess());
+        }
+      }),
+    [dispatch]
+  );
+
   return children;
 };
 

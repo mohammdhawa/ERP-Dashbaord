@@ -3,7 +3,7 @@ import { Alert, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
 import { assignRole, unassignRole } from "../../redux/actions/rolesActions";
-import { fetchUsers } from "../../redux/actions/usersActions";
+import { fetchAllUsers } from "../../redux/actions/usersActions";
 import { refreshCurrentUser } from "../../redux/actions/authActions";
 
 // Assign/unassign roles ⇄ users via the dedicated RBAC endpoints
@@ -12,8 +12,10 @@ import { refreshCurrentUser } from "../../redux/actions/authActions";
 // auth.users.view, so we fall back to a raw user-ID input without it.
 const AssignRoleCard = () => {
   const dispatch = useDispatch();
-  const { roles } = useSelector((state) => state.roles);
-  const { users } = useSelector((state) => state.users);
+  // allItems, not items: these are PICKERS and must list everything that
+  // exists, not the page the table behind them happens to be showing.
+  const { allItems: roles } = useSelector((state) => state.roles);
+  const { allItems: users } = useSelector((state) => state.users);
   const { permissions, user: currentUser } = useSelector((state) => state.auth);
 
   const canListUsers = permissions.includes("auth.users.view");
@@ -46,7 +48,7 @@ const AssignRoleCard = () => {
       await dispatch(action(resolvedUserId, selectedRole.value));
       // Refresh the users list so role chips update, and re-pull /auth/me in
       // case the admin changed their own grants.
-      if (canListUsers) dispatch(fetchUsers());
+      if (canListUsers) dispatch(fetchAllUsers());
       if (resolvedUserId === currentUser?.id) dispatch(refreshCurrentUser());
     } catch {
       /* toast already shown by the action */

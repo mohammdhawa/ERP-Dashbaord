@@ -2,7 +2,8 @@ import React, { Fragment, useEffect, useMemo, useState, Suspense, lazy } from "r
 import { Helmet } from "react-helmet";
 import { Card, Col, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import { PageHeader, DataTable } from "../../components";
+import { PageHeader } from "../../components";
+import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import {
   fetchUsers,
@@ -14,32 +15,55 @@ const UserFormModal = lazy(() => import("./UserFormModal"));
 
 const Users = () => {
   const dispatch = useDispatch();
-  const { users, fetchLoading } = useSelector((state) => state.users);
+  const { items, meta, fetchLoading } = useSelector((state) => state.users);
   const { user: currentUser, permissions } = useSelector((state) => state.auth);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  // Must be one of TablePagination's ROW_COUNT_OPTIONS (10/50/100).
+  // 15 is the SERVER default, not an offered option: bound to the select
+  // it showed "10" while fetching 15, and picking 10 changed nothing.
+  const [perPage, setPerPage] = useState(10);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
 
-  // Format B endpoint: the full collection arrives at once (no meta), so
-  // search + pagination happen client-side.
+  // Server-paginated: the API returns one page plus `meta`. It used to return
+  // the whole collection, which is what let search and paging run client-side.
   useEffect(() => {
-    dispatch(fetchUsers());
-  }, [dispatch]);
+    dispatch(fetchUsers(page, perPage));
+  }, [dispatch, page, perPage]);
 
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
+  // Keep the COMPONENT page in step with the server. A delete that empties
+  // the last page makes the action re-fetch the preceding one, but nothing
+  // moved `page` itself, so the next mutation re-fetched the page that no
+  // longer exists. Snapping back here is the same repair the departments and
+  // employees lists already do.
+  useEffect(() => {
+    if (meta && meta.last_page >= 1 && page > meta.last_page) {
+      setPage(meta.last_page);
+    }
+  }, [meta, page]);
+
+  // ⚠️ SEARCHES THE CURRENT PAGE ONLY. The API has no `search` parameter yet,
+  // so this cannot reach rows on other pages — the placeholder says so rather
+  // than implying a directory-wide search that silently misses people. The real
+  // fix is an allow-listed server-side filter (C30 in the API standard); until
+  // that exists, do not present this as a global search.
+  const visibleUsers = useMemo(() => {
+    if (!searchQuery) return items;
     const q = searchQuery.toLowerCase();
-    return users.filter(
+    return items.filter(
       (u) =>
         u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
     );
-  }, [users, searchQuery]);
+  }, [items, searchQuery]);
 
   const canToggleActive = permissions.includes("auth.users.update");
 
   const handleToggleActive = (row) => {
     // Quick enable/disable from the list — partial update, only is_active.
-    dispatch(updateUser(row.id, { is_active: !row.is_active })).catch(() => {});
+    dispatch(updateUser(row.id, { is_active: !row.is_active }, page, perPage)).catch(
+      () => {}
+    );
   };
 
   const columns = [
@@ -143,18 +167,26 @@ const Users = () => {
                 <input
                   className="form-control"
                   type="text"
-                  placeholder="ابحث بالاسم أو البريد الإلكتروني.."
+                  placeholder="ابحث في هذه الصفحة بالاسم أو البريد.."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </Col>
             </div>
             <Card.Body>
-              <DataTable
+              <DataTableServer
                 columns={columns}
-                data={filteredUsers}
-                itemsPerPage={10}
+                data={visibleUsers}
                 loading={fetchLoading}
+                currentPage={meta?.current_page || page}
+                totalPages={meta?.last_page || 1}
+                dataCount={meta?.total || 0}
+                onPageChange={setPage}
+                itemsPerPage={meta?.per_page || perPage}
+                onItemsPerPageChange={(size) => {
+                  setPerPage(size);
+                  setPage(1);
+                }}
                 updatePermission="auth.users.update"
                 deletePermission="auth.users.delete"
                 functions={{
@@ -162,7 +194,8 @@ const Users = () => {
                     setEditingUser(row);
                     setModalOpen(true);
                   },
-                  handleDelete: (id) => dispatch(deleteUser(id)),
+                  handleDelete: (id) =>
+                    dispatch(deleteUser(id, page, items.length, perPage)),
                   // Self-deletion guard: the server rejects it with 422 anyway,
                   // but we disable the button up-front to avoid the error.
                   disableDelete: (row) => row.id === currentUser?.id,
@@ -179,6 +212,8 @@ const Users = () => {
           open={modalOpen}
           close={() => setModalOpen(false)}
           user={editingUser}
+          currentPage={page}
+          perPage={perPage}
         />
       </Suspense>
     </Fragment>

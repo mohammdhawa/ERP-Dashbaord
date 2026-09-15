@@ -1,5 +1,15 @@
-// Phase-1 permission catalogue (API doc §2), grouped for the role-form matrix.
+// Permission catalogue (API doc §2) — 28 rows: 26 route-level + 2 field-level.
 // Format: {module}.{resource}.{action}
+//
+// Arabic labels come from the backend seeder. No endpoint serves permission
+// labels, so this file is the only source of them: keep it in step with the
+// seeder rather than inventing wording here.
+//
+// `fieldLevel: true` marks a permission that gates KEYS INSIDE A PAYLOAD rather
+// than a route. No endpoint requires them; they decide whether the server
+// includes a field at all (an absent key, never null). They are shown as such
+// in the role matrix so an admin granting one knows it widens what is readable
+// on a screen they already have, not which screens they can reach.
 export const PERMISSIONS_CATALOG = [
   {
     module: "الأقسام",
@@ -12,13 +22,62 @@ export const PERMISSIONS_CATALOG = [
     ],
   },
   {
-    module: "الموارد البشرية",
-    key: "hr",
+    module: "الموظفين",
+    key: "hr.employees",
     permissions: [
       { name: "hr.employees.view", label: "عرض الموظفين" },
       { name: "hr.employees.create", label: "إضافة موظف" },
       { name: "hr.employees.update", label: "تعديل موظف" },
       { name: "hr.employees.delete", label: "حذف موظف" },
+    ],
+  },
+  {
+    module: "حقول الموظفين (على مستوى الحقل)",
+    key: "hr.employees.fields",
+    fieldLevel: true,
+    note: "تتحكم بظهور حقول داخل بيانات الموظف، لا بالوصول إلى الشاشات.",
+    permissions: [
+      {
+        name: "hr.employees.viewSalary",
+        label: "عرض رواتب الموظفين",
+        fieldLevel: true,
+      },
+      {
+        name: "hr.employees.viewIdentity",
+        label: "عرض أرقام هوية الموظفين",
+        fieldLevel: true,
+      },
+    ],
+  },
+  {
+    module: "المسميات الوظيفية",
+    key: "hr.job_titles",
+    permissions: [
+      { name: "hr.job_titles.view", label: "عرض المسميات الوظيفية" },
+      { name: "hr.job_titles.create", label: "إنشاء مسمى وظيفي" },
+      { name: "hr.job_titles.update", label: "تعديل مسمى وظيفي" },
+      { name: "hr.job_titles.delete", label: "حذف مسمى وظيفي" },
+    ],
+  },
+  {
+    // سجل التعيين is append-only by design: there is no update and no delete
+    // permission, because editing a historical posting changes what a payslip
+    // was computed against with no trace of the original.
+    module: "سجل التعيين",
+    key: "hr.assignments",
+    permissions: [
+      { name: "hr.assignments.view", label: "عرض سجل التعيين" },
+      { name: "hr.assignments.create", label: "تسجيل تعيين أو نقل" },
+    ],
+  },
+  {
+    module: "الإنذارات",
+    key: "hr.warnings",
+    permissions: [
+      { name: "hr.warnings.view", label: "عرض الإنذارات" },
+      { name: "hr.warnings.create", label: "إصدار إنذار" },
+      { name: "hr.warnings.update", label: "تعديل إنذار" },
+      { name: "hr.warnings.delete", label: "حذف إنذار" },
     ],
   },
   {

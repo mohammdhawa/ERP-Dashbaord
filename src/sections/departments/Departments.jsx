@@ -14,7 +14,18 @@ import {
 const DepartmentFormModal = lazy(() => import("./DepartmentFormModal"));
 
 const columns = [
-  { key: "id", label: "#" },
+  {
+    key: "code",
+    label: "الرمز",
+    render: (value) =>
+      value ? (
+        <span className="fw-semibold" dir="ltr">
+          {value}
+        </span>
+      ) : (
+        <span className="text-muted">—</span>
+      ),
+  },
   { key: "name", label: "اسم الوحدة" },
   {
     key: "level_label",
@@ -28,10 +39,14 @@ const columns = [
       ),
   },
   {
-    key: "code",
-    label: "الرمز",
+    key: "sector_label",
+    label: "الجهة",
     render: (value) =>
-      value ? value : <span className="text-muted">—</span>,
+      value ? (
+        <span className="badge bg-secondary-transparent">{value}</span>
+      ) : (
+        <span className="text-muted">—</span>
+      ),
   },
   {
     key: "is_active",
@@ -66,14 +81,13 @@ const Departments = () => {
     (state) => state.departments
   );
   const [page, setPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState(null);
 
   // Server-side pagination: every page change is a fresh `?page=N` request.
   useEffect(() => {
-    dispatch(fetchDepartments(page, itemsPerPage));
-  }, [dispatch, page, itemsPerPage]);
+    dispatch(fetchDepartments(page));
+  }, [dispatch, page]);
 
   // If a deletion (here or elsewhere) shrinks the tree so the current page no
   // longer exists, snap back to the nearest valid page from server metadata.
@@ -92,7 +106,7 @@ const Departments = () => {
     setModalOpen(true);
   };
   const handleDelete = (id) => {
-    dispatch(deleteDepartment(id, page, items.length, itemsPerPage));
+    dispatch(deleteDepartment(id, page, items.length));
   };
 
   return (
@@ -127,8 +141,8 @@ const Departments = () => {
                 totalPages={meta?.last_page || 1}
                 dataCount={meta?.total || 0}
                 onPageChange={setPage}
-                itemsPerPage={itemsPerPage}
-                onItemsPerPageChange={setItemsPerPage}
+                itemsPerPage={meta?.per_page || 15}
+                showPageSizeSelector={false}
                 updatePermission="departments.update"
                 deletePermission="departments.delete"
                 functions={{
@@ -147,7 +161,6 @@ const Departments = () => {
           close={() => setModalOpen(false)}
           department={editingDepartment}
           currentPage={page}
-          itemsPerPage={itemsPerPage}
         />
       </Suspense>
     </Fragment>

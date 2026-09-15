@@ -1,414 +1,1121 @@
-import React, { useEffect, useState } from "react";
-import { Col, Form, Row, Modal, Spinner } from "react-bootstrap";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Col, Form, Modal, Nav, Row, Spinner, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
 import {
   createEmployee,
   updateEmployee,
+  updateEmployeeRecord,
 } from "../../redux/actions/employeesActions";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { useResourceOptions } from "../departments/useResourceOptions";
+import {
+  GENDER_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  STATUS_OPTIONS,
+  EMPLOYMENT_TYPE_OPTIONS,
+  SALARY_MODE_OPTIONS,
+  ACTIVITY_TYPE_OPTIONS,
+  EDUCATION_LEVEL_OPTIONS,
+  ENGINEERING_RANK_OPTIONS,
+  GOVERNORATE_OPTIONS,
+  GRADE_OPTIONS,
+} from "../../data/hrEnums";
+import {
+  buildEmployeePayload,
+  derivedChildrenCount,
+  emptyEmployeeForm,
+  getEmployeeFormValues,
+  validateEmployeeForm,
+  EMPLOYEE_CONSTANTS,
+} from "./employeePayload";
 
-const STATUS_OPTIONS = [
-  { value: "active", label: "نشط" },
-  { value: "inactive", label: "غير نشط" },
-  { value: "terminated", label: "منتهي الخدمة" },
+const {
+  ACTIVITY_ENGINEERING,
+  ACTIVITY_INDUSTRIAL,
+  MARITAL_MARRIED,
+  SALARY_MODE_AGREED,
+} = EMPLOYEE_CONSTANTS;
+
+// WHY A TABBED MODAL, not a flat column of forty inputs and not a full page:
+// the list already opens this modal from a row, so a full-page form would throw
+// away the page, filters and scroll position the user came from. Seven labelled
+// tabs keep the four required create fields on the first one — a minimal create
+// is four inputs and a save, without scrolling past thirty-six others — while
+// still reaching every field. The cost of tabs is that a rejected field can sit
+// on a tab you cannot see, so a 422 lists the tab each error belongs to and the
+// first offending tab is opened automatically.
+const TABS = [
+  { key: "identity", title: "الهوية" },
+  { key: "personal", title: "البيانات الشخصية" },
+  { key: "contact", title: "التواصل" },
+  { key: "military", title: "الخدمة العسكرية" },
+  { key: "education", title: "التعليم" },
+  { key: "work", title: "العمل" },
+  { key: "classification", title: "التصنيف والرواتب" },
 ];
+
+// Which tab each field lives on, so a server 422 can point at it.
+const FIELD_TAB = {
+  employee_number: "identity",
+  legacy_number: "identity",
+  first_name: "identity",
+  middle_name: "identity",
+  last_name: "identity",
+  mother_name: "identity",
+  national_id: "identity",
+
+  gender: "personal",
+  birth_date: "personal",
+  birth_place: "personal",
+  origin_governorate: "personal",
+  residence_governorate: "personal",
+  nationality: "personal",
+  second_nationality: "personal",
+  marital_status: "personal",
+  wives_count: "personal",
+  sons_count: "personal",
+  daughters_count: "personal",
+
+  phone: "contact",
+  phone_secondary: "contact",
+  email: "contact",
+  address: "contact",
+
+  did_military_service: "military",
+  military_discharge_date: "military",
+
+  education_level: "education",
+  qualification: "education",
+  specialization: "education",
+  is_graduated: "education",
+  graduation_date: "education",
+
+  department_id: "work",
+  job_title_id: "work",
+  direct_manager_id: "work",
+  employment_type: "work",
+  workplace: "work",
+  hire_date: "work",
+  termination_date: "work",
+  status: "work",
+
+  activity_type: "classification",
+  organizational_grade: "classification",
+  experience_level: "classification",
+  engineering_rank: "classification",
+  industrial_experience_years: "classification",
+  has_hazard_pay: "classification",
+  has_scarcity_pay: "classification",
+  has_dual_role_pay: "classification",
+  distinction_grade: "classification",
+  salary_mode: "classification",
+  agreed_salary: "classification",
+  sham_cash_account: "classification",
+};
 
 const departmentToOption = (d) => ({
   value: d.id,
   label: d.name || `قسم #${d.id}`,
 });
+const employeeToOption = (e) => ({
+  value: e.id,
+  label: e.employee_number
+    ? `${e.full_name || `موظف #${e.id}`} — ${e.employee_number}`
+    : e.full_name || `موظف #${e.id}`,
+});
 
-const emptyForm = {
-  employee_number: "",
-  name: "",
-  national_id: "",
-  phone: "",
-  email: "",
-  address: "",
-  department_id: "",
-  job_title: "",
-  hire_date: "",
-  salary: "",
-  status: "active",
+// Tri-state boolean: "" (unset / leave alone), "true", "false". A plain
+// checkbox cannot express "not recorded", and submitting false for a field the
+// user never touched is a claim the user did not make.
+const TRISTATE_OPTIONS = [
+  { value: "", label: "غير محدد" },
+  { value: "true", label: "نعم" },
+  { value: "false", label: "لا" },
+];
+
+// Field helpers live at MODULE scope, not inside the component. Defined inline
+// they would be a brand-new component type on every render, so React would
+// unmount and remount each input on every keystroke and the caret would jump
+// out of the box. Module scope keeps the type stable; the changing form state
+// reaches them through this context instead of through a closure.
+const FieldCtx = React.createContext(null);
+
+const Err = ({ field }) => {
+  const { fieldError } = React.useContext(FieldCtx);
+  return fieldError(field) ? (
+    <div className="text-danger small mt-1">{fieldError(field)}</div>
+  ) : null;
 };
 
-// Employee file — full field set from §8 (create + edit in one modal).
+const Text = ({ field, label, type = "text", dir, ...rest }) => {
+  const { form, setField, fieldError } = React.useContext(FieldCtx);
+  return (
+    <>
+      <Form.Label htmlFor={`emp-${field}`}>{label}</Form.Label>
+      <Form.Control
+        id={`emp-${field}`}
+        type={type}
+        dir={dir}
+        value={form[field]}
+        onChange={(e) => setField(field, e.target.value)}
+        isInvalid={!!fieldError(field)}
+        {...rest}
+      />
+      <Err field={field} />
+    </>
+  );
+};
+
+const Enum = ({
+  field,
+  label,
+  options,
+  isDisabled,
+  onChange,
+  placeholder = "غير محدد",
+  hint,
+}) => {
+  const { form, setField } = React.useContext(FieldCtx);
+  return (
+    <>
+      <Form.Label htmlFor={`emp-${field}`}>{label}</Form.Label>
+      <Select
+        inputId={`emp-${field}`}
+        classNamePrefix="Select2"
+        options={options}
+        value={options.find((o) => o.value === Number(form[field])) || null}
+        onChange={onChange || ((opt) => setField(field, opt ? opt.value : ""))}
+        isClearable
+        isDisabled={isDisabled}
+        placeholder={placeholder}
+        menuPosition="fixed"
+      />
+      {hint && <div className="text-muted small mt-1">{hint}</div>}
+      <Err field={field} />
+    </>
+  );
+};
+
+const Tri = ({ field, label }) => {
+  const { form, setField } = React.useContext(FieldCtx);
+  return (
+    <>
+      <Form.Label htmlFor={`emp-${field}`}>{label}</Form.Label>
+      <Select
+        inputId={`emp-${field}`}
+        classNamePrefix="Select2"
+        options={TRISTATE_OPTIONS}
+        value={
+          TRISTATE_OPTIONS.find((o) => o.value === String(form[field] ?? "")) ||
+          TRISTATE_OPTIONS[0]
+        }
+        onChange={(opt) => setField(field, opt ? opt.value : "")}
+        menuPosition="fixed"
+      />
+      <Err field={field} />
+    </>
+  );
+};
+
 const EmployeeFormModal = ({
   open,
   close,
   employee,
   currentPage,
   itemsPerPage,
+  filters,
+  // Opened from the profile screen there is no list behind the modal, so the
+  // save refreshes the single record instead of re-fetching a page nobody is
+  // looking at.
+  standalone = false,
+  onSaved,
 }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.employees);
   const { permissions } = useSelector((state) => state.auth);
+
+  // FIELD-LEVEL PERMISSIONS. Thirteen inputs hang off these two flags: the
+  // twelve pay/classification keys and national_id. Without the permission the
+  // key is ABSENT from the response, so the input is neither rendered nor
+  // submitted — rendering it would show a blank box over a value that exists,
+  // and submitting that blank would destroy it.
+  const canViewSalary = hasPermission(permissions, "hr.employees.viewSalary");
+  const canViewIdentity = hasPermission(
+    permissions,
+    "hr.employees.viewIdentity"
+  );
   const isEdit = Boolean(employee);
 
-  // Department picker is only allowed to read the documented `/departments`
-  // pages when the user owns `departments.view`; otherwise we fall back to a
-  // raw id input (never an invented lookup endpoint).
   const canReadDepartments = hasPermission(permissions, "departments.view");
+  const canReadJobTitles = hasPermission(permissions, "hr.job_titles.view");
+  const canReadEmployees = hasPermission(permissions, "hr.employees.view");
+
   const departments = useResourceOptions(
     "/departments",
     departmentToOption,
     open && canReadDepartments
   );
+  const jobTitlesRaw = useResourceOptions(
+    "/hr/job-titles",
+    (t) => t,
+    open && canReadJobTitles
+  );
+  const managers = useResourceOptions(
+    "/hr/employees",
+    employeeToOption,
+    open && canReadEmployees
+  );
 
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(emptyEmployeeForm);
   const [errors, setErrors] = useState({});
+  const [activeTab, setActiveTab] = useState("identity");
+  // Suggestions applied from a job title, so the UI can say which values came
+  // from the catalogue rather than from the user.
+  const [suggested, setSuggested] = useState({});
 
   useEffect(() => {
     if (open) {
-      setForm(
-        employee
-          ? {
-              employee_number: employee.employee_number || "",
-              name: employee.name || "",
-              national_id: employee.national_id || "",
-              phone: employee.phone || "",
-              email: employee.email || "",
-              address: employee.address || "",
-              department_id: employee.department_id ?? "",
-              job_title: employee.job_title || "",
-              hire_date: employee.hire_date || "",
-              salary: employee.salary ?? "",
-              status: employee.status || "active",
-            }
-          : emptyForm
-      );
+      setForm(getEmployeeFormValues(employee));
       setErrors({});
+      setActiveTab("identity");
+      setSuggested({});
     }
   }, [open, employee]);
 
   const setField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: null }));
+    setSuggested((prev) => ({ ...prev, [field]: false }));
   };
 
-  // Client validation mirroring the server rules so most 422s are caught
-  // before the request.
-  const validate = () => {
-    const clientErrors = {};
-    if (!form.name.trim()) clientErrors.name = ["اسم الموظف مطلوب."];
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email))
-      clientErrors.email = ["يرجى إدخال بريد إلكتروني صالح."];
-    if (form.phone && form.phone.length > 50)
-      clientErrors.phone = ["رقم الهاتف طويل جداً (الحد الأقصى 50)."];
-    // Validate salary as a non-negative decimal WITHOUT coercing it to a float
-    // (that would alter the intended decimal value we send back to the server).
-    if (form.salary !== "" && !/^\d+(\.\d{1,2})?$/.test(String(form.salary).trim()))
-      clientErrors.salary = ["يجب أن يكون الراتب رقماً موجباً (منزلتان عشريتان بحد أقصى)."];
-    return clientErrors;
+  // Active titles first; an inactive one stays selectable only so an existing
+  // record that already holds it can still be saved without silently losing it.
+  const jobTitleOptions = useMemo(() => {
+    const items = jobTitlesRaw.items || [];
+    const sorted = [...items].sort((a, b) => {
+      if (Boolean(a.is_active) !== Boolean(b.is_active))
+        return a.is_active ? -1 : 1;
+      return String(a.name).localeCompare(String(b.name), "ar");
+    });
+    return sorted.map((t) => ({
+      value: t.id,
+      label: t.is_active ? t.name : `${t.name} (معطّل)`,
+      raw: t,
+    }));
+  }, [jobTitlesRaw.items]);
+
+  // Selecting a title pre-fills the two default_* values ONLY into inputs the
+  // user has left empty. They are suggestions, not constraints: one title is
+  // held at different grades by a section head and a division head, so the
+  // employee record stays the fact and the user may override either.
+  const handleJobTitleChange = (option) => {
+    const nextId = option ? option.value : "";
+    const t = option?.raw || {};
+
+    // Both state updates are decided HERE, in the event handler, and applied as
+    // two plain setState calls. Deriving them inside the setForm updater made
+    // setSuggested a side effect of another state update: React treats updater
+    // functions as pure and is free to run them twice (StrictMode does exactly
+    // that in development) or to discard a run, so the hint state was being set
+    // from a code path with no guarantee about how often it executes.
+    const suggestions = {};
+    if (option && canViewSalary) {
+      if (
+        form.organizational_grade === "" &&
+        t.default_organizational_grade != null
+      ) {
+        suggestions.organizational_grade = t.default_organizational_grade;
+      }
+      if (form.activity_type === "" && t.default_activity_type != null) {
+        suggestions.activity_type = t.default_activity_type;
+      }
+    }
+
+    setForm((prev) => ({ ...prev, ...suggestions, job_title_id: nextId }));
+    setSuggested((prev) => {
+      const next = { ...prev };
+      Object.keys(suggestions).forEach((key) => {
+        next[key] = true;
+      });
+      return next;
+    });
+    setErrors((prev) => ({ ...prev, job_title_id: null }));
   };
+
+  const activity = form.activity_type === "" ? null : Number(form.activity_type);
+  const isEngineering = activity === ACTIVITY_ENGINEERING;
+  const isIndustrial = activity === ACTIVITY_INDUSTRIAL;
+  const isMarried = Number(form.marital_status) === MARITAL_MARRIED;
+  const salaryMode = form.salary_mode === "" ? null : Number(form.salary_mode);
+  const agreedRequired = salaryMode === SALARY_MODE_AGREED;
+
+  // Changing the activity clears the axis that no longer applies, so a value
+  // left over from the previous activity can never be submitted.
+  useEffect(() => {
+    if (!canViewSalary) return;
+    setForm((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      if (!isEngineering && prev.engineering_rank !== "") {
+        next.engineering_rank = "";
+        changed = true;
+      }
+      if (!isIndustrial && prev.industrial_experience_years !== "") {
+        next.industrial_experience_years = "";
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [isEngineering, isIndustrial, canViewSalary]);
+
+  // Same for wives_count when the employee is not married.
+  useEffect(() => {
+    if (isMarried) return;
+    setForm((prev) =>
+      prev.wives_count === "" ? prev : { ...prev, wives_count: "" }
+    );
+  }, [isMarried]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const clientErrors = validate();
+    if (saving) return; // double-submit guard on top of the disabled button
+
+    const clientErrors = validateEmployeeForm(form, {
+      isEdit,
+      canViewSalary,
+      canViewIdentity,
+    });
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
+      focusFirstError(clientErrors);
       return;
     }
 
-    // Optional fields are nullable server-side: send null instead of "".
-    const payload = {
-      name: form.name.trim(),
-      national_id: form.national_id.trim() || null,
-      phone: form.phone.trim() || null,
-      email: form.email.trim() || null,
-      address: form.address.trim() || null,
-      department_id:
-        form.department_id === "" || form.department_id == null
-          ? null
-          : Number(form.department_id),
-      job_title: form.job_title.trim() || null,
-      hire_date: form.hire_date || null,
-      // Keep salary as its exact decimal STRING; a numeric string satisfies the
-      // server's `numeric` rule while preserving precision (no float rounding).
-      salary: String(form.salary).trim() === "" ? null : String(form.salary).trim(),
-      status: form.status,
-    };
-
-    // `employee_number` is auto-generated when omitted — send it only when the
-    // user supplied one, otherwise leave it off entirely.
-    const trimmedNumber = form.employee_number.trim();
-    if (trimmedNumber !== "") payload.employee_number = trimmedNumber;
+    const payload = buildEmployeePayload(form, {
+      isEdit,
+      canViewSalary,
+      canViewIdentity,
+    });
 
     try {
-      if (isEdit) {
+      if (isEdit && standalone) {
+        await dispatch(updateEmployeeRecord(employee.id, payload));
+      } else if (isEdit) {
         await dispatch(
-          updateEmployee(employee.id, payload, currentPage, itemsPerPage)
+          updateEmployee(
+            employee.id,
+            payload,
+            currentPage,
+            itemsPerPage,
+            filters
+          )
         );
       } else {
-        await dispatch(createEmployee(payload, currentPage, itemsPerPage));
+        await dispatch(
+          createEmployee(payload, currentPage, itemsPerPage, filters)
+        );
       }
+      onSaved?.();
       close();
     } catch (parsed) {
-      // e.g. unknown department_id → "القسم المحدد غير موجود."
-      setErrors(parsed.errors || { _general: [parsed.message] });
+      // Server 422 mapped back by EXACT field name, so each message lands on
+      // the input it belongs to rather than in a generic banner.
+      const serverErrors = parsed.errors || { _general: [parsed.message] };
+      setErrors(serverErrors);
+      focusFirstError(serverErrors);
     }
+  };
+
+  // Opens the first tab holding a rejected field. Without this a validation
+  // error on a hidden tab is invisible and the form looks like it silently
+  // refused to save.
+  const focusFirstError = (errorBag) => {
+    const firstField = Object.keys(errorBag).find(
+      (k) => k !== "_general" && FIELD_TAB[k]
+    );
+    if (firstField) setActiveTab(FIELD_TAB[firstField]);
   };
 
   const fieldError = (field) => errors?.[field]?.[0];
 
+  // Tabs carrying an error get a marker, so the user can see where to look.
+  const tabsWithErrors = useMemo(() => {
+    const set = new Set();
+    Object.keys(errors || {}).forEach((field) => {
+      if (errors[field] && FIELD_TAB[field]) set.add(FIELD_TAB[field]);
+    });
+    return set;
+  }, [errors]);
+
+  const ctx = { form, setField, fieldError };
+
+  const title = isEdit
+    ? `تعديل بيانات الموظف: ${employee?.full_name || ""}`
+    : "إضافة موظف جديد";
+
   return (
     <Modal
       show={open}
-      size="lg"
+      size="xl"
       onHide={close}
       keyboard={false}
       centered
       backdrop="static"
+      scrollable
     >
       <Modal.Header closeButton>
-        <Modal.Title as="h6">
-          {isEdit ? `تعديل بيانات الموظف: ${employee?.name}` : "إضافة موظف جديد"}
-        </Modal.Title>
+        <Modal.Title as="h6">{title}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <form className="d-flex flex-column gap-3" onSubmit={handleSubmit}>
-          <Row className="g-3">
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-number">
-                الرقم الوظيفي <span className="text-muted">(يُنشأ تلقائياً)</span>
-              </Form.Label>
-              <Form.Control
-                id="emp-number"
-                type="text"
-                maxLength={50}
-                dir="ltr"
-                placeholder="اتركه فارغاً للإنشاء التلقائي"
-                value={form.employee_number}
-                onChange={(e) => setField("employee_number", e.target.value)}
-                isInvalid={!!fieldError("employee_number")}
-              />
-              {fieldError("employee_number") && (
-                <div className="text-danger small mt-1">
-                  {fieldError("employee_number")}
-                </div>
-              )}
-            </Col>
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-national-id">رقم الهوية</Form.Label>
-              <Form.Control
-                id="emp-national-id"
-                type="text"
-                maxLength={50}
-                dir="ltr"
-                placeholder="رقم الهوية الوطنية"
-                value={form.national_id}
-                onChange={(e) => setField("national_id", e.target.value)}
-                isInvalid={!!fieldError("national_id")}
-              />
-              {fieldError("national_id") && (
-                <div className="text-danger small mt-1">
-                  {fieldError("national_id")}
-                </div>
-              )}
-            </Col>
+        <form onSubmit={handleSubmit}>
+          <FieldCtx.Provider value={ctx}>
+          <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
+            <Nav variant="tabs" className="mb-3 flex-nowrap overflow-auto">
+              {TABS.map((tab) => {
+                // The classification tab does not exist at all without
+                // viewSalary — not a disabled tab, which would advertise the
+                // data as merely out of reach.
+                if (tab.key === "classification" && !canViewSalary) return null;
+                return (
+                  <Nav.Item key={tab.key}>
+                    <Nav.Link eventKey={tab.key} className="text-nowrap">
+                      {tab.title}
+                      {tabsWithErrors.has(tab.key) && (
+                        <i className="ri-error-warning-line text-danger ms-1 align-middle"></i>
+                      )}
+                    </Nav.Link>
+                  </Nav.Item>
+                );
+              })}
+            </Nav>
 
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-name">الاسم الكامل *</Form.Label>
-              <Form.Control
-                id="emp-name"
-                type="text"
-                maxLength={255}
-                placeholder="اسم الموظف"
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-                isInvalid={!!fieldError("name")}
-                autoFocus
-              />
-              {fieldError("name") && (
-                <div className="text-danger small mt-1">{fieldError("name")}</div>
-              )}
-            </Col>
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-job">المسمى الوظيفي</Form.Label>
-              <Form.Control
-                id="emp-job"
-                type="text"
-                maxLength={255}
-                placeholder="مثال: مهندس برمجيات"
-                value={form.job_title}
-                onChange={(e) => setField("job_title", e.target.value)}
-                isInvalid={!!fieldError("job_title")}
-              />
-              {fieldError("job_title") && (
-                <div className="text-danger small mt-1">
-                  {fieldError("job_title")}
-                </div>
-              )}
-            </Col>
-
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-phone">رقم الهاتف</Form.Label>
-              <Form.Control
-                id="emp-phone"
-                type="tel"
-                maxLength={50}
-                placeholder="+9665xxxxxxxx"
-                dir="ltr"
-                value={form.phone}
-                onChange={(e) => setField("phone", e.target.value)}
-                isInvalid={!!fieldError("phone")}
-              />
-              {fieldError("phone") && (
-                <div className="text-danger small mt-1">{fieldError("phone")}</div>
-              )}
-            </Col>
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-email">البريد الإلكتروني</Form.Label>
-              <Form.Control
-                id="emp-email"
-                type="email"
-                maxLength={255}
-                placeholder="name@example.com"
-                dir="ltr"
-                value={form.email}
-                onChange={(e) => setField("email", e.target.value)}
-                isInvalid={!!fieldError("email")}
-              />
-              {fieldError("email") && (
-                <div className="text-danger small mt-1">{fieldError("email")}</div>
-              )}
-            </Col>
-
-            <Col sm={12}>
-              <Form.Label htmlFor="emp-address">العنوان</Form.Label>
-              <Form.Control
-                id="emp-address"
-                as="textarea"
-                maxLength={1000}
-                style={{ height: "4rem", maxHeight: "6rem" }}
-                placeholder="عنوان السكن"
-                value={form.address}
-                onChange={(e) => setField("address", e.target.value)}
-                isInvalid={!!fieldError("address")}
-              />
-              {fieldError("address") && (
-                <div className="text-danger small mt-1">
-                  {fieldError("address")}
-                </div>
-              )}
-            </Col>
-
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-department">
-                القسم <span className="text-muted">(اختياري)</span>
-              </Form.Label>
-              {canReadDepartments && !departments.error ? (
-                <>
-                  <Select
-                    inputId="emp-department"
-                    classNamePrefix="Select2"
-                    options={departments.options}
-                    value={
-                      departments.options.find(
-                        (o) => o.value === Number(form.department_id)
-                      ) || null
-                    }
-                    onChange={(opt) =>
-                      setField("department_id", opt ? opt.value : "")
-                    }
-                    isClearable
-                    isLoading={departments.loading}
-                    placeholder="بدون قسم"
-                    noOptionsMessage={() => "لا توجد أقسام"}
-                    menuPosition="fixed"
-                  />
-                  {departments.incomplete && (
-                    <div className="text-warning small mt-1">
-                      تعذّر تحميل كل الأقسام، القائمة غير مكتملة.
-                    </div>
+            <Tab.Content>
+              {/* ---------------- الهوية ---------------- */}
+              <Tab.Pane eventKey="identity">
+                <Row className="g-3">
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="first_name"
+                      label="الاسم الأول *"
+                      maxLength={255}
+                      autoFocus
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text field="middle_name" label="اسم الأب *" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text field="last_name" label="الكنية *" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text field="mother_name" label="اسم الأم" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Form.Label htmlFor="emp-employee_number">
+                      الرقم الوظيفي{" "}
+                      <span className="text-muted">
+                        {isEdit ? "(لا يمكن إفراغه)" : "(يُنشأ تلقائياً)"}
+                      </span>
+                    </Form.Label>
+                    <Form.Control
+                      id="emp-employee_number"
+                      type="text"
+                      maxLength={50}
+                      dir="ltr"
+                      placeholder={
+                        isEdit ? "" : "اتركه فارغاً للإنشاء التلقائي"
+                      }
+                      value={form.employee_number}
+                      onChange={(e) =>
+                        setField("employee_number", e.target.value)
+                      }
+                      isInvalid={!!fieldError("employee_number")}
+                    />
+                    <Err field="employee_number" />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="legacy_number"
+                      label="الرقم القديم (الورقي)"
+                      maxLength={50}
+                      dir="ltr"
+                      placeholder="M024333"
+                    />
+                  </Col>
+                  {canViewIdentity && (
+                    <Col sm={12} md={4}>
+                      <Text
+                        field="national_id"
+                        label="رقم الهوية"
+                        maxLength={50}
+                        dir="ltr"
+                      />
+                    </Col>
                   )}
-                </>
-              ) : (
-                // Truthful fallback: no `departments.view` (or the load failed)
-                // → accept a raw department id instead of an invented lookup.
-                <>
-                  <Form.Control
-                    id="emp-department"
-                    type="number"
-                    min={1}
-                    placeholder="معرّف القسم (ID)"
-                    value={form.department_id}
-                    onChange={(e) => setField("department_id", e.target.value)}
-                    isInvalid={!!fieldError("department_id")}
-                  />
-                  <div className="text-muted small mt-1">
-                    تعذّر تحميل قائمة الأقسام، أدخل المعرّف يدويًا.
-                  </div>
-                </>
-              )}
-              {fieldError("department_id") && (
-                <div className="text-danger small mt-1">
-                  {fieldError("department_id")}
-                </div>
-              )}
-            </Col>
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-hire-date">تاريخ التعيين</Form.Label>
-              <Form.Control
-                id="emp-hire-date"
-                type="date"
-                value={form.hire_date}
-                onChange={(e) => setField("hire_date", e.target.value)}
-                isInvalid={!!fieldError("hire_date")}
-              />
-              {fieldError("hire_date") && (
-                <div className="text-danger small mt-1">
-                  {fieldError("hire_date")}
-                </div>
-              )}
-            </Col>
+                </Row>
+              </Tab.Pane>
 
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-salary">الراتب</Form.Label>
-              <Form.Control
-                id="emp-salary"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="0.00"
-                dir="ltr"
-                value={form.salary}
-                onChange={(e) => setField("salary", e.target.value)}
-                isInvalid={!!fieldError("salary")}
-              />
-              {fieldError("salary") && (
-                <div className="text-danger small mt-1">{fieldError("salary")}</div>
+              {/* ---------------- البيانات الشخصية ---------------- */}
+              <Tab.Pane eventKey="personal">
+                <Row className="g-3">
+                  <Col sm={12} md={4}>
+                    <Enum
+                      field="gender"
+                      label="الجنس *"
+                      options={GENDER_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text field="birth_date" label="تاريخ الميلاد" type="date" />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text field="birth_place" label="مكان الولادة" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Enum
+                      field="origin_governorate"
+                      label="محافظة المنشأ"
+                      options={GOVERNORATE_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Enum
+                      field="residence_governorate"
+                      label="محافظة الإقامة"
+                      options={GOVERNORATE_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="nationality"
+                      label="الجنسية"
+                      maxLength={60}
+                      placeholder="سوري"
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="second_nationality"
+                      label="الجنسية الثانية"
+                      maxLength={60}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Enum
+                      field="marital_status"
+                      label="الحالة الاجتماعية"
+                      options={MARITAL_STATUS_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="wives_count"
+                      label="عدد الزوجات"
+                      type="number"
+                      min={0}
+                      max={4}
+                      disabled={!isMarried}
+                    />
+                    {!isMarried && (
+                      <div className="text-muted small mt-1">
+                        يُحدَّد للموظف المتزوج فقط.
+                      </div>
+                    )}
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="sons_count"
+                      label="عدد الأبناء"
+                      type="number"
+                      min={0}
+                      max={50}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="daughters_count"
+                      label="عدد البنات"
+                      type="number"
+                      min={0}
+                      max={50}
+                    />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Form.Label>عدد الأولاد</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={derivedChildrenCount(form)}
+                      readOnly
+                      disabled
+                    />
+                    <div className="text-muted small mt-1">
+                      محسوب تلقائياً من الأبناء والبنات، ولا يُرسل إلى الخادم.
+                    </div>
+                  </Col>
+                </Row>
+              </Tab.Pane>
+
+              {/* ---------------- التواصل ---------------- */}
+              <Tab.Pane eventKey="contact">
+                <Row className="g-3">
+                  <Col sm={12} md={6}>
+                    <Text
+                      field="phone"
+                      label="الهاتف"
+                      type="tel"
+                      maxLength={50}
+                      dir="ltr"
+                      placeholder="+963900000000"
+                    />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text
+                      field="phone_secondary"
+                      label="هاتف إضافي"
+                      type="tel"
+                      maxLength={50}
+                      dir="ltr"
+                    />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text
+                      field="email"
+                      label="البريد الإلكتروني"
+                      type="email"
+                      maxLength={255}
+                      dir="ltr"
+                    />
+                  </Col>
+                  <Col sm={12}>
+                    <Form.Label htmlFor="emp-address">العنوان</Form.Label>
+                    <Form.Control
+                      id="emp-address"
+                      as="textarea"
+                      maxLength={1000}
+                      style={{ height: "4rem" }}
+                      value={form.address}
+                      onChange={(e) => setField("address", e.target.value)}
+                      isInvalid={!!fieldError("address")}
+                    />
+                    <Err field="address" />
+                  </Col>
+                </Row>
+              </Tab.Pane>
+
+              {/* ---------------- الخدمة العسكرية ---------------- */}
+              <Tab.Pane eventKey="military">
+                <Row className="g-3">
+                  <Col sm={12} md={6}>
+                    <Tri field="did_military_service" label="أدى الخدمة العسكرية" />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text
+                      field="military_discharge_date"
+                      label="تاريخ التسريح"
+                      type="date"
+                    />
+                  </Col>
+                </Row>
+              </Tab.Pane>
+
+              {/* ---------------- التعليم ---------------- */}
+              <Tab.Pane eventKey="education">
+                <Row className="g-3">
+                  <Col sm={12} md={6}>
+                    <Enum
+                      field="education_level"
+                      label="المستوى التعليمي"
+                      options={EDUCATION_LEVEL_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text
+                      field="qualification"
+                      label="المؤهل العلمي"
+                      maxLength={255}
+                    />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text field="specialization" label="الاختصاص" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={3}>
+                    <Tri field="is_graduated" label="متخرج" />
+                  </Col>
+                  <Col sm={12} md={3}>
+                    <Text field="graduation_date" label="تاريخ التخرج" type="date" />
+                  </Col>
+                </Row>
+              </Tab.Pane>
+
+              {/* ---------------- العمل ---------------- */}
+              <Tab.Pane eventKey="work">
+                <Row className="g-3">
+                  <Col sm={12} md={6}>
+                    <Form.Label htmlFor="emp-job_title_id">
+                      المسمى الوظيفي
+                    </Form.Label>
+                    {canReadJobTitles && !jobTitlesRaw.error ? (
+                      <>
+                        <Select
+                          inputId="emp-job_title_id"
+                          classNamePrefix="Select2"
+                          options={jobTitleOptions}
+                          value={
+                            jobTitleOptions.find(
+                              (o) => o.value === Number(form.job_title_id)
+                            ) || null
+                          }
+                          onChange={handleJobTitleChange}
+                          isClearable
+                          isLoading={jobTitlesRaw.loading}
+                          placeholder="بدون مسمى"
+                          noOptionsMessage={() => "لا توجد مسميات"}
+                          menuPosition="fixed"
+                        />
+                        {jobTitlesRaw.incomplete && (
+                          <div className="text-warning small mt-1">
+                            تعذّر تحميل كل المسميات، القائمة غير مكتملة.
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      // No hr.job_titles.view: accept the id rather than
+                      // inventing a lookup endpoint that does not exist.
+                      <>
+                        <Form.Control
+                          id="emp-job_title_id"
+                          type="number"
+                          min={1}
+                          placeholder="معرّف المسمى الوظيفي"
+                          value={form.job_title_id}
+                          onChange={(e) =>
+                            setField("job_title_id", e.target.value)
+                          }
+                          isInvalid={!!fieldError("job_title_id")}
+                        />
+                        <div className="text-muted small mt-1">
+                          لا تملك صلاحية عرض المسميات الوظيفية، أدخل المعرّف
+                          يدوياً.
+                        </div>
+                      </>
+                    )}
+                    <Err field="job_title_id" />
+                  </Col>
+
+                  <Col sm={12} md={6}>
+                    <Form.Label htmlFor="emp-department_id">القسم</Form.Label>
+                    {canReadDepartments && !departments.error ? (
+                      <>
+                        <Select
+                          inputId="emp-department_id"
+                          classNamePrefix="Select2"
+                          options={departments.options}
+                          value={
+                            departments.options.find(
+                              (o) => o.value === Number(form.department_id)
+                            ) || null
+                          }
+                          onChange={(opt) =>
+                            setField("department_id", opt ? opt.value : "")
+                          }
+                          isClearable
+                          isLoading={departments.loading}
+                          placeholder="بدون قسم"
+                          noOptionsMessage={() => "لا توجد أقسام"}
+                          menuPosition="fixed"
+                        />
+                        {departments.incomplete && (
+                          <div className="text-warning small mt-1">
+                            تعذّر تحميل كل الأقسام، القائمة غير مكتملة.
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Form.Control
+                          id="emp-department_id"
+                          type="number"
+                          min={1}
+                          placeholder="معرّف القسم (ID)"
+                          value={form.department_id}
+                          onChange={(e) =>
+                            setField("department_id", e.target.value)
+                          }
+                          isInvalid={!!fieldError("department_id")}
+                        />
+                        <div className="text-muted small mt-1">
+                          تعذّر تحميل قائمة الأقسام، أدخل المعرّف يدوياً.
+                        </div>
+                      </>
+                    )}
+                    <Err field="department_id" />
+                  </Col>
+
+                  {isEdit && (
+                    <Col sm={12}>
+                      <Alert
+                        variant="info"
+                        className="mb-0 py-2 px-3 fs-12 d-flex align-items-start gap-2"
+                      >
+                        <i className="ri-information-line mt-1"></i>
+                        <span>
+                          تغيير القسم أو المسمى الوظيفي أو الدرجة التنظيمية من
+                          هنا يُسجِّل نقلاً تلقائياً بسبب «نقل داخلي» بتاريخ
+                          اليوم. لتسجيل السبب الحقيقي أو تاريخ بأثر رجعي، استخدم
+                          تبويب «سجل التعيين» في ملف الموظف.
+                        </span>
+                      </Alert>
+                    </Col>
+                  )}
+
+                  <Col sm={12} md={6}>
+                    <Form.Label htmlFor="emp-direct_manager_id">
+                      المدير المباشر
+                    </Form.Label>
+                    {canReadEmployees && !managers.error ? (
+                      <Select
+                        inputId="emp-direct_manager_id"
+                        classNamePrefix="Select2"
+                        // A person may not be their own manager, so they are
+                        // not offered as one.
+                        options={managers.options.filter(
+                          (o) => !isEdit || o.value !== employee?.id
+                        )}
+                        value={
+                          managers.options.find(
+                            (o) => o.value === Number(form.direct_manager_id)
+                          ) || null
+                        }
+                        onChange={(opt) =>
+                          setField("direct_manager_id", opt ? opt.value : "")
+                        }
+                        isClearable
+                        isLoading={managers.loading}
+                        placeholder="بدون مدير مباشر"
+                        noOptionsMessage={() => "لا يوجد موظفون"}
+                        menuPosition="fixed"
+                      />
+                    ) : (
+                      <>
+                        <Form.Control
+                          id="emp-direct_manager_id"
+                          type="number"
+                          min={1}
+                          placeholder="معرّف الموظف"
+                          value={form.direct_manager_id}
+                          onChange={(e) =>
+                            setField("direct_manager_id", e.target.value)
+                          }
+                          isInvalid={!!fieldError("direct_manager_id")}
+                        />
+                        <div className="text-muted small mt-1">
+                          تعذّر تحميل قائمة الموظفين، أدخل المعرّف يدوياً.
+                        </div>
+                      </>
+                    )}
+                    <Err field="direct_manager_id" />
+                  </Col>
+
+                  <Col sm={12} md={6}>
+                    <Enum
+                      field="employment_type"
+                      label="نوع التوظيف"
+                      options={EMPLOYMENT_TYPE_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text field="workplace" label="مكان العمل" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Enum
+                      field="status"
+                      label="الحالة"
+                      options={STATUS_OPTIONS}
+                    />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text field="hire_date" label="تاريخ التعيين" type="date" />
+                  </Col>
+                  <Col sm={12} md={6}>
+                    <Text
+                      field="termination_date"
+                      label="تاريخ انتهاء العمل"
+                      type="date"
+                    />
+                  </Col>
+                </Row>
+              </Tab.Pane>
+
+              {/* ---------------- التصنيف والرواتب ---------------- */}
+              {canViewSalary && (
+                <Tab.Pane eventKey="classification">
+                  <Row className="g-3">
+                    <Col sm={12}>
+                      <Alert variant="light" className="mb-0 py-2 px-3 fs-12">
+                        محاور التصنيف هي المعايير التي يُحتسب منها الراتب. لا
+                        يعرض النظام راتباً محتسباً — «الراتب المتفق عليه» هو
+                        المبلغ الوحيد المخزَّن، وذلك ضمن نظام «إتفاق» فقط.
+                      </Alert>
+                    </Col>
+
+                    <Col sm={12} md={4}>
+                      <Enum
+                        field="activity_type"
+                        label="نوع النشاط"
+                        options={ACTIVITY_TYPE_OPTIONS}
+                        hint={
+                          suggested.activity_type
+                            ? "اقتراح من المسمى الوظيفي، يمكن تعديله."
+                            : undefined
+                        }
+                      />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Enum
+                        field="organizational_grade"
+                        label="الدرجة التنظيمية"
+                        options={GRADE_OPTIONS}
+                        hint={
+                          suggested.organizational_grade
+                            ? "اقتراح من المسمى الوظيفي، يمكن تعديله."
+                            : undefined
+                        }
+                      />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Enum
+                        field="experience_level"
+                        label="مستوى الخبرة"
+                        options={GRADE_OPTIONS}
+                      />
+                    </Col>
+
+                    <Col sm={12} md={4}>
+                      <Enum
+                        field="engineering_rank"
+                        label="الرتبة الهندسية"
+                        options={ENGINEERING_RANK_OPTIONS}
+                        isDisabled={!isEngineering}
+                        placeholder={
+                          isEngineering ? "غير محدد" : "للنشاط الهندسي فقط"
+                        }
+                        hint={
+                          !isEngineering
+                            ? "تُحدَّد للموظفين ذوي النشاط الهندسي فقط."
+                            : undefined
+                        }
+                      />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Form.Label htmlFor="emp-industrial_experience_years">
+                        سنوات الخبرة الصناعية
+                      </Form.Label>
+                      <Form.Control
+                        id="emp-industrial_experience_years"
+                        type="number"
+                        min={0}
+                        max={60}
+                        disabled={!isIndustrial}
+                        value={form.industrial_experience_years}
+                        onChange={(e) =>
+                          setField(
+                            "industrial_experience_years",
+                            e.target.value
+                          )
+                        }
+                        isInvalid={!!fieldError("industrial_experience_years")}
+                      />
+                      {!isIndustrial && (
+                        <div className="text-muted small mt-1">
+                          تُحدَّد للموظفين ذوي النشاط الصناعي فقط.
+                        </div>
+                      )}
+                      <Err field="industrial_experience_years" />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Text
+                        field="distinction_grade"
+                        label="درجة التميّز"
+                        type="number"
+                        min={0}
+                        max={255}
+                      />
+                    </Col>
+
+                    <Col sm={12} md={4}>
+                      <Tri field="has_hazard_pay" label="تعويض خطورة" />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Tri field="has_scarcity_pay" label="تعويض ندرة" />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Tri field="has_dual_role_pay" label="تعويض ازدواج وظيفي" />
+                    </Col>
+
+                    <Col sm={12} md={4}>
+                      <Enum
+                        field="salary_mode"
+                        label="نظام الراتب"
+                        options={SALARY_MODE_OPTIONS}
+                      />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Form.Label htmlFor="emp-agreed_salary">
+                        الراتب المتفق عليه {agreedRequired && "*"}
+                      </Form.Label>
+                      <Form.Control
+                        id="emp-agreed_salary"
+                        // TEXT, not number: the value is a decimal STRING and
+                        // a number input would hand it to the browser as a
+                        // float and back.
+                        type="text"
+                        inputMode="decimal"
+                        dir="ltr"
+                        placeholder="0.00"
+                        disabled={salaryMode !== SALARY_MODE_AGREED}
+                        value={form.agreed_salary}
+                        onChange={(e) =>
+                          setField("agreed_salary", e.target.value)
+                        }
+                        isInvalid={!!fieldError("agreed_salary")}
+                      />
+                      <div className="text-muted small mt-1">
+                        {salaryMode === SALARY_MODE_AGREED
+                          ? "مطلوب ضمن نظام «إتفاق»."
+                          : "يُحدَّد ضمن نظام «إتفاق» فقط؛ ضمن «نظام رواتب» يُحتسب الراتب من المعايير."}
+                      </div>
+                      <Err field="agreed_salary" />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      <Text
+                        field="sham_cash_account"
+                        label="حساب الشام كاش"
+                        maxLength={16}
+                        dir="ltr"
+                        inputMode="numeric"
+                        placeholder="16 رقماً"
+                      />
+                    </Col>
+                  </Row>
+                </Tab.Pane>
               )}
-            </Col>
-            <Col sm={12} md={6}>
-              <Form.Label htmlFor="emp-status">الحالة</Form.Label>
-              <Select
-                inputId="emp-status"
-                options={STATUS_OPTIONS}
-                classNamePrefix="Select2"
-                isClearable={false}
-                placeholder="اختر الحالة"
-                value={STATUS_OPTIONS.find((o) => o.value === form.status)}
-                onChange={(option) => setField("status", option.value)}
-              />
-              {fieldError("status") && (
-                <div className="text-danger small mt-1">{fieldError("status")}</div>
-              )}
-            </Col>
-          </Row>
+            </Tab.Content>
+          </Tab.Container>
+          </FieldCtx.Provider>
 
           {errors._general && (
-            <p className="text-danger mb-0">{errors._general[0]}</p>
+            <Alert variant="danger" className="mt-3 mb-0 py-2 px-3">
+              {errors._general[0]}
+            </Alert>
           )}
 
-          <Row className="g-2 mt-1">
+          <Row className="g-2 mt-3">
             <Col sm={12} md={6}>
               <button
                 className="btn btn-secondary fw-md w-100"
                 type="submit"
-                disabled={saving || !form.name.trim()}
+                disabled={saving}
               >
                 {saving ? (
                   <Spinner animation="border" size="sm" />
@@ -424,6 +1131,7 @@ const EmployeeFormModal = ({
                 type="button"
                 className="btn btn-light fw-md w-100"
                 onClick={close}
+                disabled={saving}
               >
                 إلغاء
               </button>

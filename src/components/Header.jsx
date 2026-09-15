@@ -11,19 +11,7 @@ import {
   markNotificationRead,
 } from "../redux/actions/notificationsActions";
 import moment from "moment";
-
-// Maps a notification `reference` ({ type: FQCN, id }) to a module route for
-// deep-linking. Phase 1 has no per-record detail pages, so we land on the
-// owning module's list page.
-const referenceLink = (reference) => {
-  if (!reference?.type) return null;
-  const type = reference.type.toLowerCase();
-  if (type.includes("employee")) return "/hr/employees";
-  if (type.includes("department")) return "/departments";
-  if (type.includes("user")) return "/users";
-  if (type.includes("role")) return "/roles";
-  return null;
-};
+import { referenceLink } from "../data/referenceRoutes";
 
 const Header = () => {
   const dispatch = useDispatch();

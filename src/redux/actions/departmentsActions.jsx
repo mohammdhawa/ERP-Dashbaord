@@ -23,11 +23,11 @@ export const saveDepartmentFailure = (error) => ({
   payload: error,
 });
 
-export const fetchDepartments = (page = 1, perPage = 10) => async (dispatch) => {
+export const fetchDepartments = (page = 1) => async (dispatch) => {
   dispatch(fetchDepartmentsStart());
   try {
     const response = await api.get("/departments", {
-      params: { page, per_page: perPage },
+      params: { page },
     });
     dispatch(
       fetchDepartmentsSuccess({
@@ -45,13 +45,13 @@ export const fetchDepartments = (page = 1, perPage = 10) => async (dispatch) => 
 // After create/update/delete the page is re-fetched instead of patched locally,
 // so item ordering and the `meta` counters stay consistent with the server.
 export const createDepartment =
-  (data, currentPage, perPage = 10) => async (dispatch) => {
+  (data, currentPage) => async (dispatch) => {
   dispatch(saveDepartmentStart());
   try {
     const response = await api.post("/departments", data);
     dispatch(saveDepartmentSuccess());
     toastNotify(response.data.message, "success");
-    dispatch(fetchDepartments(currentPage, perPage));
+    await dispatch(fetchDepartments(currentPage));
     return response.data.data;
   } catch (error) {
     const parsed = parseApiError(error);
@@ -61,13 +61,15 @@ export const createDepartment =
 };
 
 export const updateDepartment =
-  (id, data, currentPage, perPage = 10) => async (dispatch) => {
+  (id, data, currentPage) => async (dispatch) => {
   dispatch(saveDepartmentStart());
   try {
-    const response = await api.put(`/departments/${id}`, data);
+    const response = await api.patch(`/departments/${id}`, data);
     dispatch(saveDepartmentSuccess());
     toastNotify(response.data.message, "success");
-    dispatch(fetchDepartments(currentPage, perPage));
+    // Always read the page again. A move can change the resolved sector of the
+    // unit and its descendants, and the client must not guess those values.
+    await dispatch(fetchDepartments(currentPage));
     return response.data.data;
   } catch (error) {
     const parsed = parseApiError(error);
@@ -77,7 +79,7 @@ export const updateDepartment =
 };
 
 export const deleteDepartment =
-  (id, currentPage, itemsOnPage, perPage = 10) => async (dispatch) => {
+  (id, currentPage, itemsOnPage) => async (dispatch) => {
   const confirm = await Swal.fire({
     title: "هل أنت متأكد من حذف هذه الوحدة التنظيمية؟",
     text: "لن تتمكن من التراجع عن هذا الإجراء!",
@@ -101,7 +103,7 @@ export const deleteDepartment =
     // step back one page in that case.
     const nextPage =
       itemsOnPage === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
-    dispatch(fetchDepartments(nextPage, perPage));
+    dispatch(fetchDepartments(nextPage));
   } catch (error) {
     toastNotify(parseApiError(error).message, "error");
   }

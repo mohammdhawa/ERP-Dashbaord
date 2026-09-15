@@ -10,17 +10,7 @@ import {
   fetchNotifications,
   markNotificationRead,
 } from "../../redux/actions/notificationsActions";
-
-// reference {type, id} → module list route (no record detail pages in Phase 1).
-const referenceLink = (reference) => {
-  if (!reference?.type) return null;
-  const type = reference.type.toLowerCase();
-  if (type.includes("employee")) return "/hr/employees";
-  if (type.includes("department")) return "/departments";
-  if (type.includes("user")) return "/users";
-  if (type.includes("role")) return "/roles";
-  return null;
-};
+import { referenceLink } from "../../data/referenceRoutes";
 
 const Notifications = () => {
   const dispatch = useDispatch();

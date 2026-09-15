@@ -50,6 +50,15 @@ export const MENUITEMS = [
         title: "الموظفين",
         requiredPermissions: ["hr.employees.view"],
       },
+      {
+        path: `${import.meta.env.BASE_URL}hr/job-titles`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "المسميات الوظيفية",
+        requiredPermissions: ["hr.job_titles.view"],
+      },
     ],
   },
   {

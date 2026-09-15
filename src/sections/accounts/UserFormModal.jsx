@@ -15,12 +15,26 @@ import { useResourceOptions } from "../departments/useResourceOptions";
 // - password: required on create, optional on edit (sent only when filled —
 //   a blank password is omitted, never submitted as "").
 // - roles are read-only here; grant/revoke lives on the Roles page.
-const employeeToOption = (e) => ({
-  value: e.id,
-  label: e.name ? `${e.name} (#${e.id})` : `موظف #${e.id}`,
-});
+// The employee resource split in Batch 2: `name` is gone, replaced by the
+// read-only `full_name` accessor. Reading the old key degraded EVERY option to
+// "موظف #id", which is unusable for picking a person.
+//
+// The label pairs the name with `employee_number` because two people genuinely
+// share a name — الاسم الثلاثي is not unique in a company this size — and the
+// staff number is the thing that tells them apart on paper. The id is shown
+// only when there is no staff number to show.
+//
+// NOTE: `user.name` on the Users screen is a different field — an ACCOUNT's
+// display name, unchanged by Batch 2. Do not "fix" that one to match this.
+const employeeToOption = (e) => {
+  const name = e.full_name || `موظف #${e.id}`;
+  return {
+    value: e.id,
+    label: e.employee_number ? `${name} — ${e.employee_number}` : `${name} (#${e.id})`,
+  };
+};
 
-const UserFormModal = ({ open, close, user }) => {
+const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.users);
   const { permissions } = useSelector((state) => state.auth);
@@ -114,9 +128,9 @@ const UserFormModal = ({ open, close, user }) => {
 
     try {
       if (isEdit) {
-        await dispatch(updateUser(user.id, payload));
+        await dispatch(updateUser(user.id, payload, currentPage, perPage));
       } else {
-        await dispatch(createUser(payload));
+        await dispatch(createUser(payload, currentPage, perPage));
       }
       close();
     } catch (parsed) {

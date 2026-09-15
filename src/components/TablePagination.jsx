@@ -15,6 +15,7 @@ const TablePagination = ({
   dataCount,
   itemsPerPage = 10,
   onItemsPerPageChange,
+  showPageSizeSelector = true,
 }) => {
   const maxVisiblePages = 5;
   const normalizedCurrentPage = Number(currentPage) || 1;
@@ -129,23 +130,25 @@ const TablePagination = ({
       </nav>
 
       <div className="table-pagination-controls">
-        <label className="table-pagination-control">
-          <span>عدد الصفوف</span>
-          <select
-            className="form-select table-pagination-native-select"
-            value={normalizedItemsPerPage}
-            onChange={(event) =>
-              onItemsPerPageChange?.(Number(event.target.value))
-            }
-            aria-label="عدد الصفوف في الصفحة"
-          >
-            {ROW_COUNT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showPageSizeSelector && (
+          <label className="table-pagination-control">
+            <span>عدد الصفوف</span>
+            <select
+              className="form-select table-pagination-native-select"
+              value={normalizedItemsPerPage}
+              onChange={(event) =>
+                onItemsPerPageChange?.(Number(event.target.value))
+              }
+              aria-label="عدد الصفوف في الصفحة"
+            >
+              {ROW_COUNT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="table-pagination-control">
           <span>الصفحة</span>

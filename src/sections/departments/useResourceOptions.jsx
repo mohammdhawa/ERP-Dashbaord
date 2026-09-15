@@ -10,6 +10,9 @@ import { parseApiError } from "../../utils/apiHelpers";
 // Returns the raw `items`, mapped `options`, and honest loading/error/
 // incomplete flags so the caller can show a truthful fallback when the
 // related list cannot be read in full.
+const PER_PAGE = 100;
+const MAX_PAGES = 20;
+
 export const useResourceOptions = (path, mapItem, enabled = true) => {
   const [state, setState] = useState({
     items: [],
@@ -29,15 +32,27 @@ export const useResourceOptions = (path, mapItem, enabled = true) => {
     const load = async () => {
       setState((s) => ({ ...s, loading: true, error: null, incomplete: false }));
       try {
-        const first = await api.get(path, { params: { page: 1 } });
+        // `per_page` at the API maximum (100, clamped server-side). Walking at
+        // the server default of 15 meant ~17 sequential requests to fill one
+        // picker over the 242 employees this system is sized for; at 100 it is
+        // three. Same walk, same result, a fifth of the round trips.
+        const first = await api.get(path, {
+          params: { page: 1, per_page: PER_PAGE },
+        });
         let items = first.data.data || [];
         const lastPage = first.data.meta?.last_page || 1;
         let incomplete = false;
 
-        for (let p = 2; p <= lastPage; p += 1) {
+        // MAX_PAGES is a hard stop so a mis-set `last_page` cannot spin
+        // forever; the list is marked incomplete rather than silently truncated.
+        const cappedLastPage = Math.min(lastPage, MAX_PAGES);
+
+        for (let p = 2; p <= cappedLastPage; p += 1) {
           if (cancelled) return;
           try {
-            const res = await api.get(path, { params: { page: p } });
+            const res = await api.get(path, {
+              params: { page: p, per_page: PER_PAGE },
+            });
             items = items.concat(res.data.data || []);
           } catch {
             // A mid-walk failure leaves the list partially loaded: surface it
@@ -53,7 +68,7 @@ export const useResourceOptions = (path, mapItem, enabled = true) => {
           options: items.map(mapItem),
           loading: false,
           error: null,
-          incomplete,
+          incomplete: incomplete || lastPage > MAX_PAGES,
         });
       } catch (error) {
         if (cancelled) return;

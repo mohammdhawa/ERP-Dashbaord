@@ -8,7 +8,7 @@ import { PERMISSIONS_CATALOG } from "../../data/permissionsCatalog";
 // catalogue. On UPDATE the `permissions` array is a full SYNC: the server
 // replaces the role's set with exactly what we send, and an empty array wipes
 // every permission — hence the explicit warning before submitting empty.
-const RoleFormModal = ({ open, close, role }) => {
+const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.roles);
   const isEdit = Boolean(role);
@@ -75,9 +75,9 @@ const RoleFormModal = ({ open, close, role }) => {
 
     try {
       if (isEdit) {
-        await dispatch(updateRole(role.id, payload));
+        await dispatch(updateRole(role.id, payload, currentPage, perPage));
       } else {
-        await dispatch(createRole(payload));
+        await dispatch(createRole(payload, currentPage, perPage));
       }
       close();
     } catch (parsed) {
@@ -196,11 +196,23 @@ const RoleFormModal = ({ open, close, role }) => {
                         type="checkbox"
                         id={`group-${group.key}`}
                         className="fw-semibold mb-2"
-                        label={group.module}
+                        label={
+                          <span>
+                            {group.module}{" "}
+                            {group.fieldLevel && (
+                              <span className="badge bg-warning-transparent fs-11">
+                                على مستوى الحقل
+                              </span>
+                            )}
+                          </span>
+                        }
                         checked={allChecked}
                         disabled={isSystemRole}
                         onChange={() => toggleGroup(group)}
                       />
+                      {group.note && (
+                        <p className="text-muted fs-11 mb-2">{group.note}</p>
+                      )}
                       <div className="d-flex flex-column gap-1 ps-3">
                         {group.permissions.map((perm) => (
                           <Form.Check

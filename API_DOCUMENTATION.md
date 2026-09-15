@@ -37,7 +37,10 @@ Authentication uses **Laravel Sanctum bearer tokens** with a custom refresh‑to
   Authorization: Bearer {access_token}
   ```
 
-- **Access token** lifetime: **15 minutes** (`expires_in: 900` seconds).
+- **Access token** lifetime: **15 minutes** by default (`expires_in: 900` seconds).
+  Read `expires_in` from the login/refresh response rather than hardcoding 900 —
+  it is derived from server config (`SANCTUM_TOKEN_EXPIRATION`) and is `null` if
+  access tokens are configured never to expire.
 - **Refresh token** lifetime: **30 days**, single‑use (rotated on every refresh).
 - On `401 Unauthorized`, call `POST /api/auth/refresh` with the refresh token to obtain a new pair, then retry the original request.
 - Tokens are per‑user and replace each other: logging in (or refreshing) **deletes the previous access token**, so a user effectively holds one active access token at a time.
@@ -55,11 +58,36 @@ Authentication uses **Laravel Sanctum bearer tokens** with a custom refresh‑to
 
 Almost every endpoint returns the **same envelope**, so you can write a single parser.
 
-> ⚠️ **Two exceptions that do NOT carry `success`** (they are rendered by Laravel's defaults, not our handler):
-> - **`401` from a missing/expired/invalid access token** → `{ "message": "Unauthenticated." }` (English, no `success` key). This is the response that drives the refresh flow — **trigger your refresh interceptor on the HTTP `401` status, not on `success === false`**.
-> - **`429` rate-limit** → `{ "message": "Too Many Requests" }` plus a `Retry-After` header (seconds) and `X-RateLimit-*` headers. Read `Retry-After` to back off.
+> ✅ **There are now NO exceptions. Every response carries `success`** — success and error, application-generated and framework-generated, in every environment.
 >
-> Every other error (business rules, validation, permissions, disabled account, refresh-token failures) **does** use the envelope below.
+> **This changed on 2026-09-08, and it changed in your favour.** The previous
+> version of this section listed `401` and `429` as the only two bare responses.
+> That was wrong, and wrong in the direction that costs you: `422` validation —
+> the most common error any client handles — also arrived with **no `success`
+> key**, as did `404`, `405` and `5xx`. The `404` from a bad id additionally
+> leaked the internal model class name into `message`. All of it now goes
+> through one mapper.
+>
+> **What this means for your code**
+>
+> - You can now read `success` on **every** response, including `401` and `429`.
+> - **Keep triggering your refresh interceptor on the HTTP `401` status**, not on
+>   `success === false`. That advice has not changed and is still correct — a
+>   `403` also carries `success: false` and must never trigger a refresh.
+> - `401` and `429` messages are now Arabic and display-ready like everything
+>   else. If you were special-casing the English `"Unauthenticated."` or
+>   `"Too Many Requests"` strings, delete that branch.
+> - `429` still carries `Retry-After` (seconds) and `X-RateLimit-*` headers, and
+>   `405` still carries `Allow`. Those are unchanged.
+> - `message` on a `404` is now a generic Arabic string. Do not parse it — a
+>   missing row and an unknown route deliberately return the same text, so that a
+>   `404` never reveals which rows exist.
+>
+> 🆕 **`X-Request-Id` on every response.** Each response carries a correlation id,
+> and it is recorded on the matching audit rows. If you send your own
+> `X-Request-Id` (up to 64 chars of `A-Za-z0-9._-`) it is honoured and echoed
+> back; anything else is replaced. Send one per user action and log it, and a bug
+> report becomes traceable to the exact server-side rows that handled it.
 
 **Success**
 
@@ -109,9 +137,18 @@ Most validation/business messages are returned in **Arabic**. Display `message` 
 
 ### Pagination ⚠️ (important for list endpoints)
 
-List endpoints (`departments.index`, `hr/employees.index`, `notifications.index`) are paginated server‑side at **15 items per page**.
+**Every list endpoint in this API is paginated, and they all page identically** —
+`departments.index`, `hr/employees.index`, `notifications.index`,
+`auth/users.index` and `auth/roles.index`. Write one pager; it works on all five.
 
 - Request a page with the query string: `?page=2`.
+- Request a page size with `?per_page=50`. **Default 15, clamped to 1–100.**
+  Out-of-range values are clamped rather than rejected, so `?per_page=1000000`
+  returns 100 and `?per_page=0` returns 1 — neither is an error. A non-numeric
+  value falls back to 15. `meta.per_page` always reports the size actually
+  applied, so read it back rather than assuming your request was honoured.
+- An out-of-range `?page=99` is a **`200`** with `"data": []` and correct `meta`,
+  never a `404`.
 - `data` is a **flat array of items**, and pagination metadata is returned alongside it under a sibling **`meta`** key:
 
 ```json
@@ -134,11 +171,28 @@ List endpoints (`departments.index`, `hr/employees.index`, `notifications.index`
 | -------------- | ------------------------------------------------ |
 | `current_page` | the page returned                                |
 | `last_page`    | total number of pages (build pager from this)    |
-| `per_page`     | items per page (15)                              |
+| `per_page`     | items per page actually applied (after clamping) |
 | `total`        | total item count across all pages                |
 | `from` / `to`  | 1‑based index range of items on this page (`null` when the page is empty) |
 
-Roles and Users list endpoints (`/api/auth/roles`, `/api/auth/users`) return the **full collection** (not paginated) and have **no** `meta` key.
+These six keys are the **whole** contract — there is no `links` or `path`, and
+`meta` is a sibling of `data`, never nested inside it. `data` is **always an
+array**, never an object keyed by id and never `null`; an empty page is `[]` with
+`from`/`to` set to `null`. `last_page` is `1` when there are no results, never `0`.
+
+> ⚠️ **Changed 2026-09-08 — action needed if you consume roles or users.**
+> `/api/auth/roles` and `/api/auth/users` previously returned the **full
+> collection** with no `meta`. They are now paginated like everything else, so
+> they return **15 items by default instead of all of them**. If you were relying
+> on receiving every row in one response — populating a role dropdown, for
+> instance — page through with `?per_page=100` or read `meta.last_page`. This is
+> the one breaking change in this revision, and `users` is about to grow past 242
+> rows in Batch 4, so the old behaviour was not survivable.
+>
+> Also changed: `POST /api/auth/roles/assign` and `/unassign` now return the
+> updated user (with their resulting `roles`) in `data`, where they previously
+> returned a message only. Purely additive — existing `message`-only clients are
+> unaffected — but it saves you a follow-up request to refresh what you changed.
 
 ---
 
@@ -152,14 +206,47 @@ Roles and permissions both carry an Arabic **`label`** for display; `name` is th
 
 Permission string format: `{module}.{resource}.{action}`.
 
-**Phase‑1 permission catalogue**
+**Permission catalogue — 28 rows** (26 route-level + 2 field-level)
 
-| Module        | Permissions                                                                                      |
-| ------------- | ------------------------------------------------------------------------------------------------ |
-| Departments   | `departments.view`, `departments.create`, `departments.update`, `departments.delete`             |
-| HR            | `hr.employees.view`, `hr.employees.create`, `hr.employees.update`, `hr.employees.delete`         |
-| Auth – Users  | `auth.users.view`, `auth.users.create`, `auth.users.update`, `auth.users.delete`                 |
-| Auth – Roles  | `auth.roles.view`, `auth.roles.create`, `auth.roles.update`, `auth.roles.delete`                 |
+| Module            | Permissions                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| Departments       | `departments.view`, `departments.create`, `departments.update`, `departments.delete`         |
+| HR – Employees    | `hr.employees.view`, `hr.employees.create`, `hr.employees.update`, `hr.employees.delete`     |
+| HR – fields       | `hr.employees.viewSalary`, `hr.employees.viewIdentity` — **field-level**, see below           |
+| HR – Job titles   | `hr.job_titles.view`, `hr.job_titles.create`, `hr.job_titles.update`, `hr.job_titles.delete` |
+| HR – Assignments  | `hr.assignments.view`, `hr.assignments.create` — **no update or delete**, see [§8.3](#83-posting-history--سجل-التعيين) |
+| HR – Warnings     | `hr.warnings.view`, `hr.warnings.create`, `hr.warnings.update`, `hr.warnings.delete`         |
+| Auth – Users      | `auth.users.view`, `auth.users.create`, `auth.users.update`, `auth.users.delete`             |
+| Auth – Roles      | `auth.roles.view`, `auth.roles.create`, `auth.roles.update`, `auth.roles.delete`             |
+
+> `hr.assignments` has no `update` or `delete` **by design**, not by omission:
+> سجل التعيين is append-only, because editing a historical posting changes what
+> a payslip was computed against with no trace of the original.
+
+### Field-level permissions (new, 2026-09-08)
+
+The last two guard **fields inside a payload**, not routes. No endpoint requires
+them; they decide whether two keys appear in an employee response:
+
+| Permission | Unlocks |
+| --- | --- |
+| `hr.employees.viewSalary` | `salary_mode(_label)`, `agreed_salary`, `sham_cash_account`, and **every classification axis** — `activity_type(_label)`, `organizational_grade`, `experience_level`, `engineering_rank(_label)`, `industrial_experience_years`, `has_hazard_pay`, `has_scarcity_pay`, `has_dual_role_pay`, `distinction_grade` |
+| `hr.employees.viewIdentity` | `national_id` |
+
+**Without the permission the key is ABSENT, not `null`.** Do not read
+`employee.salary === null` as "this employee has no salary" — check whether the
+key exists, or gate your UI on the permission array you already receive from
+login and `/me`. A `null` would be a claim about the employee; an absent key is a
+statement about the reader.
+
+They are separate on purpose: payroll needs pay and not identity documents, HR
+administration often needs the reverse. Previously both fields were visible to
+anyone holding plain `hr.employees.view`.
+
+Batch 2 extends `viewSalary` to `agreed_salary`, `sham_cash_account` and the
+classification axes (`activity_type`, `organizational_grade`, …) — the axes are
+the inputs the salary is computed from, so hiding the result while exposing them
+would be theatre.
 
 A missing permission yields:
 
@@ -521,7 +608,7 @@ Base path `/api/auth/notifications`. **Protected** (auth only — no permission 
   "title": "New employee added",
   "body": "Jane Doe joined Engineering.",
   "type": "employee_created",
-  "reference": { "type": "App\\Modules\\HR\\Models\\Employee", "id": 5 },
+  "reference": { "type": "employee", "id": 5 },
   "is_read": false,
   "created_at": "2026-06-21T10:00:00+00:00"
 }
@@ -529,6 +616,24 @@ Base path `/api/auth/notifications`. **Protected** (auth only — no permission 
 
 - `reference` is `null` when the notification isn't linked to a record; otherwise a `{ type, id }` pair you can use to deep‑link.
 - `type` / `body` may be `null`.
+
+> ⚠️ **Changed 2026-09-08 — `reference.type` is now a short alias.** It
+> previously returned the PHP class name (`App\Modules\HR\Models\Employee`), and
+> this document published that as the contract. It now returns a stable
+> lower-case alias, and the set is closed:
+>
+> | `reference.type` | Record |
+> | --- | --- |
+> | `employee` | an HR employee |
+> | `department` | an organizational unit |
+> | `user` | a login account |
+> | `role` | an RBAC role |
+> | `permission` | a permission |
+>
+> **If you were switching on the class name, switch on the alias instead.** The
+> aliases are deliberately decoupled from PHP namespaces, so a model moving
+> between modules — which the legacy merge will do — no longer changes what you
+> receive. Any new type will be added to this table, never as a raw class name.
 
 ### 6.1 List my notifications
 
@@ -573,34 +678,64 @@ A "department" is an **organizational unit at any tier** of the company tree —
 | ------- | ------------------------ | ----------------- | --------------------------------------------- |
 | `1`     | General administration   | `الإدارة العامة`  | The **single root** — exactly one, no parent  |
 | `2`     | Division                 | `إدارة`           | Always directly under the root                |
-| `3`     | Section                  | `قسم`             | Always directly under a division (deepest tier) |
+| `3`     | Section                  | `قسم`             | Always directly under a division              |
+| `4`     | Office                   | `مكتب`            | Always directly under a section (deepest tier) |
 
 **Hierarchy rules** (enforced on every write; violations are `422` field errors):
 
 - A unit **without** `parent_id` must be level 1, and only **one** root may exist.
-- A unit **with** a parent must sit **exactly one level below it** (no skipping, nothing under level 3).
+- A unit **with** a parent must sit **exactly one level below it** (no skipping, nothing under level 4).
 - The parent must exist and not be soft‑deleted.
 - On update: a unit cannot be its own parent, or be moved under one of its own descendants.
+- `sector` may only be stored on a **level‑2** unit. See [الجهة](#الجهة--sector) below.
+
+### الجهة — `sector`
+
+Which of the company's two groupings a unit belongs to.
+
+| `sector` | `sector_label`      |
+| -------- | ------------------- |
+| `1`      | `المكاتب الإدارية`  |
+| `2`      | `الأجسام الإدارية`  |
+
+**It is stored on divisions only.** The root, the governance units
+(`مجلس الإدارة`, `مكتب المدير العام`), and every section and office store `NULL`
+and **inherit** their sector from the nearest ancestor that has one.
+
+The API therefore returns a **resolved** value: a section reads back
+`"sector": 1` even though its own row is `NULL`. Two consequences for clients:
+
+- **Read it, do not re‑post it.** Sending a non‑null `sector` for a unit whose
+  `level` is not 2 is rejected with `422` — including when the value is simply
+  echoed back from a `GET`. Send `sector` only when you are editing a division.
+  A `PATCH` that omits the field is always safe.
+- **Moving a unit changes its sector automatically.** Re‑parent a section into a
+  division in the other grouping and the section — and everything beneath it —
+  reports the new sector on the next read. No second call is needed, and none is
+  possible.
 
 **Department object shape**
 
 ```json
 {
   "id": 3,
-  "name": "قسم تطوير البرمجيات",
-  "code": "SW",
+  "name": "قسم النقدية",
+  "code": "FIN-CASH",
   "description": null,
   "is_active": true,
   "parent_id": 2,
   "level": 3,
   "level_label": "قسم",
+  "sector": 1,
+  "sector_label": "المكاتب الإدارية",
   "manager_id": 4,
   "created_at": "2026-06-21T10:00:00+00:00",
   "updated_at": "2026-06-21T10:00:00+00:00"
 }
 ```
 
-- `level` is the machine‑readable tier to filter on; `level_label` is the Arabic display name (resolved server‑side — do **not** hardcode a tier map in the frontend).
+- `level` is the machine‑readable tier to filter on; `level_label` is the Arabic display name (resolved server‑side — do **not** hardcode a tier map in the frontend). `sector` / `sector_label` work the same way, with the addition that the value is **inherited** — see [الجهة](#الجهة--sector).
+- `code` is a stable short identifier derived from the unit's path through the tree (`FIN` → `FIN-CASH` → `FIN-CASH-VAULT`). Prefer it over `name` when matching units against an external system: names repeat across the company — `الحسابات` and `أمانة الصندوق` each occur under three different divisions.
 
 | Method & path                          | Permission             | Notes                                   |
 | -------------------------------------- | ---------------------- | --------------------------------------- |
@@ -619,14 +754,15 @@ A "department" is an **organizational unit at any tier** of the company tree —
 | `description` | string  | optional, nullable, max 1000                                            |
 | `is_active`   | boolean | optional (defaults to `true`)                                           |
 | `parent_id`   | integer | nullable; must be an existing, **non‑deleted** unit; `null` = the root  |
-| `level`       | integer | required on create; must be a defined tier (1–3) obeying the rules above |
+| `level`       | integer | required on create; must be a defined tier (1–4) obeying the rules above |
+| `sector`      | integer | optional, nullable; `1` or `2`; **only accepted when `level` is 2** — every other unit inherits it |
 | `manager_id`  | integer | optional, nullable; must be an existing, **non‑deleted employee**       |
 
 **Messages:** index `تم جلب الوحدات التنظيمية.` · show `تم جلب الوحدة التنظيمية.` · create `تم إنشاء الوحدة التنظيمية.` · update `تم تحديث الوحدة التنظيمية.` · delete `تم حذف الوحدة التنظيمية.`
 
 **Errors**
 
-- `422` — field/hierarchy violations, e.g. missing name `اسم الوحدة التنظيمية مطلوب.` · second root `يوجد بالفعل وحدة جذر (الإدارة العامة) في هيكل الشركة، ولا يمكن إنشاء أكثر من جذر واحد.` · wrong child tier `الوحدة التابعة لـ… يجب أن تكون … (المستوى …).` · deleted/missing parent `الوحدة التنظيمية الأصل غير موجودة أو تم حذفها.` · cycle `لا يمكن نقل الوحدة التنظيمية لتصبح تابعة لإحدى الوحدات الفرعية التابعة لها.` · unknown manager `المدير المحدد غير موجود.`
+- `422` — field/hierarchy violations, e.g. missing name `اسم الوحدة التنظيمية مطلوب.` · second root `يوجد بالفعل وحدة جذر (الإدارة العامة) في هيكل الشركة، ولا يمكن إنشاء أكثر من جذر واحد.` · wrong child tier `الوحدة التابعة لـ… يجب أن تكون … (المستوى …).` · nothing under the deepest tier `لا يمكن إضافة وحدات فرعية تحت مكتب لأنها أدنى مستوى في هيكل الشركة.` · sector on a non‑division `الجهة تُحدَّد على مستوى إدارة (المستوى 2) فقط؛ الوحدات الأدنى ترث جهتها من الوحدة الأعلى.` · deleted/missing parent `الوحدة التنظيمية الأصل غير موجودة أو تم حذفها.` · cycle `لا يمكن نقل الوحدة التنظيمية لتصبح تابعة لإحدى الوحدات الفرعية التابعة لها.` · unknown manager `المدير المحدد غير موجود.`
 - `409` — deleting the **root**: `لا يمكن حذف الإدارة العامة، فهي الوحدة الجذر لهيكل الشركة.`
 - `409` — deleting a unit that still has live children: `لا يمكن حذف وحدة تنظيمية تحتوي على وحدات فرعية. الرجاء نقل أو حذف الوحدات الفرعية أولًا.`
 
@@ -634,64 +770,400 @@ A "department" is an **organizational unit at any tier** of the company tree —
 
 ---
 
-## 8. HR — Employees
+## 8. HR
 
-Base path `/api/hr`. **Protected**, guarded by `hr.employees.*` permissions.
+Base path `/api/hr`. **Protected.** Four resources: employees, the job-title
+catalogue, posting history, and warnings.
 
-**Employee object shape**
+### ⚠️ 8.0 Breaking changes — Batch 2 (2026-09-13)
+
+**Every client that reads an employee must be updated.** The employees table was
+restructured before the company's real staff are imported — the last release in
+which that was a migration rather than a data migration.
+
+| Was | Is now | Why |
+| --- | --- | --- |
+| `name` | `first_name`, `middle_name`, `last_name` + read-only `full_name` | The company records الاسم الثلاثي. Storing parts *and* a joined string is two columns for one fact |
+| `job_title` (string) | `job_title_id` (FK) + embedded `job_title` object | Titles are a governed, company-wide catalogue |
+| `salary` | **removed** | For most staff pay is *computed* from criteria, not stored. The negotiated track uses `agreed_salary` |
+| `status: "active"` | `status: 1` + `status_label: "نشط"` | Matches `level` / `level_label` on departments. `inactive` is now **`موقوف` (suspended)** |
+
+**Migration notes for the frontend**
+
+1. Replace any `employee.name` read with `employee.full_name`; use the three
+   parts in forms.
+2. `POST` and `PUT` now require `first_name`, `middle_name`, `last_name` and
+   `gender` on create.
+3. Every enum field ships as `{field}` (int) plus `{field}_label` (Arabic).
+   Render the label, filter on the int, and never keep your own copy of the
+   mapping.
+4. `GET /api/auth/me` and `/api/auth/users` still return `name` — that key is an
+   *account's* display name and is unchanged. Only the employee resource split.
+
+### 8.1 Employees
+
+**Employee object** (a requester holding **both** field-level permissions)
 
 ```json
 {
   "id": 1,
   "employee_number": "EMP-00001",
-  "name": "Jane Doe",
+  "legacy_number": "M024333",
+
+  "first_name": "سامر",
+  "middle_name": "خالد",
+  "last_name": "الحلبي",
+  "mother_name": "فاطمة",
+  "full_name": "سامر خالد الحلبي",
   "national_id": "1098765432",
-  "phone": "+966500000000",
-  "email": "jane@example.com",
-  "address": "Riyadh",
+
+  "gender": 1,
+  "gender_label": "ذكر",
+  "birth_date": "1990-04-12",
+  "birth_place": "حلب",
+  "origin_governorate": 3,
+  "origin_governorate_label": "حلب",
+  "residence_governorate": 3,
+  "residence_governorate_label": "حلب",
+  "nationality": "سوري",
+  "second_nationality": null,
+
+  "marital_status": 2,
+  "marital_status_label": "متزوج",
+  "wives_count": 1,
+  "sons_count": 2,
+  "daughters_count": 1,
+  "children_count": 3,
+
+  "phone": "+963900000000",
+  "phone_secondary": null,
+  "email": "samer@example.com",
+  "address": "حلب - الفرقان",
+
+  "did_military_service": true,
+  "military_discharge_date": "2014-06-01",
+
+  "education_level": 11,
+  "education_level_label": "كلية",
+  "qualification": "كلية هندسة مدنية",
+  "specialization": "إنشاءات",
+  "is_graduated": true,
+  "graduation_date": "2013-07-01",
+
   "department_id": 2,
-  "job_title": "Engineer",
+  "department": { "id": 2, "name": "الإدارة الهندسية", "level": 2 },
+  "job_title_id": 7,
+  "job_title": { "id": 7, "name": "مهندس مدني" },
+  "direct_manager_id": null,
+  "employment_type": 1,
+  "employment_type_label": "متعاقد",
+  "workplace": "مجبل الإسفلت",
   "hire_date": "2026-01-15",
-  "salary": "85000.00",
-  "status": "active",
-  "created_at": "2026-06-21T10:00:00+00:00",
-  "updated_at": "2026-06-21T10:00:00+00:00"
+  "termination_date": null,
+  "status": 1,
+  "status_label": "نشط",
+
+  "activity_type": 1,
+  "activity_type_label": "هندسي",
+  "organizational_grade": 3,
+  "experience_level": 2,
+  "engineering_rank": 6,
+  "engineering_rank_label": "ممارس",
+  "industrial_experience_years": null,
+  "has_hazard_pay": true,
+  "has_scarcity_pay": false,
+  "has_dual_role_pay": false,
+  "distinction_grade": null,
+  "salary_mode": 1,
+  "salary_mode_label": "نظام رواتب",
+  "agreed_salary": null,
+  "sham_cash_account": "1234567890123456",
+
+  "created_at": "2026-09-13T10:00:00+00:00",
+  "updated_at": "2026-09-13T10:00:00+00:00"
 }
 ```
 
-- `employee_number` is the unique staff identifier. **Auto‑generated** (`EMP-00001`, …) when omitted on create; a client‑supplied value is honoured but must be unique.
-- `national_id` is nullable, unique when present.
-- `salary` is serialized as a **string** (decimal 12,2). `hire_date` is a plain `YYYY-MM-DD` date.
-- `status` is one of `active` | `inactive` | `terminated`.
+**Field-level gating.** Gated keys are **absent entirely**, never `null` — an
+absent key says "you may not see this", a null would say "this employee has no
+national id".
 
-| Method & path                              | Permission              | Notes                               |
-| ------------------------------------------ | ----------------------- | ----------------------------------- |
-| `GET /api/hr/employees`                    | `hr.employees.view`     | Paginated list (15/page). `?page=N` |
-| `POST /api/hr/employees`                   | `hr.employees.create`   | 201 on success                      |
-| `GET /api/hr/employees/{employee}`         | `hr.employees.view`     | Single resource                     |
-| `PUT\|PATCH /api/hr/employees/{employee}`  | `hr.employees.update`   | Partial update                      |
-| `DELETE /api/hr/employees/{employee}`      | `hr.employees.delete`   | 200 on success (**soft** delete)    |
+| Permission | Gates |
+| --- | --- |
+| `hr.employees.viewIdentity` | `national_id` |
+| `hr.employees.viewSalary` | `salary_mode(_label)`, `agreed_salary`, `sham_cash_account`, **and every classification axis**: `activity_type(_label)`, `organizational_grade`, `experience_level`, `engineering_rank(_label)`, `industrial_experience_years`, `has_hazard_pay`, `has_scarcity_pay`, `has_dual_role_pay`, `distinction_grade` |
 
-**Request body (create / update)**
+> **Why the axes are gated with the amount:** they are the inputs the salary is
+> computed from. Publishing them while hiding the result would let anyone with
+> the rate table reconstruct the pay to within a rounding error.
 
-| Field             | Type    | Rules                                                              |
-| ----------------- | ------- | ------------------------------------------------------------------ |
-| `employee_number` | string  | optional, nullable, max 50, unique — **auto‑generated when omitted** |
-| `name`            | string  | required on create, optional on update, max 255                    |
-| `national_id`     | string  | optional, nullable, max 50, unique when present                    |
-| `phone`           | string  | optional, nullable, max 50                                         |
-| `email`           | string  | optional, nullable, email, max 255                                 |
-| `address`         | string  | optional, nullable, max 1000                                       |
-| `department_id`   | integer | optional, nullable, must be an existing, **non‑deleted** department |
-| `job_title`       | string  | optional, nullable, max 255                                        |
-| `hire_date`       | date    | optional, nullable (`YYYY-MM-DD`)                                  |
-| `salary`          | numeric | optional, ≥ 0                                                     |
-| `status`          | enum    | optional, one of `active` / `inactive` / `terminated`              |
+Both gates behave identically on the list and single endpoints.
+
+| Method & path | Permission | Notes |
+| --- | --- | --- |
+| `GET /api/hr/employees` | `hr.employees.view` | Paginated. Filters + sort below |
+| `POST /api/hr/employees` | `hr.employees.create` | 201 on success |
+| `GET /api/hr/employees/{employee}` | `hr.employees.view` | Single resource |
+| `PUT\|PATCH /api/hr/employees/{employee}` | `hr.employees.update` | Partial update |
+| `DELETE /api/hr/employees/{employee}` | `hr.employees.delete` | 200 (**soft** delete) |
+
+**List query parameters**
+
+| Param | Type | Notes |
+| --- | --- | --- |
+| `status` | int | `1` نشط · `2` موقوف · `3` منتهي الخدمة |
+| `department_id` | int | must exist and not be deleted |
+| `job_title_id` | int | must exist and not be deleted |
+| `activity_type` | int | 1–5 |
+| `search` | string | matches any name part, `employee_number` **or** `legacy_number` |
+| `sort` | string | `employee_number`, `first_name`, `last_name`, `hire_date`, `created_at`; prefix `-` for descending |
+
+⚠️ An unknown `sort` or an invalid filter is a **422**, not a silent fallback —
+quietly ignoring one returns a correct-looking page of the wrong rows.
+(`per_page` is the exception: it is clamped to 1–100 rather than rejected.)
+
+**Request body (create / update).** Fields are `sometimes` unless marked
+required; required applies on create only.
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `first_name` / `middle_name` / `last_name` | string | **required on create**, max 255 |
+| `gender` | int | **required on create**, `1` ذكر · `2` أنثى |
+| `employee_number` | string | optional, max 50, unique — **auto-generated when omitted**, and a supplied value is kept as-is |
+| `legacy_number` | string | optional, nullable, max 50, unique — the `M024333` values |
+| `national_id` | string | optional, nullable, max 50, unique |
+| `mother_name` | string | optional, nullable, max 255 |
+| `birth_date` | date | optional, nullable, must be before today |
+| `birth_place` | string | optional, nullable, max 255 |
+| `origin_governorate` / `residence_governorate` | int | optional, nullable, 1–14 |
+| `nationality` / `second_nationality` | string | optional, max 60 (`nationality` defaults to `سوري`) |
+| `marital_status` | int | optional, nullable, `1` عازب · `2` متزوج · `3` مطلق · `4` أرمل |
+| `wives_count` | int | optional, 0–4 — **only for a married employee** |
+| `sons_count` / `daughters_count` | int | optional, 0–50. `children_count` is derived and read-only |
+| `phone` / `phone_secondary` | string | optional, nullable, max 50 |
+| `email` | string | optional, nullable, email, max 255 |
+| `address` | string | optional, nullable, max 1000 |
+| `did_military_service` | bool | optional, nullable |
+| `military_discharge_date` | date | optional, nullable |
+| `education_level` | int | optional, nullable, 1–13 (see §8.5) |
+| `qualification` / `specialization` | string | optional, nullable, max 255 |
+| `is_graduated` | bool | optional, nullable |
+| `graduation_date` | date | optional, nullable |
+| `activity_type` | int | optional, nullable, 1–5 |
+| `organizational_grade` | int | optional, nullable, **1–5** |
+| `experience_level` | int | optional, nullable, **1–5** |
+| `engineering_rank` | int | optional, nullable, 1–9 — **only when `activity_type` = 1 (هندسي)** |
+| `industrial_experience_years` | int | optional, nullable, 0–60 — **only when `activity_type` = 2 (صناعي)** |
+| `has_hazard_pay` / `has_scarcity_pay` / `has_dual_role_pay` | bool | optional |
+| `distinction_grade` | int | optional, nullable, 0–255 |
+| `department_id` | int | optional, nullable, existing **non-deleted** department |
+| `job_title_id` | int | optional, nullable, existing **non-deleted** title |
+| `direct_manager_id` | int | optional, nullable, existing employee, **not the employee themselves** |
+| `employment_type` | int | optional, nullable, `1` متعاقد · `2` يحتاج تثبيت · `3` جماعة · `4` مثبت |
+| `workplace` | string | optional, nullable, max 255 |
+| `hire_date` / `termination_date` | date | optional, nullable — termination may not precede hire |
+| `status` | int | optional, 1–3 |
+| `sham_cash_account` | string | optional, nullable, **exactly 16 digits**, unique |
+| `salary_mode` | int | optional, `1` نظام رواتب (default) · `2` إتفاق |
+| `agreed_salary` | numeric | **required when `salary_mode` = 2, must be absent/null when = 1** |
+
+**Cross-field rules (422).** These are enforced for every writer, not just HTTP:
+
+- `الرتبة الهندسية تُحدَّد للموظفين ذوي النشاط الهندسي فقط.`
+- `سنوات الخبرة الصناعية تُحدَّد للموظفين ذوي النشاط الصناعي فقط.`
+- `الراتب المتفق عليه مطلوب عندما يكون نظام الراتب «إتفاق».`
+- `لا يجوز تحديد راتب متفق عليه ضمن «نظام الرواتب»؛ الراتب يُحتسب من المعايير.`
+- `عدد الزوجات يُحدَّد للموظف المتزوج فقط.`
+- `تاريخ انتهاء العمل لا يمكن أن يسبق تاريخ التعيين.`
+- `رقم الشام كاش يجب أن يتكون من 16 رقماً.`
 
 **Messages:** index `تم جلب الموظفين.` · show `تم جلب بيانات الموظف.` · create `تم إنشاء الموظف.` · update `تم تحديث بيانات الموظف.` · delete `تم حذف الموظف.`
-**422** — missing name: `اسم الموظف مطلوب.` · unknown/deleted department: `القسم المحدد غير موجود أو تم حذفه.` · duplicate number: `الرقم الوظيفي مستخدم بالفعل.` · duplicate national id: `رقم الهوية مستخدم بالفعل.` · bad status: `يجب أن تكون الحالة واحدة من: active أو inactive أو terminated.`
 
-> Deletes are **soft**: the person's record (identity, history, audit trail) survives; they simply stop appearing in lists. A linked user account keeps its `employee_id`, but the account's `name` resolves to `null` while the employee is deleted.
+> Deletes are **soft**: identity, history and audit trail survive. A linked user
+> account keeps its `employee_id`, but the account's `name` resolves to `null`
+> while the employee is deleted.
+
+### 8.2 Job titles — دليل المسميات الوظيفية
+
+**One shared, company-wide catalogue.** `name` is unique on its own and there is
+**no `department_id`**: `محاسب` is a single row with a single job description
+whichever divisions employ accountants. "Which divisions use this title?" is
+answered by filtering employees on `job_title_id`.
+
+```json
+{
+  "id": 7,
+  "name": "مهندس مدني",
+  "default_organizational_grade": 3,
+  "default_activity_type": 1,
+  "default_activity_type_label": "هندسي",
+  "is_described": false,
+  "description": null,
+  "is_active": true,
+  "created_at": "2026-09-13T10:00:00+00:00",
+  "updated_at": "2026-09-13T10:00:00+00:00"
+}
+```
+
+The two `default_*` values are **suggestions** that pre-fill the employee form,
+not constraints: a section head and a division head can hold one title at
+different grades, so the employee's own columns remain the fact.
+
+| Method & path | Permission | Notes |
+| --- | --- | --- |
+| `GET /api/hr/job-titles` | `hr.job_titles.view` | Paginated, ordered by name. `?search=`, `?is_described=`, `?is_active=`, `?sort=name\|-name\|created_at\|-created_at` |
+| `POST /api/hr/job-titles` | `hr.job_titles.create` | 201 |
+| `GET /api/hr/job-titles/{jobTitle}` | `hr.job_titles.view` | |
+| `PUT\|PATCH /api/hr/job-titles/{jobTitle}` | `hr.job_titles.update` | |
+| `DELETE /api/hr/job-titles/{jobTitle}` | `hr.job_titles.delete` | 200, **soft** delete — **409** if held |
+
+The boolean filters accept `1`/`0`, `true`/`false`, `yes`/`no`, `on`/`off`, in
+any case. Anything else is a **422** — as is an unknown `sort` — never a silent
+fallback: a filter that is quietly ignored returns a correct-looking page of the
+wrong rows.
+
+⚠️ **`409 Conflict`** — `لا يمكن حذف المسمى الوظيفي لأنه مرتبط بموظفين أو بسجلات تعيين.`
+A title is undeletable while anyone holds it **or ever held it**, because a
+historical posting that cannot resolve its title cannot explain the payslip
+computed from it.
+
+⚠️ **A deleted title keeps its name reserved.** The unique index counts
+soft-deleted rows, so `محاسب` cannot be recreated until the old row is
+force-deleted. Same trade-off as `users.email`.
+
+`?is_described=0` is قسم التحليل والتوصيف's worklist: the titles still awaiting
+a job description.
+
+### 8.3 Posting history — سجل التعيين
+
+One employee's placements over time. The row with `to_date: null` is the current
+one; the earliest row is their initial posting.
+
+```json
+{
+  "id": 12,
+  "employee_id": 1,
+  "department_id": 2,
+  "department": { "id": 2, "name": "الإدارة الهندسية" },
+  "job_title_id": 7,
+  "job_title": { "id": 7, "name": "مهندس مدني" },
+  "organizational_grade": 3,
+  "from_date": "2026-06-01",
+  "to_date": null,
+  "is_current": true,
+  "reason": 3,
+  "reason_label": "ترقية",
+  "legacy_workplace": null,
+  "legacy_manager_name": null,
+  "notes": "قرار رقم 41",
+  "created_at": "2026-09-13T10:00:00+00:00"
+}
+```
+
+| Method & path | Permission | Notes |
+| --- | --- | --- |
+| `GET /api/hr/employees/{employee}/assignments` | `hr.assignments.view` | Paginated, newest first |
+| `POST /api/hr/employees/{employee}/assignments` | `hr.assignments.create` | 201 — records a transfer |
+
+⚠️ **There is no update and no delete, and no permission that could reach one.**
+The history is append-only: a posting recorded wrongly is corrected by recording
+the correction, the way a ledger is. Editing last year's posting would change
+what a payslip was computed against, with no trace of the original.
+
+**Request body**
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `from_date` | date | **required**, may be back-dated, **may not be in the future** |
+| `reason` | int | **required, no default** — `1` تعيين · `2` نقل داخلي · `3` ترقية · `4` تعديل مسمى وظيفي · `5` إعادة هيكلة · `6` إنهاء عمل |
+| `department_id` | int | optional, nullable, existing non-deleted — **omit to carry forward** |
+| `job_title_id` | int | optional, nullable, existing non-deleted — **omit to carry forward** |
+| `organizational_grade` | int | optional, nullable, 1–5 — **omit to carry forward** |
+| `notes` | string | optional, nullable, max 2000 |
+
+⚠️ **An omitted field carries forward; an explicit `null` clears it.** These are
+different instructions and they behave differently. A promotion states only the
+new grade and a تعديل مسمى only the new title — neither restates the department,
+and neither should un-assign the person from it. Send `"department_id": null`
+only when you actually mean "no unit".
+
+**What recording a posting does**, in one transaction: closes the current posting
+**the day before** the new one starts (so "which unit were they in on date D?"
+has exactly one answer), opens the new one, and updates the employee's
+`department_id` / `job_title_id` / `organizational_grade` to match. A posting
+dated on or before the current one's start is treated as an **amendment** and
+updates it in place rather than stacking a zero-length row in front of it.
+
+> The reverse also holds: changing `department_id`, `job_title_id` or
+> `organizational_grade` through `PUT /api/hr/employees/{employee}` records the
+> transfer automatically, with `reason: 2 (نقل داخلي)`, closing the outgoing
+> posting the day before in exactly the same way. Use this endpoint when you
+> know the real reason or the real date.
+
+**Messages:** index `تم جلب سجل التعيين.` · create `تم تسجيل التعيين.`
+
+### 8.4 Warnings — الإنذارات
+
+```json
+{
+  "id": 4,
+  "employee_id": 1,
+  "type": "تأخر متكرر",
+  "number": "W-2026-14",
+  "issued_on": "2026-04-01",
+  "sequence": 2,
+  "issued_by": 9,
+  "issuer": { "id": 9, "full_name": "سامر خالد الحلبي" },
+  "notes": "إنذار ثانٍ.",
+  "created_at": "2026-09-13T10:00:00+00:00",
+  "updated_at": "2026-09-13T10:00:00+00:00"
+}
+```
+
+`sequence` is **computed, not stored** — it is this warning's position in the
+employee's sequence, counted from the live rows. Withdrawing warning #2 of 3
+renumbers the third to #2; filing a back-dated one puts it in its rightful place.
+Do not send it.
+
+| Method & path | Permission | Notes |
+| --- | --- | --- |
+| `GET /api/hr/employees/{employee}/warnings` | `hr.warnings.view` | Paginated, newest first |
+| `POST /api/hr/employees/{employee}/warnings` | `hr.warnings.create` | 201 |
+| `PUT\|PATCH /api/hr/warnings/{warning}` | `hr.warnings.update` | **Not** nested — the row's employee is fixed by its FK |
+| `DELETE /api/hr/warnings/{warning}` | `hr.warnings.delete` | 200, **soft** delete (withdrawn ≠ never happened) |
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `type` | string | **required on create**, max 255 |
+| `issued_on` | date | **required on create**, **may not be in the future** |
+| `number` | string | optional, nullable, max 50 — رقم كتاب الإنذار |
+| `issued_by` | int | optional, nullable — an **employee** id (a manager may have no login) |
+| `notes` | string | optional, nullable, max 5000 |
+
+**Messages:** index `تم جلب الإنذارات.` · create `تم تسجيل الإنذار.` · update `تم تحديث الإنذار.` · delete `تم حذف الإنذار.`
+
+### 8.5 Enum reference
+
+Every enum below ships as an int with a matching `_label`. Render the label,
+filter on the int.
+
+| Enum | Values |
+| --- | --- |
+| `gender` | 1 ذكر · 2 أنثى |
+| `marital_status` | 1 عازب · 2 متزوج · 3 مطلق · 4 أرمل |
+| `status` | 1 نشط · 2 موقوف · 3 منتهي الخدمة |
+| `employment_type` | 1 متعاقد · 2 يحتاج تثبيت · 3 جماعة · 4 مثبت |
+| `salary_mode` | 1 نظام رواتب · 2 إتفاق |
+| `activity_type` | 1 هندسي · 2 صناعي · 3 إداري · 4 مالي · 5 أمني |
+| `education_level` | 1 لا يوجد · 2 ابتدائي · 3 تاسع · 4 بكالوريا · 5 سنة 1 · 6 سنة 2 · 7 معهد · 8 سنة 3 · 9 سنة 4 · 10 سنة 5 · 11 كلية · 12 ماجستير · 13 دكتوراه |
+| `engineering_rank` | 1 لا يوجد · 2 متدرب · 3 مراقب فني · 4 مساعد مهندس · 5 مشارك · 6 ممارس · 7 رأي · 8 استشاري · 9 ركن |
+| `governorate` | 1 دمشق · 2 ريف دمشق · 3 حلب · 4 حمص · 5 حماة · 6 اللاذقية · 7 طرطوس · 8 إدلب · 9 درعا · 10 السويداء · 11 القنيطرة · 12 دير الزور · 13 الرقة · 14 الحسكة |
+| `reason` (assignments) | 1 تعيين · 2 نقل داخلي · 3 ترقية · 4 تعديل مسمى وظيفي · 5 إعادة هيكلة · 6 إنهاء عمل |
+
+`education_level` and `engineering_rank` are **ordered scales** — the int
+ascends with attainment, so `>=` comparisons are meaningful. ⚠️ The int is an
+ORDER, not an amount: سنة 4، سنة 5 and كلية are three distinct rungs carrying one
+identical pay value. Never compute pay from a case number.
 
 ---
 
@@ -726,6 +1198,27 @@ Base path `/api/hr`. **Protected**, guarded by `hr.employees.*` permissions.
 | 25| GET         | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.view`    |
 | 26| PUT/PATCH   | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.update`  |
 | 27| DELETE      | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.delete`  |
+| 28| GET         | `/api/hr/job-titles`                         | bearer   | `hr.job_titles.view`   |
+| 29| POST        | `/api/hr/job-titles`                         | bearer   | `hr.job_titles.create` |
+| 30| GET         | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.view`   |
+| 31| PUT/PATCH   | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.update` |
+| 32| DELETE      | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.delete` |
+| 33| GET         | `/api/hr/employees/{employee}/assignments`   | bearer   | `hr.assignments.view`  |
+| 34| POST        | `/api/hr/employees/{employee}/assignments`   | bearer   | `hr.assignments.create`|
+| 35| GET         | `/api/hr/employees/{employee}/warnings`      | bearer   | `hr.warnings.view`     |
+| 36| POST        | `/api/hr/employees/{employee}/warnings`      | bearer   | `hr.warnings.create`   |
+| 37| PUT/PATCH   | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.update`   |
+| 38| DELETE      | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.delete`   |
+
+**38 endpoints.** Batch 2 added eleven — the job-title catalogue (5), posting
+history (2, read and append only), and warnings (4).
+
+> There are **no employee-document endpoints yet**, on purpose. The
+> `employee_documents` table exists so the data import can attach the intake
+> form's four images per hire, but upload, storage and signed downloads belong to
+> the Documents module being ported from the legacy system. Building a second
+> file pipeline here and unifying it later is the duplication the merge plan's
+> stage ordering exists to prevent.
 
 ---
 
@@ -733,10 +1226,11 @@ Base path `/api/hr`. **Protected**, guarded by `hr.employees.*` permissions.
 
 1. **HTTP client:** set base URL `{APP_URL}/api`, default headers `Accept: application/json` + `Content-Type: application/json`.
 2. **Auth interceptor:** attach `Authorization: Bearer {access_token}` on every request.
-3. **Refresh flow:** trigger on the HTTP **`401` status** (the expired-token body is `{ "message": "Unauthenticated." }` and has no `success` key). Call `/api/auth/refresh` once with the stored refresh token, swap in the new pair, and retry the failed request. If refresh fails (any `401`), clear tokens and route to login. Do **not** refresh on `403` (that's a permission denial or a disabled account, not an expired token).
+3. **Refresh flow:** trigger on the HTTP **`401` status** — still the status, not the body, even though `401` now carries the envelope like everything else. Call `/api/auth/refresh` once with the stored refresh token, swap in the new pair, and retry the failed request. If refresh fails (any `401`), clear tokens and route to login. Do **not** refresh on `403` (that's a permission denial or a disabled account, not an expired token) — and note that `403` also has `success: false`, which is exactly why the trigger is the status code.
 4. **Single‑use refresh:** persist the new `refresh_token` returned by **both** login and refresh; never reuse an old one. Store it where your JS can read it — it is sent in the request body, not a cookie.
 5. **Session bootstrap:** on app start, if a token exists, call `/api/auth/me` to validate it and (re)load the user **and their `permissions`**.
-6. **Error handling:** for most responses, read `success`; on `false`, show `message` and, if `errors` exists, map field errors to inputs. Treat `401` (→ refresh) and `429` (→ back off via `Retry-After`) by **status code**, since those two don't carry `success`.
+6. **Error handling:** read `success` on **every** response — there are no longer any exceptions. On `false`, show `message` (always Arabic and display-ready) and, if `errors` exists, map field errors to inputs. Still route `401` (→ refresh) and `429` (→ back off via `Retry-After`) by **status code**, because what you do about them depends on the status, not on `success`.
 7. **Permission‑aware UI:** gate actions on the `permissions` array from login/`me` (e.g. `permissions.includes('hr.employees.create')`); hide/disable what the user can't do to avoid `403`s. No extra request needed — it works for non‑admins too.
 8. **Notification badge:** poll `/api/auth/notifications/unread-count` on an interval.
-9. **Lists:** paginated endpoints return items in `data` plus a `meta` block (`current_page`, `last_page`, `total`, …); use `?page=N` to page and `meta.last_page` to build the pager.
+9. **Lists:** **all five** list endpoints are paginated and page identically — items in `data`, a sibling `meta` block of exactly six keys. Use `?page=N` and `?per_page=N` (default 15, clamped 1–100), and build the pager from `meta.last_page`. Read `meta.per_page` back rather than assuming your requested size was applied. Roles and users were unpaginated before 2026-09-08 and are not any more.
+10. **Correlation:** send an `X-Request-Id` per user action and log the one that comes back on every response — it is recorded server-side on the matching audit rows, which turns a vague bug report into an exact lookup.
