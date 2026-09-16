@@ -19,7 +19,16 @@
       "Bash(npm test *)",
       "Bash(grep -rn 'from \"\\\\.\\\\./components\"\\\\|from \"\\\\.\\\\./\\\\.\\\\./components\"\\\\|from \"\\\\./components\"' src --include=*.jsx)",
       "Bash(awk '{printf \"%-50s %8.1f KB\\\\n\", $NF, $5/1024}')",
-      "Bash(cd \"C:/Users/M.Hawa/Desktop/work/erp-dashboard\" && echo \"=== hasPermission ===\" && sed -n '/export const hasPermission/,/^};/p' src/data/permissionsCatalog.js && echo \"\" && echo \"=== any zero-valued enum options? ===\" && grep -n \"value: 0\" src/data/hrEnums.js)"
+      "Bash(cd \"C:/Users/M.Hawa/Desktop/work/erp-dashboard\" && echo \"=== hasPermission ===\" && sed -n '/export const hasPermission/,/^};/p' src/data/permissionsCatalog.js && echo \"\" && echo \"=== any zero-valued enum options? ===\" && grep -n \"value: 0\" src/data/hrEnums.js)",
+      "Bash(VITE_API_URL=https://api.example.com/api npx vite build)",
+      "Bash(awk '{printf \"%-46s %8.1f KB\\\\n\", $NF, $5/1024}')",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);const m={};r.forEach\\(f=>f.messages.forEach\\(x=>{const k=x.ruleId||'\\(fatal\\)';m[k]=\\(m[k]||0\\)+1}\\)\\);Object.entries\\(m\\).sort\\(\\(a,b\\)=>b[1]-a[1]\\).forEach\\(\\([k,v]\\)=>console.log\\(String\\(v\\).padStart\\(5\\),k\\)\\)}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);r.forEach\\(f=>f.messages.filter\\(x=>x.ruleId==='no-undef'||x.ruleId==='react-hooks/rules-of-hooks'\\).forEach\\(x=>console.log\\(f.filePath.replace\\(/.*erp-dashboard./,''\\),':',x.line,x.message\\)\\)\\)}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);const mine=['Sidebar','Header','ScrollTop','TablePagination','Pageheader','Loader','App.jsx','main.jsx','Signin','Employees.jsx','EmployeeFormModal','EmployeeFilters','JobTitles','Notifications','Users.jsx','Roles.jsx','Departments.jsx','AssignRoleCard','Dashboard'];r.forEach\\(f=>{if\\(!mine.some\\(m=>f.filePath.includes\\(m\\)\\)\\)return;f.messages.filter\\(x=>x.ruleId==='react-hooks/exhaustive-deps'\\).forEach\\(x=>console.log\\(f.filePath.replace\\(/.*erp-dashboard./,''\\),':',x.line,'-',x.message.slice\\(0,110\\)\\)\\)}\\)}\\)\")",
+      "Bash(rm -rf dist)",
+      "Bash(grep -v \"^\\\\s*//\\\\|{/\\\\*\")",
+      "Bash(grep -n \"^    }$\" src/components/Header.jsx)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
