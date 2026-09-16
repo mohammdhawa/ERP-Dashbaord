@@ -17,7 +17,12 @@ import TablePaginationServer from "./TablePaginationServer";
 //   Needed for append-only histories (سجل التعيين): a resource with no update
 //   and no delete must not show an empty column implying an action exists.
 // - onRowClick makes rows navigate; it is skipped when the click originated
-//   inside the actions cell, so a delete button never also opens the row.
+//   inside the actions cell, inside any other interactive control, or when the
+//   gesture actually selected text (see handleRowClick).
+// - functions.rowLabel(item): the row's human name, appended to the edit and
+//   delete buttons' accessible names. Without it a screen reader reads a page
+//   of identical "تعديل"/"حذف" buttons with nothing saying which record each
+//   one belongs to. Optional — the plain verbs remain the fallback.
 // - error / onRetry render a failed load in place of the rows, with a retry.
 // - SORTING: a column opts in with `sortKey` — the exact key the SERVER accepts
 //   for that column. The caller passes the current `sort` value and an
@@ -72,6 +77,23 @@ const DataTableServer = ({
 }) => {
   const colCount = (columns?.length || 0) + (showActions ? 1 : 0);
 
+  // A row click must not hijack a text SELECTION. Copying an employee number or
+  // a national ID out of a row is routine work here, but dragging across a cell
+  // still ends in a `click` on the <tr> — so every attempt to select text also
+  // navigated away from the page you were reading it on. If the gesture left
+  // something selected, it was a selection; if it landed on a control, that
+  // control owns it.
+  const handleRowClick = (item) => (event) => {
+    const selection = window.getSelection?.();
+    if (selection && !selection.isCollapsed && selection.toString().trim()) {
+      return;
+    }
+    if (event.target.closest?.("a, button, input, select, textarea, label")) {
+      return;
+    }
+    onRowClick(item);
+  };
+
   return (
     <Fragment>
       <div className="table-responsive">
@@ -80,8 +102,15 @@ const DataTableServer = ({
             HR system, and suppressing selection on the whole table made every
             one of those a retype-by-hand. Rows navigate on a SINGLE click, so
             there is no double-click gesture for stray selection to interfere
-            with. */}
-        <table className="table text-nowrap table-hover table-striped">
+            with.
+
+            `table-wrap-sm` releases `text-nowrap` below the lg breakpoint (see
+            the horizontal-overflow block at the end of styles.css). On a phone
+            these tables were one unbroken line per row inside a scroller whose
+            scrollbar the global `*::-webkit-scrollbar { width: 0 }` had made
+            invisible — so the off-screen columns were unreachable AND unhinted.
+            Cells that must never break opt back in with `table-cell-nowrap`. */}
+        <table className="table text-nowrap table-wrap-sm table-hover table-striped">
           <thead>
             <tr>
               {columns?.map((column, index) => {
@@ -190,7 +219,11 @@ const DataTableServer = ({
             ) : (
               <>
                 {data?.length > 0 ? (
-                  data.map((item) => (
+                  data.map((item) => {
+                    // Used for the two icon-only action buttons below, which
+                    // otherwise announce as a page of identical "تعديل"/"حذف".
+                    const label = functions?.rowLabel?.(item);
+                    return (
                     <tr
                       key={item.id}
                       // Mouse-only shortcut, deliberately. The row keeps its
@@ -200,18 +233,29 @@ const DataTableServer = ({
                       // which is invalid. Keyboard access to the record comes
                       // from a real focusable control instead — callers that set
                       // onRowClick should also pass functions.handleDetail.
-                      onClick={onRowClick ? () => onRowClick(item) : undefined}
+                      onClick={onRowClick ? handleRowClick(item) : undefined}
                       style={onRowClick ? { cursor: "pointer" } : undefined}
                     >
                       {columns.map((column, idx) => (
-                        <td key={idx} className="py-3">
+                        <td
+                          key={idx}
+                          // `nowrap: true` on a column keeps that cell on one
+                          // line even on a phone — dates, ids and numbers,
+                          // where a break changes what the value looks like.
+                          className={`py-3${
+                            column.nowrap ? " table-cell-nowrap" : ""
+                          }`}
+                        >
                           {column.render
                             ? column.render(item[column.key], item)
                             : item[column.key]}
                         </td>
                       ))}
                       {showActions && (
-                      <td onClick={(e) => e.stopPropagation()}>
+                      <td
+                        className="table-cell-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="d-flex gap-2 align-items-center justify-content-center">
                           {functions?.handleDetail && (
                             <OverlayTrigger
@@ -225,7 +269,8 @@ const DataTableServer = ({
                                 // Icon-only: without this a screen reader
                                 // announces an unlabelled button.
                                 aria-label={
-                                  functions?.detailLabel?.(item) || "عرض"
+                                  functions?.detailLabel?.(item) ||
+                                  (label ? `عرض ${label}` : "عرض")
                                 }
                               >
                                 <i
@@ -265,7 +310,9 @@ const DataTableServer = ({
                                         item
                                       )}
                                       className="btn btn-sm btn-success-light btn-wave"
-                                      aria-label="تعديل"
+                                      aria-label={
+                                        label ? `تعديل ${label}` : "تعديل"
+                                      }
                                     >
                                       <i
                                         className="ri-pencil-line align-middle"
@@ -311,7 +358,13 @@ const DataTableServer = ({
                                           item
                                         )}
                                         className="btn btn-sm btn-danger-light"
-                                        aria-label="حذف"
+                                        aria-label={
+                                          label
+                                            ? `${
+                                                functions?.deleteLabel || "حذف"
+                                              } ${label}`
+                                            : functions?.deleteLabel || "حذف"
+                                        }
                                       >
                                         <i
                                           className="ri-delete-bin-7-line align-middle"
@@ -331,7 +384,8 @@ const DataTableServer = ({
                       </td>
                       )}
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={colCount} className="text-center py-4">

@@ -95,6 +95,14 @@ const Notifications = () => {
                 <ul className="list-group list-group-flush" aria-label="الإشعارات">
                   {items.map((notify) => {
                     const link = referenceLink(notify.reference);
+                    // A notification is actionable when clicking it DOES
+                    // something: it marks an unread one read, or it opens a
+                    // referenced record. A read notification with no reference
+                    // is neither — it was still rendered as a <button>, so it
+                    // took a tab stop and announced itself as a control that,
+                    // on activation, did nothing at all.
+                    const actionable = !notify.is_read || Boolean(link);
+                    const RowTag = actionable ? "button" : "div";
                     return (
                       <li
                         key={notify.id}
@@ -102,18 +110,17 @@ const Notifications = () => {
                           notify.is_read ? "" : "bg-primary-transparent"
                         }`}
                       >
-                        {/* The row is a <button> rather than a clickable <li>:
-                            as a list item it took no focus and could not be
-                            activated by keyboard, so the whole notifications
-                            screen was mouse-only. */}
-                        <button
-                          type="button"
+                        {/* An actionable row is a <button> rather than a
+                            clickable <li>: as a list item it took no focus and
+                            could not be activated by keyboard, so the whole
+                            notifications screen was mouse-only. */}
+                        <RowTag
+                          type={actionable ? "button" : undefined}
                           className="d-flex align-items-start gap-3 py-3 px-3 w-100 text-end border-0 bg-transparent"
-                          style={{
-                            cursor:
-                              notify.is_read && !link ? "default" : "pointer",
-                          }}
-                          onClick={() => handleClick(notify)}
+                          style={{ cursor: actionable ? "pointer" : "default" }}
+                          onClick={
+                            actionable ? () => handleClick(notify) : undefined
+                          }
                         >
                         <span
                           className={`avatar avatar-rounded ${
@@ -133,7 +140,9 @@ const Notifications = () => {
                         </span>
                         {/* <span>s rather than <p>s: a button's content model
                             is phrasing content only, and browsers repair a
-                            nested <p> by breaking the button out of the flow. */}
+                            nested <p> by breaking the button out of the flow.
+                            Kept for the <div> case too so the two branches
+                            render identically. */}
                         <div className="flex-grow-1">
                           <div className="d-flex align-items-center justify-content-between">
                             <span
@@ -174,7 +183,7 @@ const Notifications = () => {
                             )}
                           </div>
                         </div>
-                        </button>
+                        </RowTag>
                       </li>
                     );
                   })}

@@ -2,11 +2,15 @@ import React, { Fragment, useEffect, useState } from "react";
 import { Card, Col, OverlayTrigger, Popover, Tooltip } from "react-bootstrap";
 import { permissionsColumns } from "../../data/Columns";
 import { useSelector } from "react-redux";
-import { DataTable, TablePagination } from "../../components";
+import DataTable from "../../components/DataTable";
+import TablePagination from "../../components/TablePagination";
 import { ShowPerPage } from "../../data/General";
 import Select from "react-select";
 import DetailPermissionModal from "./DetailPermissionModal";
-import ALLImages from "../../data/Imagedata";
+// Imported directly rather than through data/Imagedata, which is in the entry
+// chunk: this 917 KB GIF has exactly one consumer — this unrouted screen — and
+// registering it there put it in the first paint of every page in the app.
+import upgradeStars from "../../assets/images/upgradeStars.gif";
 const Permissions = () => {
   const { permissions } = useSelector((state) => state.permissions);
   const [filteredData, setFilteredData] = useState([]);
@@ -74,7 +78,7 @@ const Permissions = () => {
               }
             >
               <img
-                src={ALLImages("upgradeStars")}
+                src={upgradeStars}
                 style={{
                   width: "1.3rem",
                   cursor: "pointer",

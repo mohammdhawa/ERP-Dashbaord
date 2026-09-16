@@ -213,23 +213,29 @@ const EmployeeProfile = () => {
                   </div>
                 </Col>
                 <Col md={12} lg={6}>
+                  {/* Same fix as the Field helper in EmployeeOverview: the
+                      direction goes on an inline <bdi>, never on the value's
+                      block. `dir="ltr"` on the <div> flipped its text-align from
+                      right to left while the label above it stayed right, so all
+                      three values sat across the column from the labels they
+                      belong to. */}
                   <Row className="g-3">
                     <Col xs={6} md={4}>
                       <div className="text-muted fs-11">الرقم الوظيفي</div>
-                      <div className="fw-medium" dir="ltr">
-                        {current.employee_number || "—"}
+                      <div className="fw-medium">
+                        <bdi dir="ltr">{current.employee_number || "—"}</bdi>
                       </div>
                     </Col>
                     <Col xs={6} md={4}>
                       <div className="text-muted fs-11">الرقم القديم</div>
-                      <div className="fw-medium" dir="ltr">
-                        {current.legacy_number || "—"}
+                      <div className="fw-medium">
+                        <bdi dir="ltr">{current.legacy_number || "—"}</bdi>
                       </div>
                     </Col>
                     <Col xs={6} md={4}>
                       <div className="text-muted fs-11">تاريخ التعيين</div>
-                      <div className="fw-medium" dir="ltr">
-                        {current.hire_date || "—"}
+                      <div className="fw-medium">
+                        <bdi dir="ltr">{current.hire_date || "—"}</bdi>
                       </div>
                     </Col>
                   </Row>

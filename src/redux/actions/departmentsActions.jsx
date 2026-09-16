@@ -1,5 +1,5 @@
 import api from "../api";
-import { parseApiError } from "../../utils/apiHelpers";
+import { parseApiError, fetchAllPages } from "../../utils/apiHelpers";
 import { toastNotify, confirmDestructive } from "../../utils";
 
 // Departments module — /api/departments (Format A: paginated, 15/page,
@@ -13,6 +13,21 @@ export const fetchDepartmentsSuccess = (payload) => ({
 export const fetchDepartmentsFailure = (error) => ({
   type: "FETCH_DEPARTMENTS_FAILURE",
   payload: error,
+});
+
+export const fetchAllDepartmentsStart = () => ({
+  type: "FETCH_ALL_DEPARTMENTS_START",
+});
+export const fetchAllDepartmentsSuccess = (items) => ({
+  type: "FETCH_ALL_DEPARTMENTS_SUCCESS",
+  payload: items,
+});
+export const fetchAllDepartmentsFailure = (error) => ({
+  type: "FETCH_ALL_DEPARTMENTS_FAILURE",
+  payload: error,
+});
+export const invalidateDepartmentTree = () => ({
+  type: "INVALIDATE_DEPARTMENT_TREE",
 });
 
 export const saveDepartmentStart = () => ({ type: "SAVE_DEPARTMENT_START" });
@@ -37,6 +52,26 @@ export const fetchDepartments = (page = 1) => async (dispatch) => {
   } catch (error) {
     const parsed = parseApiError(error);
     dispatch(fetchDepartmentsFailure(parsed.message));
+    toastNotify(parsed.message, "error");
+  }
+};
+
+// The WHOLE tree, walked page by page.
+//
+// The list needs it for three things a single page cannot give: the parent
+// column (the resource carries `parent_id` but no embedded `parent`, and the
+// parent is usually on another page), the search, and the hierarchy view. The
+// set is an org chart, not a directory — a root, a few divisions, their
+// sections and offices — so `fetchAllPages` at 100/request is one or two calls.
+export const fetchAllDepartments = () => async (dispatch) => {
+  dispatch(fetchAllDepartmentsStart());
+  try {
+    dispatch(
+      fetchAllDepartmentsSuccess(await fetchAllPages(api, "/departments"))
+    );
+  } catch (error) {
+    const parsed = parseApiError(error);
+    dispatch(fetchAllDepartmentsFailure(parsed.message));
     toastNotify(parsed.message, "error");
   }
 };
@@ -89,6 +124,8 @@ export const deleteDepartment =
   try {
     const response = await api.delete(`/departments/${id}`);
     toastNotify(response.data.message, "success");
+    // The cached tree now names a unit that no longer exists.
+    dispatch(invalidateDepartmentTree());
     // Deleting the last row of the last page would land on an empty page —
     // step back one page in that case.
     const nextPage =

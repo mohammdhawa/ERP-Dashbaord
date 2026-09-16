@@ -300,6 +300,10 @@ const Employees = () => {
                   handleDetail: openProfile,
                   detailLabel: (employee) =>
                     `عرض ملف ${employee.full_name || "الموظف"}`,
+                  // Names the edit/delete buttons too, which otherwise announce
+                  // as a page of identical "تعديل"/"حذف".
+                  rowLabel: (employee) =>
+                    employee.full_name || `موظف #${employee.id}`,
                   handleUpdate: openEdit,
                   handleDelete: handleDelete,
                 }}

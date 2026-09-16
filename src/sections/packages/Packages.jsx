@@ -1,6 +1,7 @@
 import React, { Fragment, useEffect, useState, useMemo } from "react";
 import { Helmet } from "react-helmet";
-import { Loader, PageHeader, DataTable } from "../../components";
+import { Loader, PageHeader } from "../../components";
+import DataTable from "../../components/DataTable";
 // Imported directly, not via the components barrel: routing them through it
 // pulls ApexCharts into the main chunk for every page in the app.
 import PieUsersWithPackages from "../../components/statistics/PieUsersWithPackages";

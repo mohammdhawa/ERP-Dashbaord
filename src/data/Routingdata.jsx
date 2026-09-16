@@ -1,13 +1,31 @@
-import {
-  Dashboard,
-  Users,
-  Roles,
-  Departments,
-  Employees,
-  EmployeeProfile,
-  JobTitles,
-  Notifications,
-} from "../sections";
+import { lazy } from "react";
+
+// ROUTES ARE CODE-SPLIT, ONE CHUNK PER SCREEN.
+//
+// These used to come from the `../sections` barrel, which is a plain
+// re-export: naming one route pulled all eight into the entry chunk, and with
+// them react-select, moment, sweetalert2, every form modal and every profile
+// tab. Signing in therefore downloaded the employee form, the RBAC matrix and
+// the notifications list before rendering a login box — a 1.16 MB main script
+// (329 KB gzipped) for an app whose first screen needs two inputs.
+//
+// Each entry is now its own dynamic import, so a route's code arrives when the
+// route does. The <Suspense> that catches the gap is in pages/App.jsx, around
+// the <Outlet>; sign-in and the error pages stay eager because they are the
+// shell, not a destination.
+//
+// ⚠️ Import the MODULE, not the barrel. `lazy(() => import("../sections"))`
+// would split nothing — it would just move all eight behind one chunk.
+const Dashboard = lazy(() => import("../sections/dashboard/Dashboard"));
+const Departments = lazy(() => import("../sections/departments/Departments"));
+const Employees = lazy(() => import("../sections/hr/Employees"));
+const EmployeeProfile = lazy(() => import("../sections/hr/EmployeeProfile"));
+const JobTitles = lazy(() => import("../sections/hr/JobTitles"));
+const Users = lazy(() => import("../sections/accounts/Users"));
+const Roles = lazy(() => import("../sections/rbac/Roles"));
+const Notifications = lazy(() =>
+  import("../sections/notifications/Notifications")
+);
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held

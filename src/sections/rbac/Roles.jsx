@@ -175,6 +175,7 @@ const Roles = () => {
                 updatePermission="auth.roles.update"
                 deletePermission="auth.roles.delete"
                 functions={{
+                  rowLabel: (role) => role.name,
                   handleUpdate: (role) => {
                     setEditingRole(role);
                     setModalOpen(true);

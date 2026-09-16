@@ -1,6 +1,6 @@
 import React, { Fragment, useEffect, useState } from "react";
 import { Accordion, Card, Col, Form, InputGroup, Row } from "react-bootstrap";
-import { DataTable } from "../../../components";
+import DataTable from "../../../components/DataTable";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteFeature } from "../../../redux/actions/featuresActions";
 import Select from "react-select";

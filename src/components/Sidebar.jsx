@@ -61,7 +61,13 @@ const Sidebar = () => {
     }
   }
   function Outhover() {
-    const theme = store.getState();
+    // `.theme`, not the ROOT state. Every `store.getState()` in this file used
+    // to hand back the whole store and then read theme keys off it, so
+    // `theme.toggled` and `theme.iconoverlay` were undefined and this guard
+    // never passed: a collapsed sidebar expanded on hover and then stayed
+    // expanded after the pointer left, permanently covering the page. The same
+    // mistake silently disabled the resize handler and half of menuClose.
+    const theme = store.getState().theme;
     if (
       (theme.toggled == "icon-overlay-close" ||
         theme.toggled == "detached-close") &&
@@ -91,11 +97,11 @@ const Sidebar = () => {
     const MainContent = document.querySelector(".main-content");
 
     if (theme?.dataverticalstyle === "icontext" && theme?.iconText !== "") {
-      const theme = store.getState();
+      const theme = store.getState().theme;
       dispatch(ThemeChanger({ ...theme, dataIconText: "open" }));
 
       MainContent?.addEventListener("click", (_event) => {
-        const theme = store.getState();
+        const theme = store.getState().theme;
         dispatch(ThemeChanger({ ...theme, dataIconText: "" }));
       });
     }
@@ -114,7 +120,7 @@ const Sidebar = () => {
     if (WindowPreSize.length > 2) {
       WindowPreSize.shift();
     }
-    const theme = store.getState();
+    const theme = store.getState().theme;
     if (WindowPreSize.length > 1) {
       if (
         WindowPreSize[WindowPreSize.length - 1] < 992 &&
@@ -347,7 +353,7 @@ const Sidebar = () => {
   let hasParentLevel = 0;
 
   function setSubmenu(event, targetObject, MENUITEMS = menuitems) {
-    const theme = store.getState();
+    const theme = store.getState().theme;
     if (
       (window.screen.availWidth <= 992 ||
         theme.datanavlayout != "icon-hover") &&
@@ -399,7 +405,7 @@ const Sidebar = () => {
 
   function setMenuAncestorsActive(targetObject) {
     const parent = getParentObject(menuitems, targetObject);
-    const theme = store.getState();
+    const theme = store.getState().theme;
     if (parent) {
       if (hasParentLevel > 2) {
         hasParent = true;
@@ -480,7 +486,7 @@ const Sidebar = () => {
   }, [location]);
 
   function toggleSidemenu(event, targetObject, MENUITEMS = menuitems) {
-    const theme = store.getState();
+    const theme = store.getState().theme;
     let element = event.target;
 
     //for icon-text
@@ -595,7 +601,7 @@ const Sidebar = () => {
   }
 
   function setAncestorsActive(MENUITEMS, targetObject) {
-    const theme = store.getState();
+    const theme = store.getState().theme;
     const parent = findParent(MENUITEMS, targetObject);
     if (parent) {
       parent.active = true;

@@ -92,6 +92,13 @@ const Header = () => {
     //
     // Strict `< 992` / `>= 992`: the old `<= 992` and `>= 992` pair both ran at
     // exactly 992.
+    //
+    // The overlay key below is `iconoverlay`, all lowercase — the name the
+    // reducer and main.jsx's data-icon-overlay attribute actually use. It was
+    // written as `iconOverlay` in four places, so collapsing the sidebar set a
+    // key nothing reads and left the real flag on whatever the last hover had
+    // put there. Paired with the Outhover fix in Sidebar.jsx, that is the other
+    // half of "the collapsed sidebar stays expanded".
     if (window.innerWidth < 992) {
       dispatch(
         ThemeChanger({
@@ -125,7 +132,7 @@ const Header = () => {
               ThemeChanger({
                 ...theme,
                 toggled: "",
-                iconOverlay: "",
+                iconoverlay: "",
                 dataverticalstyle: "default",
               })
             );
@@ -135,7 +142,7 @@ const Header = () => {
                 ThemeChanger({
                   ...theme,
                   toggled: "icon-overlay-close",
-                  iconOverlay: "",
+                  iconoverlay: "",
                 })
               );
             }
@@ -171,14 +178,14 @@ const Header = () => {
         case "detached":
           if (theme.toggled === "detached-close") {
             dispatch(
-              ThemeChanger({ ...theme, toggled: "", iconOverlay: "" })
+              ThemeChanger({ ...theme, toggled: "", iconoverlay: "" })
             );
           } else {
             dispatch(
               ThemeChanger({
                 ...theme,
                 toggled: "detached-close",
-                iconOverlay: "",
+                iconoverlay: "",
               })
             );
           }
@@ -330,10 +337,16 @@ const Header = () => {
               </button>
             </li>
 
-            {/* Notifications: badge fed by the 60s unread-count poll */}
+            {/* Notifications: badge fed by the 60s unread-count poll.
+                DEFAULT autoClose, not "outside". React-Bootstrap's "outside"
+                means exactly what it says — only a click OUTSIDE the menu
+                closes it — so clicking a notification or "عرض الكل" navigated
+                with the panel still open, and because the header persists
+                across routes the open overlay rode along to the destination
+                page and sat on top of it. Nothing in this menu needs to
+                survive a click inside it. */}
             <Dropdown
               className="header-element notifications-dropdown"
-              autoClose="outside"
               onToggle={handleNotificationsToggle}
             >
               <Dropdown.Toggle
@@ -459,18 +472,30 @@ const Header = () => {
               </Dropdown.Menu>
             </Dropdown>
 
-            {/* Profile Dropdown */}
-            <Dropdown className="header-element" autoClose="outside">
+            {/* Profile Dropdown. Default autoClose for the same reason as the
+                notifications menu above — with "outside", signing out left the
+                panel hanging open over the sign-in screen. */}
+            <Dropdown className="header-element">
               <Dropdown.Toggle
                 as="a"
                 className="header-link no-caret"
                 variant=""
                 id="mainHeaderProfile"
+                // Below xl the name is hidden by `d-xl-block d-none` and all
+                // that is left is an avatar icon, so the control had no
+                // accessible name at all on a laptop or a phone. The label is
+                // unconditional: the visible name is not a substitute, because
+                // "أحمد العلي" alone does not say the button opens a menu.
+                aria-label={
+                  user?.name
+                    ? `حساب المستخدم: ${user.name}`
+                    : "حساب المستخدم"
+                }
               >
                 <div className="d-flex align-items-center">
                   <div className="me-sm-2 me-0">
                     <span className="avatar bg-primary-transparent avatar-sm avatar-rounded">
-                      <i className="ri-user-line fs-13"></i>
+                      <i className="ri-user-line fs-13" aria-hidden="true"></i>
                     </span>
                   </div>
                   <div className="d-xl-block d-none lh-1">

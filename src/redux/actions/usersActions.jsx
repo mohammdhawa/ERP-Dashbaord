@@ -24,9 +24,19 @@ export const fetchUsersFailure = (payload) => ({
   payload, // { error, requestId }
 });
 
+export const fetchAllUsersStart = () => ({ type: "FETCH_ALL_USERS_START" });
 export const fetchAllUsersSuccess = (users) => ({
   type: "FETCH_ALL_USERS_SUCCESS",
   payload: users,
+});
+export const fetchAllUsersFailure = (error) => ({
+  type: "FETCH_ALL_USERS_FAILURE",
+  payload: error,
+});
+// Marks the cached directory stale after a mutation, so the next search walks
+// the pages again instead of matching against rows that no longer exist.
+export const invalidateUsersDirectory = () => ({
+  type: "INVALIDATE_USERS_DIRECTORY",
 });
 
 export const saveUserStart = () => ({ type: "SAVE_USER_START" });
@@ -117,6 +127,7 @@ export const deleteUser =
   try {
     const response = await api.delete(`/auth/users/${userId}`);
     toastNotify(response.data.message, "success");
+    dispatch(invalidateUsersDirectory());
     // Deleting the last row of the last page would land on an empty page —
     // step back one, the same repair the departments/employees lists do.
     const nextPage =
@@ -129,12 +140,27 @@ export const deleteUser =
   }
 };
 
-// Every user, for the role-assignment picker. A picker that stops at page 1
-// cannot grant a role to user #200 and gives no hint that it is truncated.
+// Every user, flattened across pages.
+//
+// Two consumers: the role-assignment picker (a picker that stops at page 1
+// cannot grant a role to user #200 and gives no hint that it is truncated) and
+// the directory SEARCH on the users list.
+//
+// ⚠️ THE SEARCH USE IS A STAND-IN, NOT THE DESTINATION. `/api/auth/users`
+// accepts `page` and `per_page` and nothing else — no `search`, unlike
+// `/hr/employees` and `/hr/job-titles`, which both document one. Until it has
+// one, searching the directory means holding the directory, and this walks it
+// in ceil(total/100) requests. That is fine at the 242 accounts this system is
+// sized for and is NOT fine at several thousand: when `auth/users.index` grows
+// an allow-listed `?search=`, move the users list onto it and this call goes
+// back to serving the picker alone.
 export const fetchAllUsers = () => async (dispatch) => {
+  dispatch(fetchAllUsersStart());
   try {
     dispatch(fetchAllUsersSuccess(await fetchAllPages(api, "/auth/users")));
   } catch (error) {
-    toastNotify(parseApiError(error).message, "error");
+    const parsed = parseApiError(error);
+    dispatch(fetchAllUsersFailure(parsed.message));
+    toastNotify(parsed.message, "error");
   }
 };

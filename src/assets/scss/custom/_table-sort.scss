@@ -34,7 +34,10 @@
   }
 
   &.is-sorted {
-    color: var(--primary-color);
+    // --primary-ink, not --primary-color: the brand yellow is 1.66:1 on a white
+    // table header, so "this column is sorted" was being said in a colour that
+    // cannot be read.
+    color: var(--primary-ink);
 
     i {
       opacity: 1;
@@ -42,10 +45,12 @@
   }
 
   // Never remove the ring without replacing it: this is the only thing telling
-  // a keyboard user which header they are on.
+  // a keyboard user which header they are on. The colour is the shared focus
+  // token — a yellow ring on white is under the 3:1 floor for a non-text
+  // indicator, so it was a ring you could not see either.
   &:focus-visible {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
     border-radius: 0.25rem;
   }
 }

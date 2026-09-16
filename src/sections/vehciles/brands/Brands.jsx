@@ -5,7 +5,8 @@ import {
   fetchVehicleBrands,
 } from "../../../redux/actions/VehiclesBrandsActions";
 import { Helmet } from "react-helmet";
-import { DataTable, Loader, PageHeader } from "../../../components";
+import { Loader, PageHeader } from "../../../components";
+import DataTable from "../../../components/DataTable";
 import { ProtectedElement } from "../../../pages";
 import { Accordion, Card, Col, Form, InputGroup, Row } from "react-bootstrap";
 import Select from "react-select";

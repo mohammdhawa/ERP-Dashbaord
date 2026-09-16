@@ -168,6 +168,10 @@ const EmployeeWarnings = ({ employee }) => {
         updatePermission="hr.warnings.update"
         deletePermission="hr.warnings.delete"
         functions={{
+          // Names the row on the action buttons. Warnings have no title, so the
+          // type and the issue date are what distinguish one from the next.
+          rowLabel: (item) =>
+            [item.type, item.number, item.issued_on].filter(Boolean).join(" "),
           handleUpdate: canUpdate ? openEdit : undefined,
           handleDelete: handleDelete,
           // `disabledDeleteReason` only renders on a DISABLED button, and there

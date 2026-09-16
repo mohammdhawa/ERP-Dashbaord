@@ -386,9 +386,7 @@
   input {
     background-color: transparent !important;
     color: $default-text-color !important;
-    &:focus-visible {
-      outline: none !important;
-    }
+    // Same as the <select> below: stripping :focus-visible blinds the keyboard.
   }
 }
 .react-datepicker__header {
@@ -549,9 +547,10 @@ th.gridjs-th-fixed {
 select {
   background-color: $custom-white !important;
   color: $default-text-color !important;
-  &:focus-visible {
-    outline: none !important;
-  }
+  // NO `&:focus-visible { outline: none }` here. :focus-visible IS the keyboard
+  // case, so that rule removed the indicator from exactly the users who need
+  // it — including the page-size <select> on every table. The shared ring at the
+  // end of assets/css/styles.css applies instead.
 }
 .btn.disabled, .btn:disabled, fieldset:disabled .btn {
   color: $default-text-color;

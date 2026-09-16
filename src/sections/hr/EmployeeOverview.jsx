@@ -17,21 +17,87 @@ import { hasPermission } from "../../data/permissionsCatalog";
 
 const dash = <span className="text-muted">—</span>;
 
-const Field = ({ label, value, dir }) => (
-  <Col sm={12} md={6} lg={4} className="mb-3">
-    <div className="text-muted fs-11 mb-1">{label}</div>
-    <div className="fw-medium" dir={dir}>
-      {value === null || value === undefined || value === "" ? dash : value}
-    </div>
-  </Col>
-);
+// ⚠️ `dir` GOES ON A <bdi>, NOT ON THE VALUE'S BLOCK.
+//
+// This used to be `<div className="fw-medium" dir={dir}>`. Setting `dir` on a
+// BLOCK changes that block's base direction, which means its `text-align: start`
+// stops resolving to "right" (the RTL page) and starts resolving to "left". The
+// label above it inherits RTL and stays on the right. So on every field that
+// needed LTR — the staff number, the national id, all seven dates, both phones,
+// the email, the salary, the Sham Cash account — the label sat against the right
+// edge of the column and its value sat against the left edge, with the width of
+// the column between them. That is the "values are not under their labels"
+// misalignment, and it was 13 of the ~50 fields on this tab.
+//
+// <bdi> is the element for exactly this: an INLINE run of foreign-direction
+// text. It carries `unicode-bidi: isolate` by default, so "+963 11 234 5678" and
+// "2026-01-15" order their characters correctly, while the block around it stays
+// RTL and keeps the value hard against the same edge as its label. The rest of
+// the app already reached this conclusion — every other LTR value in src/ is an
+// inline <span dir="ltr">; these two profile files were the outliers.
+//
+// `d-flex flex-column` + `mt-auto` pins the VALUES to a common baseline across
+// each row of the grid, so a label that wraps to two lines drops its own value
+// no further than its neighbours'.
+const Field = ({ label, value, dir }) => {
+  const empty = value === null || value === undefined || value === "";
+  return (
+    <Col sm={12} md={6} lg={4} className="d-flex flex-column">
+      <div className="text-muted fs-11 mb-1">{label}</div>
+      <div className="fw-medium mt-auto">
+        {empty ? dash : dir ? <bdi dir={dir}>{value}</bdi> : value}
+      </div>
+    </Col>
+  );
+};
 
-const Section = ({ title, children }) => (
-  <div className="mb-4">
-    <h6 className="mb-3 pb-2 border-bottom">{title}</h6>
-    <Row className="g-0">{children}</Row>
-  </div>
-);
+const isEmptyValue = (value) =>
+  value === null || value === undefined || value === "";
+
+// Each section is a bordered PANEL, not a heading with a rule under it and not
+// a nested <Card>. See assets/scss/custom/_employee-profile.scss for why those
+// two were rejected; the short version is that this content already sits inside
+// a card body, and that whitespace between groups is distance rather than
+// grouping.
+//
+// The head counts how much of the section is actually filled in. It reads that
+// off its own children's `value` prop — the coupling to <Field> is tight, but
+// both components are defined in this file, ten lines apart, and the
+// alternative (threading every section's data through as an array) would
+// restate fifty field definitions to answer one question. React.Children.toArray
+// drops the `false` a `{canViewIdentity && <Field/>}` produces, so a gated field
+// is not counted as a missing one.
+//
+// `gx-4 gy-3` on the Row, not `g-0`. With the gutters zeroed, columns touched:
+// the second column's label began exactly where the first column's value ended,
+// so a three-up grid of label/value pairs read as one continuous run of text.
+// The vertical gap comes from `gy-3` rather than an `mb-3` on each Col, so the
+// two do not stack into a double gap.
+const Section = ({ title, icon, children }) => {
+  const fields = React.Children.toArray(children);
+  const filled = fields.filter((f) => !isEmptyValue(f.props?.value)).length;
+
+  return (
+    <section className="profile-section">
+      <div className="profile-section__head">
+        <span className="profile-section__icon" aria-hidden="true">
+          <i className={icon}></i>
+        </span>
+        <h6 className="profile-section__title">{title}</h6>
+        <span
+          className={`profile-section__count${
+            filled === 0 ? " profile-section__count--empty" : ""
+          }`}
+        >
+          {filled} من {fields.length} مسجّلة
+        </span>
+      </div>
+      <div className="profile-section__body">
+        <Row className="gx-4 gy-3">{children}</Row>
+      </div>
+    </section>
+  );
+};
 
 // Booleans are tri-state: true / false / not recorded. "لا" and "غير مسجّل"
 // are different statements and must not collapse into one.
@@ -50,7 +116,7 @@ const EmployeeOverview = ({ employee }) => {
 
   return (
     <div>
-      <Section title="الهوية">
+      <Section title="الهوية" icon="ri-fingerprint-line">
         <Field label="الاسم الكامل" value={employee.full_name} />
         <Field label="الاسم الأول" value={employee.first_name} />
         <Field label="اسم الأب" value={employee.middle_name} />
@@ -67,7 +133,7 @@ const EmployeeOverview = ({ employee }) => {
         )}
       </Section>
 
-      <Section title="البيانات الشخصية">
+      <Section title="البيانات الشخصية" icon="ri-user-3-line">
         <Field label="الجنس" value={employee.gender_label} />
         <Field label="تاريخ الميلاد" value={employee.birth_date} dir="ltr" />
         <Field label="مكان الولادة" value={employee.birth_place} />
@@ -91,14 +157,14 @@ const EmployeeOverview = ({ employee }) => {
         <Field label="عدد الأولاد" value={employee.children_count} />
       </Section>
 
-      <Section title="التواصل">
+      <Section title="التواصل" icon="ri-phone-line">
         <Field label="الهاتف" value={employee.phone} dir="ltr" />
         <Field label="هاتف إضافي" value={employee.phone_secondary} dir="ltr" />
         <Field label="البريد الإلكتروني" value={employee.email} dir="ltr" />
         <Field label="العنوان" value={employee.address} />
       </Section>
 
-      <Section title="الخدمة العسكرية">
+      <Section title="الخدمة العسكرية" icon="ri-shield-star-line">
         <Field
           label="أدى الخدمة العسكرية"
           value={boolText(employee.did_military_service)}
@@ -110,7 +176,7 @@ const EmployeeOverview = ({ employee }) => {
         />
       </Section>
 
-      <Section title="التعليم">
+      <Section title="التعليم" icon="ri-graduation-cap-line">
         <Field
           label="المستوى التعليمي"
           value={employee.education_level_label}
@@ -125,7 +191,7 @@ const EmployeeOverview = ({ employee }) => {
         />
       </Section>
 
-      <Section title="العمل">
+      <Section title="العمل" icon="ri-briefcase-line">
         <Field label="القسم" value={employee.department?.name} />
         <Field label="المسمى الوظيفي" value={employee.job_title?.name} />
         {/* Embedded now — `direct_manager: { id, full_name, employee_number }`
@@ -164,7 +230,7 @@ const EmployeeOverview = ({ employee }) => {
           section is not rendered at all rather than shown as a wall of dashes,
           which would read as "nothing is recorded" instead of "not for you". */}
       {canViewSalary && (
-        <Section title="التصنيف والرواتب">
+        <Section title="التصنيف والرواتب" icon="ri-money-dollar-circle-line">
           <Field label="نوع النشاط" value={employee.activity_type_label} />
           <Field
             label="الدرجة التنظيمية"

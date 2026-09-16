@@ -354,6 +354,7 @@ const JobTitles = () => {
                 updatePermission="hr.job_titles.update"
                 deletePermission="hr.job_titles.delete"
                 functions={{
+                  rowLabel: (item) => item.name,
                   handleUpdate: openEdit,
                   handleDelete: handleDelete,
                 }}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Col, Form, Modal, Nav, Row, Spinner, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
@@ -155,15 +155,24 @@ const FieldCtx = React.createContext(null);
 // Modal.Body/Modal.Footer boundary.
 const FORM_ID = "employee-form";
 
+// The message carries a stable id so the control it belongs to can point at it
+// with aria-describedby. Without that link, moving focus to a rejected field
+// announces the label and nothing else — the reason it was rejected is sitting
+// right underneath in text a screen reader never reaches.
+const errorId = (field) => `emp-${field}-error`;
+
 const Err = ({ field }) => {
   const { fieldError } = React.useContext(FieldCtx);
   return fieldError(field) ? (
-    <div className="text-danger small mt-1">{fieldError(field)}</div>
+    <div id={errorId(field)} className="text-danger small mt-1">
+      {fieldError(field)}
+    </div>
   ) : null;
 };
 
 const Text = ({ field, label, type = "text", dir, ...rest }) => {
   const { form, setField, fieldError } = React.useContext(FieldCtx);
+  const invalid = !!fieldError(field);
   return (
     <>
       <Form.Label htmlFor={`emp-${field}`}>{label}</Form.Label>
@@ -173,7 +182,9 @@ const Text = ({ field, label, type = "text", dir, ...rest }) => {
         dir={dir}
         value={form[field]}
         onChange={(e) => setField(field, e.target.value)}
-        isInvalid={!!fieldError(field)}
+        isInvalid={invalid}
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? errorId(field) : undefined}
         {...rest}
       />
       <Err field={field} />
@@ -190,7 +201,8 @@ const Enum = ({
   placeholder = "غير محدد",
   hint,
 }) => {
-  const { form, setField } = React.useContext(FieldCtx);
+  const { form, setField, fieldError } = React.useContext(FieldCtx);
+  const invalid = !!fieldError(field);
   return (
     <>
       <Form.Label htmlFor={`emp-${field}`}>{label}</Form.Label>
@@ -204,6 +216,8 @@ const Enum = ({
         isDisabled={isDisabled}
         placeholder={placeholder}
         menuPosition="fixed"
+        aria-invalid={invalid || undefined}
+        aria-describedby={invalid ? errorId(field) : undefined}
       />
       {hint && <div className="text-muted small mt-1">{hint}</div>}
       <Err field={field} />
@@ -290,6 +304,8 @@ const EmployeeFormModal = ({
   // The values this modal opened with, so "did the user change anything?" can
   // be answered without tracking a dirty flag on every field.
   const [initialForm, setInitialForm] = useState(emptyEmployeeForm);
+  // Focus target for a server error that names no field (see focusFirstError).
+  const generalErrorRef = useRef(null);
 
   useEffect(() => {
     if (open) {
@@ -499,14 +515,38 @@ const EmployeeFormModal = ({
     }
   };
 
-  // Opens the first tab holding a rejected field. Without this a validation
-  // error on a hidden tab is invisible and the form looks like it silently
-  // refused to save.
+  // Opens the first tab holding a rejected field AND puts the caret in that
+  // field. Switching the tab alone was only half the job: the submit button
+  // lives in the footer, so after a rejected save focus stayed on it while the
+  // thing that failed was somewhere in a pane the user now had to hunt
+  // through — and a screen reader announced nothing at all, because nothing
+  // moved. With forty fields across seven tabs that is the difference between
+  // "the form told me what is wrong" and "the form refused and went quiet".
+  //
+  // Every input in this modal carries a predictable id (`emp-<field>`, set by
+  // Text/Enum/Tri above; react-select gets it via inputId), which is what makes
+  // the lookup possible without a ref per field.
+  //
+  // The focus is deferred: the destination pane is display:none until React has
+  // committed the tab change, and focusing a hidden element silently does
+  // nothing. rAF runs after that commit has painted.
   const focusFirstError = (errorBag) => {
     const firstField = Object.keys(errorBag).find(
       (k) => k !== "_general" && FIELD_TAB[k]
     );
-    if (firstField) setActiveTab(FIELD_TAB[firstField]);
+    if (!firstField) {
+      // A _general-only error has no field to point at, so send focus to the
+      // banner instead of leaving it on a button that just did nothing.
+      requestAnimationFrame(() => generalErrorRef.current?.focus());
+      return;
+    }
+    setActiveTab(FIELD_TAB[firstField]);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`emp-${firstField}`);
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
   };
 
   const fieldError = (field) => errors?.[field]?.[0];
@@ -1172,8 +1212,17 @@ const EmployeeFormModal = ({
           </Tab.Container>
           </FieldCtx.Provider>
 
+          {/* role="alert" so the message is announced when it appears, and
+              tabIndex={-1} so focusFirstError can move the caret here when the
+              server rejects the save without naming a field. */}
           {errors._general && (
-            <Alert variant="danger" className="mt-3 mb-0 py-2 px-3">
+            <Alert
+              ref={generalErrorRef}
+              role="alert"
+              tabIndex={-1}
+              variant="danger"
+              className="mt-3 mb-0 py-2 px-3"
+            >
               {errors._general[0]}
             </Alert>
           )}

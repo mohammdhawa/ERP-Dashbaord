@@ -8,8 +8,15 @@ const initialState = {
   // client-side. It is paginated now, so the page and its size are the server's
   // answer, not ours — mirrors departmentReducer exactly.
   meta: null,
-  // EVERY user, flattened across pages — for the role-assignment picker only.
+  // EVERY user, flattened across pages — the role-assignment picker, and the
+  // directory search on the users list (which cannot be a server filter until
+  // `auth/users.index` grows a `?search=`; see fetchAllUsers).
   allItems: [],
+  allLoading: false,
+  allError: null,
+  // False until a walk has completed, and reset to false by any mutation, so a
+  // search never matches against rows the server has since changed.
+  allLoaded: false,
   fetchLoading: false,
   saving: false,
   error: null,
@@ -36,8 +43,20 @@ const usersReducer = (state = initialState, action) => {
         items: action.payload.items,
         meta: action.payload.meta,
       };
+    case "FETCH_ALL_USERS_START":
+      return { ...state, allLoading: true, allError: null };
     case "FETCH_ALL_USERS_SUCCESS":
-      return { ...state, allItems: action.payload };
+      return {
+        ...state,
+        allItems: action.payload,
+        allLoading: false,
+        allLoaded: true,
+        allError: null,
+      };
+    case "FETCH_ALL_USERS_FAILURE":
+      return { ...state, allLoading: false, allError: action.payload };
+    case "INVALIDATE_USERS_DIRECTORY":
+      return { ...state, allLoaded: false };
     case "FETCH_USERS_FAILURE":
       if (action.payload.requestId !== state.listRequestId) return state;
       return { ...state, fetchLoading: false, error: action.payload.error };
@@ -48,8 +67,10 @@ const usersReducer = (state = initialState, action) => {
     // server would not have.
     case "SAVE_USER_START":
       return { ...state, saving: true, error: null };
+    // A successful create/update changes what a directory search should match,
+    // so the cached walk is marked stale rather than left to go quietly wrong.
     case "SAVE_USER_DONE":
-      return { ...state, saving: false };
+      return { ...state, saving: false, allLoaded: false };
     case "SAVE_USER_FAILURE":
       return { ...state, saving: false, error: action.payload };
 

@@ -1,10 +1,15 @@
 @use "./assets/scss/variables" as *;
 @use "./assets/scss/custom/table-pagination";
 @use "./assets/scss/custom/table-sort";
+@use "./assets/scss/custom/department-tree";
+@use "./assets/scss/custom/employee-profile";
 @import "./assets/css/bootstrap.css";
 @import "simplebar-react/dist/simplebar.min.css";
-@import "@simonwep/pickr/dist/themes/classic.min.css";
-@import "@simonwep/pickr/dist/themes/monolith.min.css";
-@import "@simonwep/pickr/dist/themes/nano.min.css";
+// The three @simonwep/pickr theme stylesheets (classic, monolith, nano) used to
+// be imported here. Nothing in src/ constructs a Pickr — the colour picker
+// belongs to the template's theme switcher, which this app does not ship — so
+// all three were loaded on every page, in every theme, for a widget that never
+// renders. `.pickr-container-*` rules in custom/_custom.scss remain and are
+// equally inert; they are the next thing to go if the switcher stays out.
 @import "./assets/css/styles.css";
 @import "./assets/css/icons.css";

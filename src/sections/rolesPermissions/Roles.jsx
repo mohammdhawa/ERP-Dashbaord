@@ -3,7 +3,7 @@ import { Card, Form, Row, Col, Accordion, InputGroup } from "react-bootstrap";
 import Select from "react-select";
 import moment from "moment";
 import { ShowPerPage } from "../../data/General";
-import { DataTable } from "../../components";
+import DataTable from "../../components/DataTable";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteRole } from "../../redux/actions/rolesActions";
 import { rolesColumns } from "../../data/Columns";

@@ -33,7 +33,9 @@
   justify-content: center;
   border-radius: 0.65rem;
   background: var(--primary01);
-  color: var(--primary-color);
+  // Brand yellow on a 10%-yellow tint is barely a shade apart. --primary-ink is
+  // the same hue at a readable weight.
+  color: var(--primary-ink);
   font-size: 1rem;
 }
 
@@ -63,7 +65,7 @@
 
   .pagination .page-item:not(.disabled):not(.active) .page-link:hover {
     background: var(--primary01);
-    color: var(--primary-color);
+    color: var(--primary-ink);
     transform: translateY(-1px);
   }
 

@@ -13,7 +13,10 @@ import {
 import moment from "moment-timezone";
 import { Link } from "react-router-dom";
 import { toastNotify } from "../../utils";
-import ALLImages from "../../data/Imagedata";
+// Direct import, not via data/Imagedata: that registry is in the entry chunk,
+// so listing this placeholder there loaded it on every page for two unrouted
+// screens.
+import NoUserProfile from "../../assets/images/NoUserProfile.jpg";
 const DetailUserModal = ({ open, close, user }) => {
   const handleCloseModal = () => {
     close();
@@ -52,7 +55,7 @@ const DetailUserModal = ({ open, close, user }) => {
                   className="avatar bg-light avatar-rounded"
                 >
                   <img
-                    src={user?.image ? user?.image : ALLImages("NoUserProfile")}
+                    src={user?.image ? user?.image : NoUserProfile}
                     alt="img"
                     style={{
                       objectFit: "cover",

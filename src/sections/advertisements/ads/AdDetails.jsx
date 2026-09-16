@@ -26,7 +26,8 @@ import {
   MarineFeatures,
   FeatureBadge,
 } from "../../../components/ads/Features";
-import ALLImages from "../../../data/Imagedata";
+// Direct import, not via data/Imagedata — see the note at the top of that file.
+import NoUserProfile from "../../../assets/images/NoUserProfile.jpg";
 import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
 const DetailUserModal = React.lazy(() => import("../../users/DetailUserModal"));
 const ProcessAdModal = React.lazy(() => import("./ProcessAdModal"));
@@ -933,7 +934,7 @@ const AdDetails = () => {
                                 src={
                                   user?.image
                                     ? user?.image
-                                    : ALLImages("NoUserProfile")
+                                    : NoUserProfile
                                 }
                                 alt="User"
                                 className="rounded-pill"

@@ -2,7 +2,11 @@
 :root {
   --body-bg-rgb: 247, 248, 249;
   --primary-rgb: 255, 190, 0;
-  --secondary-rgb: 180, 90, 237;
+  /* Was 180, 90, 237 (#b45aed). White text on that fill is 3.73:1 and the same
+     purple as text on white is 3.73:1 — both under the 4.5:1 floor for the
+     small, 300-weight text this app is set in. Darkened to #a348e0, which is
+     4.63:1 in BOTH directions, so one value fixes the fill and the ink. */
+  --secondary-rgb: 163, 72, 224;
   --warning-rgb: 243, 156, 18;
   --info-rgb: 52, 152, 219;
   --success-rgb: 46, 204, 113;
@@ -79,6 +83,34 @@
   --black-8: rgba(0, 0, 0, 0.8);
   --black-9: rgba(0, 0, 0, 0.9);
   --default-font-size: 0.8725rem;
+
+  /* Start::accessible brand pairings
+     ------------------------------------------------------------------
+     The brand yellow cannot serve as both a fill and an ink. #ffbe00 is
+     1.66:1 against white, so white text on a primary button and yellow text
+     on a white card both fail WCAG 1.4.3 badly. The fill stays exactly the
+     brand colour; what changes is the text put on it and the shade used when
+     primary itself IS the text:
+
+       --on-primary   text/icons sitting ON a --primary-color fill.
+                      #2a2000 on #ffbe00 = 9.6:1
+       --primary-ink  primary used AS text/icons on a light surface.
+                      #8a6200 on #fff = 5.5:1 (same hue family, readable)
+       --on-secondary text on a --secondary fill. #fff on #a348e0 = 4.63:1
+       --secondary-ink secondary as text on a light surface = 4.63:1
+
+     Both inks are redefined in the dark block below, where the surface
+     underneath them flips. */
+  --on-primary: #2a2000;
+  --primary-ink: #8a6200;
+  --on-secondary: #fff;
+  --secondary-ink: rgb(var(--secondary-rgb));
+  /* Keyboard focus ring. One token so the ring is identical on every control
+     and can be retuned in one place. */
+  --focus-ring-color: #0a58ca;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  /* End::accessible brand pairings */
 }
 
 /*Font Family*/
@@ -150,6 +182,16 @@
   --black-7: rgba(255, 255, 255, 0.7);
   --black-8: rgba(255, 255, 255, 0.8);
   --black-9: rgba(255, 255, 255, 0.9);
+  /* The inks flip with the surface. On rgb(32,32,37) the brand yellow is
+     already 9.7:1, so primary text needs no darkening here — darkening it
+     would make it WORSE. The purple is the opposite case: #a348e0 is only
+     3.5:1 on this background, so secondary text lightens to #c98bf5 (6.5:1).
+     The fills themselves are untouched in both modes. */
+  --on-primary: #2a2000;
+  --primary-ink: rgb(var(--primary-rgb));
+  --on-secondary: #fff;
+  --secondary-ink: #c98bf5;
+  --focus-ring-color: #8ab4ff;
 }
 
 /* Sidemenu Layout Syles */
@@ -4274,8 +4316,10 @@
   color: #fff;
 }
 
-.btn-check:focus + .btn,
-.btn:focus {
+/* Scoped to the mouse case. Unqualified, this removed Bootstrap's focus shadow
+   from every button in the app, including the one the keyboard is actually on. */
+.btn-check:focus:not(:focus-visible) + .btn,
+.btn:focus:not(:focus-visible) {
   box-shadow: none;
 }
 
@@ -11539,9 +11583,15 @@ body {
   background: rgb(var(--light-rgb));
 }
 
-a,
-button {
-  outline: 0 !important;
+/* Was `a, button { outline: 0 !important; }` — a blanket kill on the only
+   indicator a keyboard user has of where they are. It is kept ONLY for the
+   mouse case it was presumably written for (`:focus` without `:focus-visible`,
+   i.e. a clicked control), so clicking still looks clean while tabbing does
+   not go blind. The ring itself is defined in the focus-visible block at the
+   end of this file. */
+a:focus:not(:focus-visible),
+button:focus:not(:focus-visible) {
+  outline: 0;
 }
 
 /* Start::basic */
@@ -14642,9 +14692,9 @@ span.flatpickr-weekday {
   background-color: transparent !important;
   color: var(--default-text-color) !important;
 }
-.react-datepicker__input-container input:focus-visible {
-  outline: none !important;
-}
+/* `.react-datepicker__input-container input:focus-visible { outline: none }`
+   removed — :focus-visible is the keyboard case, so this hid the ring from
+   exactly the users it exists for. */
 
 .react-datepicker__header {
   background-color: rgb(var(--light-rgb)) !important;
@@ -14850,9 +14900,10 @@ select {
   background-color: var(--custom-white) !important;
   color: var(--default-text-color) !important;
 }
-select:focus-visible {
-  outline: none !important;
-}
+/* `select:focus-visible { outline: none !important }` used to live here. It
+   targeted the keyboard case EXACTLY — :focus-visible is the keyboard
+   pseudo-class — so a tabbed-to <select> (the page-size picker on every table)
+   had no indicator at all. Removed; the ring at the end of this file applies. */
 
 .btn.disabled,
 .btn:disabled,
@@ -28008,5 +28059,235 @@ h6 {
 }
 
 /* End::Heading tags */
+
+/* ==================================================================
+   Start::Keyboard focus
+
+   This file, bootstrap.css and half the component partials each strip
+   `outline` from something — nineteen per-colour `.btn-*:focus { outline: 0 }`
+   blocks alone. Rather than chase every one, the ring is declared LAST and
+   with `!important`, so it wins wherever focus actually lands.
+
+   `:focus-visible`, not `:focus`: the browser decides. A clicked button stays
+   clean; a tabbed-to button gets the ring. `:where()` keeps the specificity at
+   zero so any component that wants a DIFFERENT ring (the sort headers) can
+   still override the colour without fighting.
+   ================================================================== */
+:where(a, button, input, select, textarea, summary, [tabindex], [role="button"], [role="tab"], [contenteditable="true"]):focus-visible,
+:where(.btn, .page-link, .dropdown-item, .nav-link, .form-control, .form-select, .form-check-input, .list-group-item-action):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color) !important;
+  outline-offset: var(--focus-ring-offset) !important;
+}
+
+/* react-select renders its real <input> 1px wide and invisible, so the ring has
+   to go on the control it sits inside or it lands on nothing you can see. */
+.Select2__control--is-focused {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color) !important;
+  outline-offset: var(--focus-ring-offset) !important;
+}
+
+/* The switch/checkbox ring must clear the control rather than trace its pill
+   shape, which reads as part of the graphic. */
+.form-check-input:focus-visible {
+  outline-offset: 3px !important;
+}
+
+/* The main landmark is focused programmatically by the skip link. It spans the
+   viewport, so the ring goes INSIDE its box — a positive offset on a
+   full-width element pushes the page into a horizontal scroll. */
+main#main-content:focus-visible {
+  outline-offset: -3px !important;
+}
+
+/* An expandable sidebar group is a <button> now (it opens a submenu, it does
+   not navigate), so it needs the anchor's layout back: a button is
+   inline-block, centred and carries its own font. */
+button.side-menu__item {
+  width: 100%;
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+/* The group heading inside a collapsed-layout flyout is a <span> now — it was
+   a <Link to="#!">, i.e. a focusable link to nowhere on every group. Carry
+   over the colours the old `.side-menu__label1 a` selectors gave it. */
+.app-sidebar .side-menu__label1 span {
+  color: var(--menu-prime-color);
+}
+[data-menu-styles="light"] .side-menu__label1 span {
+  color: #222528;
+  font-weight: 300;
+}
+[data-menu-styles="dark"] .side-menu__label1 span {
+  color: rgb(255, 255, 255);
+  font-weight: 300;
+}
+
+/* Skip link: off-screen until focused, then anchored at the top of the page.
+   It is the first tab stop in the app (see pages/App.jsx) and the only way to
+   get past ~40 sidebar links without tabbing through all of them. */
+.skip-to-content {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 10001;
+  padding: 0.65rem 1.25rem;
+  background-color: var(--custom-white);
+  color: var(--default-text-color);
+  border: 1px solid var(--default-border);
+  border-radius: 0 0 0.5rem 0.5rem;
+  box-shadow: 0 0.25rem 1rem var(--black-1);
+  text-decoration: none;
+  transform: translateY(-120%);
+}
+.skip-to-content:focus {
+  transform: translateY(0);
+}
+
+/* End::Keyboard focus */
+
+/* ==================================================================
+   Start::Accessible brand foregrounds
+
+   The fills stay on brand; only the text and icons drawn on top of them move.
+   See the --on-primary / --primary-ink notes in :root for the ratios. These
+   rules are last in the file so they land on top of the generated colour
+   blocks above without needing extra specificity, and they repeat `!important`
+   only where the rule they correct already used it.
+   ================================================================== */
+
+/* -- text/icons ON a solid primary fill: white 1.66:1 -> dark 9.6:1 -- */
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.btn-primary.show,
+.btn-check:active + .btn-primary,
+.btn-check:checked + .btn-primary {
+  color: var(--on-primary) !important;
+}
+
+.badge.bg-primary,
+.bg-primary > .badge,
+.page-item.active .page-link,
+.btn.btn-primary-light:hover,
+.btn.btn-primary-light:focus,
+.btn.btn-primary-light:active,
+.simple-list-example-scrollspy .active {
+  color: var(--on-primary);
+}
+
+/* -- primary used AS text on a light surface: 1.66:1 -> 5.5:1 -- */
+.text-primary,
+.link-primary,
+.link-primary:hover,
+.link-primary:focus,
+.link-primary:active {
+  color: var(--primary-ink) !important;
+}
+
+.bg-primary-transparent,
+.bg-primary-transparent:hover,
+.badge.bg-primary-transparent {
+  color: var(--primary-ink) !important;
+}
+
+.app-sidebar .side-menu__item.active,
+.app-sidebar .side-menu__item:hover,
+.app-sidebar .side-menu__item.active .side-menu__label,
+.app-sidebar .side-menu__item.active .side-menu__angle,
+.app-sidebar .side-menu__item:hover .side-menu__label,
+.app-sidebar .side-menu__item:hover .side-menu__angle,
+.app-sidebar .side-menu__item.active .side-menu__icon,
+.app-sidebar .side-menu__item:hover .side-menu__icon {
+  color: var(--primary-ink);
+}
+
+.btn.btn-primary-light,
+.btn.btn-primary-transparent,
+.page-link:hover,
+.scrollToTop,
+.table-pagination-summary-icon,
+.table-pagination-pages
+  .pagination
+  .page-item:not(.disabled):not(.active)
+  .page-link:hover,
+.table-sort-button.is-sorted {
+  color: var(--primary-ink);
+}
+
+/* -- secondary: the fill itself moved, so only the transparent/ink uses that
+      sit on a light surface still need pointing at the ink token (identical in
+      light mode, lightened in dark). -- */
+.text-secondary,
+.link-secondary,
+.link-secondary:hover,
+.link-secondary:focus,
+.link-secondary:active,
+.bg-secondary-transparent,
+.bg-secondary-transparent:hover,
+.badge.bg-secondary-transparent {
+  color: var(--secondary-ink) !important;
+}
+
+.btn.btn-secondary-light,
+.btn.btn-secondary-transparent {
+  color: var(--secondary-ink);
+}
+
+.btn-secondary,
+.btn-secondary:hover,
+.btn-secondary:focus,
+.btn-secondary:active,
+.badge.bg-secondary {
+  color: var(--on-secondary) !important;
+}
+
+/* End::Accessible brand foregrounds */
+
+/* ==================================================================
+   Start::Horizontal table overflow
+
+   `*::-webkit-scrollbar { width: 0 }` near the top of this file hides the
+   scrollbar entirely, which is survivable for a vertical scroll the wheel
+   handles anyway — but a wide table's HORIZONTAL scrollbar is then the only
+   thing saying there are more columns, and it is invisible. Tables get a
+   slim, always-present one back, plus a shadow on the clipped edge.
+   ================================================================== */
+.table-responsive {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--dark-rgb), 0.35) transparent;
+}
+.table-responsive::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+.table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(var(--dark-rgb), 0.3);
+  border-radius: 0.5rem;
+}
+.table-responsive:hover::-webkit-scrollbar-thumb {
+  background: rgba(var(--dark-rgb), 0.45);
+}
+
+/* Below the lg breakpoint let the long free-text columns wrap instead of
+   forcing one enormous horizontal scroll. `text-nowrap` still applies to the
+   cells that must not break (dates, numbers, the actions column) — see
+   DataTableServer. */
+@media (max-width: 991.98px) {
+  .table-responsive .table.table-wrap-sm,
+  .table-responsive .table.table-wrap-sm th,
+  .table-responsive .table.table-wrap-sm td {
+    white-space: normal;
+  }
+  .table-responsive .table.table-wrap-sm td.table-cell-nowrap,
+  .table-responsive .table.table-wrap-sm th.table-cell-nowrap {
+    white-space: nowrap;
+  }
+}
+/* End::Horizontal table overflow */
 
 /*# sourceMappingURL=styles.css.map */

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
+import { confirmDiscardChanges } from "../../utils";
 import {
   createJobTitle,
   updateJobTitle,
@@ -34,25 +35,48 @@ const JobTitleFormModal = ({
 
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
+  // The values the modal opened with, so "has anything been typed?" can be
+  // answered without a dirty flag on every field — same shape as every other
+  // form modal in the app.
+  const [initialForm, setInitialForm] = useState(emptyForm);
 
   useEffect(() => {
     if (open) {
-      setForm(
-        jobTitle
-          ? {
-              name: jobTitle.name || "",
-              default_organizational_grade:
-                jobTitle.default_organizational_grade ?? "",
-              default_activity_type: jobTitle.default_activity_type ?? "",
-              is_described: Boolean(jobTitle.is_described),
-              description: jobTitle.description || "",
-              is_active: Boolean(jobTitle.is_active),
-            }
-          : emptyForm
-      );
+      const values = jobTitle
+        ? {
+            name: jobTitle.name || "",
+            default_organizational_grade:
+              jobTitle.default_organizational_grade ?? "",
+            default_activity_type: jobTitle.default_activity_type ?? "",
+            is_described: Boolean(jobTitle.is_described),
+            description: jobTitle.description || "",
+            is_active: Boolean(jobTitle.is_active),
+          }
+        : emptyForm;
+      setForm(values);
+      setInitialForm(values);
       setErrors({});
     }
   }, [open, jobTitle]);
+
+  const isDirty = useMemo(
+    () => Object.keys(form).some((key) => form[key] !== initialForm[key]),
+    [form, initialForm]
+  );
+
+  // The header's × and "إلغاء" both run the guard. This modal already refuses
+  // Escape and backdrop clicks (backdrop="static", keyboard={false}) to protect
+  // the form — and then let these two throw it away with no warning, which is
+  // the same loss by a different button. An untouched form still closes
+  // instantly; only real edits are confirmed. Every other active data-entry
+  // modal here does this; this one was the last that did not.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
 
   const setField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -112,7 +136,7 @@ const JobTitleFormModal = ({
     <Modal
       show={open}
       size="lg"
-      onHide={close}
+      onHide={handleCancel}
       keyboard={false}
       centered
       backdrop="static"
@@ -281,7 +305,7 @@ const JobTitleFormModal = ({
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={close}
+                onClick={handleCancel}
                 disabled={saving}
               >
                 إلغاء
