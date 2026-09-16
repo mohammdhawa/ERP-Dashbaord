@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Alert, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
+import Swal from "sweetalert2";
 import { assignRole, unassignRole } from "../../redux/actions/rolesActions";
 import { fetchAllUsers } from "../../redux/actions/usersActions";
 import { refreshCurrentUser } from "../../redux/actions/authActions";
@@ -24,15 +25,23 @@ const AssignRoleCard = () => {
   const [selectedRole, setSelectedRole] = useState(null);
   const [submitting, setSubmitting] = useState(null); // "assign" | "unassign"
 
-  const userOptions = users.map((u) => ({
-    value: u.id,
-    label: `${u.name} (${u.email})`,
-  }));
+  const userOptions = useMemo(
+    () =>
+      users.map((u) => ({
+        value: u.id,
+        label: `${u.name} (${u.email})`,
+      })),
+    [users]
+  );
   // Prefer the Arabic label for display, keep the machine name for clarity.
-  const roleOptions = roles.map((r) => ({
-    value: r.id,
-    label: r.label ? `${r.label} (${r.name})` : r.name,
-  }));
+  const roleOptions = useMemo(
+    () =>
+      roles.map((r) => ({
+        value: r.id,
+        label: r.label ? `${r.label} (${r.name})` : r.name,
+      })),
+    [roles]
+  );
 
   const resolvedUserId = canListUsers
     ? selectedUser?.value
@@ -42,6 +51,31 @@ const AssignRoleCard = () => {
 
   const submit = async (mode) => {
     if (!resolvedUserId || !selectedRole) return;
+
+    // Revoking a role is destructive and silently takes screens away from
+    // whoever held it — including, if they pick their own account, the admin
+    // doing it. Every delete in this app confirms first; this did not.
+    if (mode === "unassign") {
+      const isSelf = resolvedUserId === currentUser?.id;
+      const confirm = await Swal.fire({
+        title: "سحب الدور من هذا المستخدم؟",
+        text: isSelf
+          ? "هذا حسابك — قد تفقد الوصول إلى شاشات تستخدمها الآن."
+          : "سيفقد المستخدم كل الصلاحيات التي يمنحها هذا الدور.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "سحب",
+        cancelButtonText: "إلغاء",
+        reverseButtons: true,
+        customClass: {
+          confirmButton: "btn btn-danger me-2",
+          cancelButton: "btn btn-light me-2",
+        },
+        buttonsStyling: false,
+      });
+      if (!confirm.isConfirmed) return;
+    }
+
     setSubmitting(mode);
     try {
       const action = mode === "assign" ? assignRole : unassignRole;
@@ -65,9 +99,13 @@ const AssignRoleCard = () => {
       <Card.Body>
         <Row className="g-3 align-items-end">
           <Col sm={12} md={5}>
-            <Form.Label>المستخدم</Form.Label>
+            {/* htmlFor + inputId: without the pair these labels were floating
+                text and neither select had an accessible name. The employee and
+                job-title filters already wire theirs up this way. */}
+            <Form.Label htmlFor="assign-user">المستخدم</Form.Label>
             {canListUsers ? (
               <Select
+                inputId="assign-user"
                 options={userOptions}
                 classNamePrefix="Select2"
                 placeholder="اختر المستخدم"
@@ -83,6 +121,7 @@ const AssignRoleCard = () => {
                   <code>auth.users.view</code>. أدخل معرّف المستخدم يدويًا.
                 </Alert>
                 <Form.Control
+                  id="assign-user"
                   type="number"
                   min={1}
                   placeholder="معرّف المستخدم (ID)"
@@ -93,8 +132,9 @@ const AssignRoleCard = () => {
             )}
           </Col>
           <Col sm={12} md={4}>
-            <Form.Label>الدور</Form.Label>
+            <Form.Label htmlFor="assign-role">الدور</Form.Label>
             <Select
+              inputId="assign-role"
               options={roleOptions}
               classNamePrefix="Select2"
               placeholder="اختر الدور"
@@ -105,7 +145,11 @@ const AssignRoleCard = () => {
           </Col>
           <Col sm={12} md={3}>
             <div className="d-flex gap-2">
+              {/* type="button" on both: these sit in a Card, not a form today,
+                  but an untyped <button> defaults to submit and would post the
+                  moment this block is ever wrapped in one. */}
               <button
+                type="button"
                 className="btn btn-secondary flex-fill"
                 disabled={!resolvedUserId || !selectedRole || !!submitting}
                 onClick={() => submit("assign")}
@@ -117,6 +161,7 @@ const AssignRoleCard = () => {
                 )}
               </button>
               <button
+                type="button"
                 className="btn btn-outline-danger flex-fill"
                 disabled={!resolvedUserId || !selectedRole || !!submitting}
                 onClick={() => submit("unassign")}

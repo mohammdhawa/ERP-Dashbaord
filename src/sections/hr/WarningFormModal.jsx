@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
@@ -8,6 +8,7 @@ import {
 } from "../../redux/actions/warningsActions";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { useResourceOptions } from "../departments/useResourceOptions";
+import { confirmDiscardChanges } from "../../utils";
 
 // `issued_by` is an EMPLOYEE id, not a user id: a line manager may have no
 // login at all, so the picker is over /hr/employees and never over the user
@@ -58,23 +59,39 @@ const WarningFormModal = ({
 
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
+  const [initialForm, setInitialForm] = useState(emptyForm);
 
   useEffect(() => {
     if (open) {
-      setForm(
-        warning
-          ? {
-              type: warning.type || "",
-              issued_on: warning.issued_on || "",
-              number: warning.number || "",
-              issued_by: warning.issued_by ?? "",
-              notes: warning.notes || "",
-            }
-          : emptyForm
-      );
+      const values = warning
+        ? {
+            type: warning.type || "",
+            issued_on: warning.issued_on || "",
+            number: warning.number || "",
+            issued_by: warning.issued_by ?? "",
+            notes: warning.notes || "",
+          }
+        : emptyForm;
+      setForm(values);
+      setInitialForm(values);
       setErrors({});
     }
   }, [open, warning]);
+
+  const isDirty = useMemo(
+    () => Object.keys(form).some((key) => form[key] !== initialForm[key]),
+    [form, initialForm]
+  );
+
+  // Closing discards a disciplinary record someone was mid-way through writing,
+  // including its notes field. Untouched forms still close instantly.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close(false);
+      return;
+    }
+    if (await confirmDiscardChanges()) close(false);
+  };
 
   const setField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -138,7 +155,7 @@ const WarningFormModal = ({
     <Modal
       show={open}
       size="lg"
-      onHide={() => close(false)}
+      onHide={handleCancel}
       keyboard={false}
       centered
       backdrop="static"
@@ -300,7 +317,7 @@ const WarningFormModal = ({
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={() => close(false)}
+                onClick={handleCancel}
                 disabled={saving}
               >
                 إلغاء

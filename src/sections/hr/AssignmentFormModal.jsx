@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
 import { createAssignment } from "../../redux/actions/assignmentsActions";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { useResourceOptions } from "../departments/useResourceOptions";
+import { confirmDiscardChanges } from "../../utils";
 import {
   ASSIGNMENT_REASON_OPTIONS,
   GRADE_OPTIONS,
@@ -67,8 +68,18 @@ const CarryControl = ({
   error,
   children,
 }) => (
-  <div className="border rounded p-3 h-100">
-    <div className="fw-semibold mb-1">{label}</div>
+  // A <fieldset>/<legend>, not a <div> with a bold <div> above it. These are
+  // three radios whose meaning is entirely relative to their subject — "بدون
+  // تغيير / تغيير إلى / إزالة" is unanswerable without knowing whether it is
+  // the unit, the job title or the grade being spoken about. Rendered as loose
+  // text the subject was visual only, so a screen reader announced the same
+  // three options three times with nothing to tell them apart.
+  //
+  // Bootstrap's own `legend` rule is `float: left; width: 100%`, which would
+  // push the box open and drop the border; `float-none w-auto` restores it to
+  // an inline caption, and `fs-6` undoes the oversized default.
+  <fieldset className="border rounded p-3 h-100">
+    <legend className="fw-semibold mb-1 fs-6 float-none w-auto">{label}</legend>
     <div className="text-muted fs-11 mb-2">الحالي: {currentLabel || "بدون"}</div>
     <div className="d-flex flex-column gap-1 mb-2">
       <Form.Check
@@ -98,7 +109,7 @@ const CarryControl = ({
     </div>
     {mode === MODE_SET && children}
     {error && <div className="text-danger small mt-1">{error}</div>}
-  </div>
+  </fieldset>
 );
 
 const AssignmentFormModal = ({
@@ -142,6 +153,24 @@ const AssignmentFormModal = ({
     setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
+  // This modal always opens blank (it only ever creates), so `emptyForm` IS the
+  // opening snapshot — no separate initial-state copy is needed here the way it
+  // is in the edit-capable forms.
+  const isDirty = useMemo(
+    () => Object.keys(emptyForm).some((key) => form[key] !== emptyForm[key]),
+    [form]
+  );
+
+  // A posting carries a date, a reason, three carry-forward decisions and a
+  // notes field. Discarding it silently on "إلغاء" threw all of that away.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close(false);
+      return;
+    }
+    if (await confirmDiscardChanges()) close(false);
+  };
+
   // Recomputed every render, NOT memoised on mount. A tab left open
   // overnight otherwise keeps yesterday as both the input max and the
   // future-date boundary, and rejects today's date as being in the
@@ -183,7 +212,7 @@ const AssignmentFormModal = ({
     <Modal
       show={open}
       size="lg"
-      onHide={() => close(false)}
+      onHide={handleCancel}
       keyboard={false}
       centered
       backdrop="static"
@@ -418,7 +447,7 @@ const AssignmentFormModal = ({
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={() => close(false)}
+                onClick={handleCancel}
                 disabled={saving}
               >
                 إلغاء

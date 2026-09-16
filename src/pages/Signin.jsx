@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Card, Col, Container, Form, Row, Spinner } from "react-bootstrap";
-import { Helmet, HelmetProvider } from "react-helmet-async";
+import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { login, clearRateLimit } from "../redux/actions/authActions";
@@ -27,11 +27,21 @@ const Signin = () => {
     if (retryAfter) setCooldown(retryAfter);
   }, [retryAfter]);
 
+  // Keyed on the BOOLEAN, not on `cooldown` itself: depending on the number
+  // would tear down and recreate the interval every single tick. The condition
+  // is a named variable because a raw expression in a dependency array is
+  // something the linter cannot check — and something the next reader has to
+  // reverse-engineer. The functional updater means the effect never has to read
+  // `cooldown`, so the dependency list is genuinely complete.
+  const isCoolingDown = cooldown > 0;
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    if (!isCoolingDown) return undefined;
+    const timer = setInterval(
+      () => setCooldown((c) => Math.max(0, c - 1)),
+      1000
+    );
     return () => clearInterval(timer);
-  }, [cooldown > 0]);
+  }, [isCoolingDown]);
 
   // Falling edge of the countdown: once it lapses, drop the stale rate-limit
   // message so it doesn't reappear as a red error while the user can retry.
@@ -66,14 +76,13 @@ const Signin = () => {
       formValid = false;
     }
 
+    // Presence only. A minimum-length rule belongs on the SET-password form,
+    // not here: enforcing it at sign-in locks out any account whose password
+    // predates the policy, and tells an attacker the policy before they have
+    // authenticated. The server is the authority on whether a password is
+    // correct.
     if (!password) {
       setErrors((prev) => ({ ...prev, password: "كلمة المرور مطلوبة" }));
-      formValid = false;
-    } else if (password.length < 8) {
-      setErrors((prev) => ({
-        ...prev,
-        password: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
-      }));
       formValid = false;
     }
     if (formValid) {
@@ -100,12 +109,12 @@ const Signin = () => {
 
   return (
     <Fragment>
-      <HelmetProvider>
-        <Helmet>
-          <body className="bg-light"></body>
-          <title>الراقي ERP | تسجيل الدخول</title>
-        </Helmet>
-      </HelmetProvider>
+      {/* The provider lives at the root now; a nested one here made this page's
+          <title> register against a different context than every other page. */}
+      <Helmet>
+        <body className="bg-light"></body>
+        <title>الراقي ERP | تسجيل الدخول</title>
+      </Helmet>
       <Container>
         <Row
           style={{
@@ -120,21 +129,33 @@ const Signin = () => {
             width: "100%",
           }}
         >
-          <Link
-            to="#"
-            className="header-link layout-setting"
+          <button
+            type="button"
+            className="header-link layout-setting btn border-0 bg-transparent"
             onClick={() => ToggleDark()}
+            aria-label={
+              theme.datathememode === "dark"
+                ? "التبديل إلى الوضع الفاتح"
+                : "التبديل إلى الوضع الداكن"
+            }
+            aria-pressed={theme.datathememode === "dark"}
           >
             <span className="light-layout">
-              <i className="bi bi-moon header-link-icon"></i>
+              <i className="bi bi-moon header-link-icon" aria-hidden="true"></i>
             </span>
             <span className="dark-layout">
-              <i className="bi bi-brightness-high header-link-icon"></i>
+              <i
+                className="bi bi-brightness-high header-link-icon"
+                aria-hidden="true"
+              ></i>
             </span>
-          </Link>
+          </button>
         </Row>
+        {/* minHeight, not maxHeight: capping the row at the viewport clipped
+            the card on short screens (and on mobile once the keyboard opens)
+            with no way to scroll to the submit button. */}
         <Row
-          style={{ maxHeight: "100vh" }}
+          style={{ minHeight: "100vh" }}
           className="justify-content-center align-items-center authentication authentication-basic"
         >
           <Col xxl={4} xl={5} lg={5} md={6} sm={8} className="col-12">
@@ -187,9 +208,16 @@ const Signin = () => {
                         <Form.Label className="text-default">
                           البريد الالكتروني
                         </Form.Label>
+                        {/* type="email" + autoComplete: as a bare text input
+                            with no autocomplete hint, password managers and
+                            mobile keyboards had nothing to go on. */}
                         <Form.Control
-                          type="text"
+                          type="email"
                           size="lg"
+                          name="email"
+                          autoComplete="username"
+                          inputMode="email"
+                          dir="ltr"
                           placeholder="name@example.com"
                           value={email}
                           onChange={(e) => {
@@ -216,6 +244,8 @@ const Signin = () => {
                           <Form.Control
                             type={showPassword ? "text" : "password"}
                             size="lg"
+                            name="password"
+                            autoComplete="current-password"
                             placeholder="كلمة المرور"
                             value={password}
                             onChange={(e) => {
@@ -231,17 +261,33 @@ const Signin = () => {
                               {errors.password || serverFieldError("password")}
                             </Form.Control.Feedback>
                           )}
-                          <Link
-                            to="#"
-                            className="show-password-button text-muted"
+                          {/* A <button>, not a <Link to="#">: the anchor
+                              navigated (leaving a "#" on the sign-in URL) and
+                              announced as a link. aria-pressed reports the
+                              current state to a screen reader. */}
+                          <button
+                            type="button"
+                            className="show-password-button text-muted btn border-0 bg-transparent p-0"
                             onClick={() => setShowPassword(!showPassword)}
+                            aria-label={
+                              showPassword
+                                ? "إخفاء كلمة المرور"
+                                : "إظهار كلمة المرور"
+                            }
+                            aria-pressed={showPassword}
                           >
                             {showPassword ? (
-                              <i className="ri-eye-line align-middle"></i>
+                              <i
+                                className="ri-eye-line align-middle"
+                                aria-hidden="true"
+                              ></i>
                             ) : (
-                              <i className="ri-eye-off-line align-middle"></i>
+                              <i
+                                className="ri-eye-off-line align-middle"
+                                aria-hidden="true"
+                              ></i>
                             )}
-                          </Link>
+                          </button>
                         </div>
                       </Form.Group>
                     </Col>

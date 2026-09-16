@@ -1,7 +1,6 @@
-import Swal from "sweetalert2";
 import api from "../api";
 import { parseApiError } from "../../utils/apiHelpers";
-import { toastNotify } from "../../utils";
+import { toastNotify, confirmDestructive } from "../../utils";
 
 // الإنذارات — warnings (API doc §8.4).
 //
@@ -99,23 +98,18 @@ export const updateWarning =
 // never happened — so the confirmation says WITHDRAW, not erase, and does not
 // promise the irreversibility that the other delete dialogs in this app do.
 export const deleteWarning =
-  (warningId, employeeId, page, itemsOnPage, perPage = 10) =>
+  (warningId, employeeId, page, itemsOnPage, perPage = 10, label) =>
   async (dispatch) => {
-    const confirm = await Swal.fire({
-      title: "سحب هذا الإنذار؟",
+    const confirmed = await confirmDestructive({
+      action: "سحب الإنذار",
+      // The warning's own type, plus its letter number when it has one — a
+      // withdrawal is nearly always chosen from several rows that differ only
+      // by date.
+      subject: label,
       text: "يُسحب الإنذار من سجل الموظف ويُعاد ترقيم الإنذارات التالية له. السجل نفسه يبقى محفوظاً.",
-      icon: "warning",
-      showCancelButton: true,
       confirmButtonText: "سحب الإنذار",
-      cancelButtonText: "إلغاء",
-      reverseButtons: true,
-      customClass: {
-        confirmButton: "btn btn-danger me-2",
-        cancelButton: "btn btn-light me-2",
-      },
-      buttonsStyling: false,
     });
-    if (!confirm.isConfirmed) return;
+    if (!confirmed) return;
 
     try {
       const response = await api.delete(`/hr/warnings/${warningId}`);

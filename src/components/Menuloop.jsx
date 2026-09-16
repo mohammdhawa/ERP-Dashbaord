@@ -6,6 +6,14 @@ import { hasPermission } from "../data/permissionsCatalog";
 
 const Menuloop = ({ MENUITEMS, toggleSidemenu, level }) => {
   const { permissions } = useSelector((state) => state.auth);
+  const theme = useSelector((state) => state.theme);
+
+  // From the theme slice, not localStorage: nothing writes `verticalstyles`,
+  // `layout` or `rtl`, so the old conditions were always false and this tooltip
+  // never appeared in the doublemenu layout it exists for.
+  const isDoubleMenu =
+    theme?.datanavlayout !== "horizontal" &&
+    theme?.dataverticalstyle === "doublemenu";
 
   // Hide a parent group unless at least one child is reachable, so empty
   // sections never render for users lacking access to any item inside.
@@ -33,11 +41,10 @@ const Menuloop = ({ MENUITEMS, toggleSidemenu, level }) => {
       >
         {level <= 1 &&
           MENUITEMS.icon &&
-          (localStorage.verticalstyles === "doublemenu" &&
-          localStorage.layout !== "horizontal" ? (
+          (isDoubleMenu ? (
             <div className="custom-tooltip">
               <OverlayTrigger
-                placement={localStorage.rtl ? "left" : "right"}
+                placement={theme?.dir === "rtl" ? "left" : "right"}
                 overlay={<Tooltip>{MENUITEMS.title}</Tooltip>}
               >
                 <i
@@ -79,7 +86,9 @@ const Menuloop = ({ MENUITEMS, toggleSidemenu, level }) => {
                   ${firstlevel?.type === "sub" ? "slide has-sub" : ""} 
                   ${firstlevel?.active ? "open" : ""} 
                   ${firstlevel?.selected ? "active" : ""}`}
-              key={Math.random()}
+              // Stable identity — a random key remounted every submenu item on
+              // each render, discarding open/closed state and animations.
+              key={firstlevel.path || firstlevel.title}
             >
               {firstlevel.type === "link" && (
                 <Link
@@ -87,6 +96,9 @@ const Menuloop = ({ MENUITEMS, toggleSidemenu, level }) => {
                   className={`side-menu__item ${
                     firstlevel.selected ? "active" : ""
                   }`}
+                  // Matches the top-level entries in Sidebar.jsx: the current
+                  // page is announced, not just highlighted.
+                  aria-current={firstlevel.selected ? "page" : undefined}
                 >
                   {firstlevel.icon} <span>{firstlevel.title}</span>
                 </Link>

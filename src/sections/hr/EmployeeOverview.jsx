@@ -128,12 +128,24 @@ const EmployeeOverview = ({ employee }) => {
       <Section title="العمل">
         <Field label="القسم" value={employee.department?.name} />
         <Field label="المسمى الوظيفي" value={employee.job_title?.name} />
+        {/* Embedded now — `direct_manager: { id, full_name, employee_number }`
+            beside the untouched `direct_manager_id`. The id-set-but-object-null
+            case means the manager's own record has been soft-deleted: the
+            reporting line is still recorded, the person is not. Field() renders
+            a plain dash for null, which would claim this employee reports to
+            nobody, so that case is spelled out instead. */}
         <Field
           label="المدير المباشر"
           value={
-            employee.direct_manager_id
-              ? `موظف #${employee.direct_manager_id}`
-              : null
+            employee.direct_manager ? (
+              <span title={employee.direct_manager.employee_number || undefined}>
+                {employee.direct_manager.full_name}
+              </span>
+            ) : employee.direct_manager_id ? (
+              <span className="text-muted">
+                موظف #{employee.direct_manager_id} — سجل غير متاح
+              </span>
+            ) : null
           }
         />
         <Field label="نوع التوظيف" value={employee.employment_type_label} />

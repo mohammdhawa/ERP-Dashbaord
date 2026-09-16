@@ -1,7 +1,6 @@
-import Swal from "sweetalert2";
 import api from "../api";
 import { parseApiError } from "../../utils/apiHelpers";
-import { toastNotify } from "../../utils";
+import { toastNotify, confirmDestructive } from "../../utils";
 
 // دليل المسميات الوظيفية — job-title catalogue (API doc §8.2).
 //
@@ -156,23 +155,14 @@ export const updateJobTitle =
  * @returns {Promise<{ok: boolean, conflict?: string}>}
  */
 export const deleteJobTitle =
-  (id, page, itemsOnPage, perPage = 10, filters = {}) =>
+  (id, page, itemsOnPage, perPage = 10, filters = {}, name) =>
   async (dispatch) => {
-    const confirm = await Swal.fire({
-      title: "هل أنت متأكد من حذف هذا المسمى الوظيفي؟",
+    const confirmed = await confirmDestructive({
+      action: "حذف المسمى الوظيفي",
+      subject: name,
       text: "لن تتمكن من التراجع عن هذا الإجراء!",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "حذف",
-      cancelButtonText: "إلغاء",
-      reverseButtons: true,
-      customClass: {
-        confirmButton: "btn btn-danger me-2",
-        cancelButton: "btn btn-light me-2",
-      },
-      buttonsStyling: false,
     });
-    if (!confirm.isConfirmed) return { ok: false };
+    if (!confirmed) return { ok: false };
 
     try {
       const response = await api.delete(`/hr/job-titles/${id}`);

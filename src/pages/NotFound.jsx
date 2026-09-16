@@ -1,7 +1,6 @@
 import { Fragment } from "react";
-import { Col, Container, Row } from "react-bootstrap";
-import { Helmet } from "react-helmet";
-import { HelmetProvider } from "react-helmet-async";
+import { Container, Row } from "react-bootstrap";
+import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import ALLImages from "../data/Imagedata";
 
@@ -9,19 +8,14 @@ const NotFound = () => {
   const navigate = useNavigate();
   return (
     <Fragment>
-      <HelmetProvider>
-        <Helmet>
-          <title>Syria Souq | Not Found</title>
-        </Helmet>
-      </HelmetProvider>
-      <div
-        dir="rtl"
-        className="page"
-        style={{
-          userSelect: "none",
-          caretColor: "transparent",
-        }}
-      >
+      {/* Root provider only — see the note in NoAccess.jsx. The title was still
+          the previous product's ("Syria Souq"). */}
+      <Helmet>
+        <title>الراقي ERP | الصفحة غير موجودة</title>
+      </Helmet>
+      {/* Selection left enabled: the user may well need to copy this out to
+          report the broken link. */}
+      <div dir="rtl" className="page">
         <div className="error-page">
           <Container>
             <div className="my-auto">

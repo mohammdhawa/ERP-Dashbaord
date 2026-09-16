@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Col, Form, Modal, Nav, Row, Spinner, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
+import { confirmDiscardChanges } from "../../utils";
 import {
   createEmployee,
   updateEmployee,
@@ -45,6 +46,13 @@ const {
 // still reaching every field. The cost of tabs is that a rejected field can sit
 // on a tab you cannot see, so a 422 lists the tab each error belongs to and the
 // first offending tab is opened automatically.
+//
+// That "four on the first tab" claim was ASPIRATIONAL until recently: `gender`
+// is required on create (see validateEmployeeForm) but was laid out on the
+// personal tab, so the minimal create always bounced to a second tab. It now
+// sits on الهوية with the other three. If a future field becomes required on
+// create, put it on this tab too — FIELD_TAB below is what keeps the error
+// routing honest, but it cannot fix a layout that contradicts the contract.
 const TABS = [
   { key: "identity", title: "الهوية" },
   { key: "personal", title: "البيانات الشخصية" },
@@ -64,8 +72,10 @@ const FIELD_TAB = {
   last_name: "identity",
   mother_name: "identity",
   national_id: "identity",
+  // Lives on الهوية with the other three required create fields, not on
+  // البيانات الشخصية where it used to sit.
+  gender: "identity",
 
-  gender: "personal",
   birth_date: "personal",
   birth_place: "personal",
   origin_governorate: "personal",
@@ -140,6 +150,10 @@ const TRISTATE_OPTIONS = [
 // out of the box. Module scope keeps the type stable; the changing form state
 // reaches them through this context instead of through a closure.
 const FieldCtx = React.createContext(null);
+
+// Ties the footer's submit button to the form in the modal body across the
+// Modal.Body/Modal.Footer boundary.
+const FORM_ID = "employee-form";
 
 const Err = ({ field }) => {
   const { fieldError } = React.useContext(FieldCtx);
@@ -273,21 +287,79 @@ const EmployeeFormModal = ({
   // Suggestions applied from a job title, so the UI can say which values came
   // from the catalogue rather than from the user.
   const [suggested, setSuggested] = useState({});
+  // The values this modal opened with, so "did the user change anything?" can
+  // be answered without tracking a dirty flag on every field.
+  const [initialForm, setInitialForm] = useState(emptyEmployeeForm);
 
   useEffect(() => {
     if (open) {
-      setForm(getEmployeeFormValues(employee));
+      const values = getEmployeeFormValues(employee);
+      setForm(values);
+      setInitialForm(values);
       setErrors({});
       setActiveTab("identity");
       setSuggested({});
     }
   }, [open, employee]);
 
+  const isDirty = useMemo(
+    () => Object.keys(form).some((key) => form[key] !== initialForm[key]),
+    [form, initialForm]
+  );
+
+  // The modal already refuses Escape and backdrop clicks (backdrop="static",
+  // keyboard={false}) to protect forty fields of work — but "إلغاء" threw all
+  // of it away with no warning, which is the same loss by a different button.
+  // An untouched form still closes immediately; only real edits are confirmed.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
+
   const setField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: null }));
     setSuggested((prev) => ({ ...prev, [field]: false }));
   };
+
+  // ⚠️ THE SELECTED MANAGER IS RESOLVED FROM THE RECORD, NOT ONLY FROM THE LIST.
+  //
+  // Looking the value up in `managers.options` alone means that whenever the
+  // stored manager is absent from that list, `.find(...) || null` falls through
+  // to null and the control renders its placeholder — "بدون مدير مباشر",
+  // asserting this employee reports to nobody. That happens on every first
+  // render, because the list walk is async, and permanently when the manager's
+  // own record has been soft-deleted.
+  //
+  // The employee resource now carries `direct_manager` embedded, so the truth is
+  // already in hand: use the loaded option when there is one, fall back to the
+  // embedded object, and fall back again to the bare id. `direct_manager_id` in
+  // form state is untouched either way, so nothing here changes what is saved —
+  // this is only about the form not stating something false.
+  const managerOptions = useMemo(
+    () => managers.options.filter((o) => !isEdit || o.value !== employee?.id),
+    [managers.options, isEdit, employee?.id]
+  );
+
+  const selectedManagerOption = useMemo(() => {
+    if (form.direct_manager_id === "" || form.direct_manager_id == null)
+      return null;
+    const id = Number(form.direct_manager_id);
+
+    const loaded = managerOptions.find((o) => o.value === id);
+    if (loaded) return loaded;
+
+    // Only trust the embedded record while the id is still the one it describes
+    // — the user may have picked someone else since the modal opened.
+    if (employee?.direct_manager && employee.direct_manager.id === id) {
+      return employeeToOption(employee.direct_manager);
+    }
+
+    return { value: id, label: `موظف #${id}` };
+  }, [form.direct_manager_id, managerOptions, employee]);
 
   // Active titles first; an inactive one stays selectable only so an existing
   // record that already holds it can still be saved without silently losing it.
@@ -458,7 +530,9 @@ const EmployeeFormModal = ({
     <Modal
       show={open}
       size="xl"
-      onHide={close}
+      // The header's × now runs the same discard guard as "إلغاء" rather than
+      // closing straight through it.
+      onHide={handleCancel}
       keyboard={false}
       centered
       backdrop="static"
@@ -468,7 +542,7 @@ const EmployeeFormModal = ({
         <Modal.Title as="h6">{title}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <form onSubmit={handleSubmit}>
+        <form id={FORM_ID} onSubmit={handleSubmit}>
           <FieldCtx.Provider value={ctx}>
           <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
             <Nav variant="tabs" className="mb-3 flex-nowrap overflow-auto">
@@ -507,6 +581,13 @@ const EmployeeFormModal = ({
                   </Col>
                   <Col sm={12} md={4}>
                     <Text field="last_name" label="الكنية *" maxLength={255} />
+                  </Col>
+                  {/* `gender` is the FOURTH required create field and it lived
+                      on the personal tab, so every first create filled this tab,
+                      pressed "إضافة" and was bounced to another one. The four
+                      starred fields are now the first four controls here. */}
+                  <Col sm={12} md={4}>
+                    <Enum field="gender" label="الجنس *" options={GENDER_OPTIONS} />
                   </Col>
                   <Col sm={12} md={4}>
                     <Text field="mother_name" label="اسم الأم" maxLength={255} />
@@ -559,13 +640,6 @@ const EmployeeFormModal = ({
               {/* ---------------- البيانات الشخصية ---------------- */}
               <Tab.Pane eventKey="personal">
                 <Row className="g-3">
-                  <Col sm={12} md={4}>
-                    <Enum
-                      field="gender"
-                      label="الجنس *"
-                      options={GENDER_OPTIONS}
-                    />
-                  </Col>
                   <Col sm={12} md={4}>
                     <Text field="birth_date" label="تاريخ الميلاد" type="date" />
                   </Col>
@@ -879,14 +953,8 @@ const EmployeeFormModal = ({
                         classNamePrefix="Select2"
                         // A person may not be their own manager, so they are
                         // not offered as one.
-                        options={managers.options.filter(
-                          (o) => !isEdit || o.value !== employee?.id
-                        )}
-                        value={
-                          managers.options.find(
-                            (o) => o.value === Number(form.direct_manager_id)
-                          ) || null
-                        }
+                        options={managerOptions}
+                        value={selectedManagerOption}
                         onChange={(opt) =>
                           setField("direct_manager_id", opt ? opt.value : "")
                         }
@@ -1110,35 +1178,42 @@ const EmployeeFormModal = ({
             </Alert>
           )}
 
-          <Row className="g-2 mt-3">
-            <Col sm={12} md={6}>
-              <button
-                className="btn btn-secondary fw-md w-100"
-                type="submit"
-                disabled={saving}
-              >
-                {saving ? (
-                  <Spinner animation="border" size="sm" />
-                ) : isEdit ? (
-                  "حفظ التعديلات"
-                ) : (
-                  "إضافة"
-                )}
-              </button>
-            </Col>
-            <Col sm={12} md={6}>
-              <button
-                type="button"
-                className="btn btn-light fw-md w-100"
-                onClick={close}
-                disabled={saving}
-              >
-                إلغاء
-              </button>
-            </Col>
-          </Row>
         </form>
       </Modal.Body>
+      {/* The actions live in the FOOTER, outside the scrollable body. Inside it
+          they scrolled away with the fields: on the classification tab you had
+          to scroll past a dozen inputs to reach Save. The submit button reaches
+          the form through the `form` attribute, which is what it is for. */}
+      <Modal.Footer>
+        <Row className="g-2 w-100 m-0">
+          <Col sm={12} md={6}>
+            <button
+              className="btn btn-secondary fw-md w-100"
+              type="submit"
+              form={FORM_ID}
+              disabled={saving}
+            >
+              {saving ? (
+                <Spinner animation="border" size="sm" />
+              ) : isEdit ? (
+                "حفظ التعديلات"
+              ) : (
+                "إضافة"
+              )}
+            </button>
+          </Col>
+          <Col sm={12} md={6}>
+            <button
+              type="button"
+              className="btn btn-light fw-md w-100"
+              onClick={handleCancel}
+              disabled={saving}
+            >
+              إلغاء
+            </button>
+          </Col>
+        </Row>
+      </Modal.Footer>
     </Modal>
   );
 };

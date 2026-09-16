@@ -1,11 +1,21 @@
-import React, { Fragment, useEffect, useState, Suspense, lazy } from "react";
-import { Helmet } from "react-helmet";
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+  lazy,
+} from "react";
+import { Helmet } from "react-helmet-async";
 import { Card, Col, Row } from "react-bootstrap";
+import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import moment from "moment";
-import { PageHeader } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
+import { hasPermission } from "../../data/permissionsCatalog";
 import {
   fetchDepartments,
   deleteDepartment,
@@ -13,7 +23,26 @@ import {
 
 const DepartmentFormModal = lazy(() => import("./DepartmentFormModal"));
 
-const columns = [
+const dash = <span className="text-muted">—</span>;
+
+// The manager comes EMBEDDED on the resource now — `manager: { id, full_name,
+// employee_number }` beside the untouched `manager_id`. This page used to walk
+// every employee page to resolve that name itself; that interim lookup is gone.
+//
+// THE THREE STATES ARE NOT TWO. `manager_id` and `manager` disagree in one real
+// case, and it is the case worth getting right:
+//
+//   manager_id null            → no manager assigned. A dash.
+//   manager_id + manager       → the person. Named, and linked when the reader
+//                                may open employee profiles at all.
+//   manager_id + manager null  → a manager IS recorded, but that employee has
+//                                been soft-deleted. Collapsing this into a dash
+//                                would state the unit has no manager, which is
+//                                false; printing the bare id would imply the
+//                                name merely failed to load. So it says both:
+//                                the id that is still on the record, and that
+//                                the person behind it is gone.
+const buildColumns = ({ canOpenEmployee }) => [
   {
     key: "code",
     label: "الرمز",
@@ -59,14 +88,47 @@ const columns = [
       ),
   },
   {
-    key: "manager_id",
+    key: "manager",
     label: "المدير",
-    render: (value) =>
-      value ? (
-        <span className="badge bg-info-transparent">موظف #{value}</span>
+    render: (manager, item) => {
+      if (!item.manager_id) return dash;
+
+      // Soft-deleted employee: the foreign key survives, the person does not.
+      if (!manager) {
+        return (
+          <span
+            className="badge bg-secondary-transparent"
+            title="الموظف المسجَّل كمدير لم يعد متاحاً (سجل محذوف)"
+          >
+            موظف #{item.manager_id} — سجل غير متاح
+          </span>
+        );
+      }
+
+      // The staff number lives in the tooltip rather than the cell: two people
+      // can share الاسم الثلاثي, but a table column is the wrong place to spend
+      // that width on every row.
+      const badge = (
+        <span title={manager.employee_number || undefined}>
+          {manager.full_name}
+        </span>
+      );
+
+      // Linked only when the reader can actually open a profile — otherwise the
+      // link is a trip to /no_access. stopPropagation so following the manager
+      // does not also fire the row's own click.
+      return canOpenEmployee ? (
+        <Link
+          to={`${import.meta.env.BASE_URL}hr/employees/${manager.id}`}
+          className="badge bg-info-transparent text-decoration-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {badge}
+        </Link>
       ) : (
-        <span className="text-muted">—</span>
-      ),
+        <span className="badge bg-info-transparent">{badge}</span>
+      );
+    },
   },
   {
     key: "created_at",
@@ -77,17 +139,22 @@ const columns = [
 
 const Departments = () => {
   const dispatch = useDispatch();
-  const { items, meta, fetchLoading } = useSelector(
+  const { items, meta, fetchLoading, error } = useSelector(
     (state) => state.departments
   );
+  const { permissions } = useSelector((state) => state.auth);
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState(null);
 
   // Server-side pagination: every page change is a fresh `?page=N` request.
-  useEffect(() => {
+  const load = useCallback(() => {
     dispatch(fetchDepartments(page));
   }, [dispatch, page]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // If a deletion (here or elsewhere) shrinks the tree so the current page no
   // longer exists, snap back to the nearest valid page from server metadata.
@@ -97,6 +164,16 @@ const Departments = () => {
     }
   }, [meta, page]);
 
+  // Gates the manager LINK only, not the name: the name ships with the
+  // department resource, but the profile route behind the link needs its own
+  // permission.
+  const canOpenEmployee = hasPermission(permissions, "hr.employees.view");
+
+  const columns = useMemo(
+    () => buildColumns({ canOpenEmployee }),
+    [canOpenEmployee]
+  );
+
   const openCreate = () => {
     setEditingDepartment(null);
     setModalOpen(true);
@@ -105,8 +182,8 @@ const Departments = () => {
     setEditingDepartment(department);
     setModalOpen(true);
   };
-  const handleDelete = (id) => {
-    dispatch(deleteDepartment(id, page, items.length));
+  const handleDelete = (id, department) => {
+    dispatch(deleteDepartment(id, page, items.length, department?.name));
   };
 
   return (
@@ -137,6 +214,11 @@ const Departments = () => {
                 columns={columns}
                 data={items}
                 loading={fetchLoading}
+                // Without these a failed fetch rendered the generic empty
+                // message, so a network error read as "this company has no
+                // organisational units".
+                error={error}
+                onRetry={load}
                 currentPage={meta?.current_page || page}
                 totalPages={meta?.last_page || 1}
                 dataCount={meta?.total || 0}
@@ -155,7 +237,12 @@ const Departments = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={modalOpen ? <ModalFallback /> : null}>
         <DepartmentFormModal
           open={modalOpen}
           close={() => setModalOpen(false)}

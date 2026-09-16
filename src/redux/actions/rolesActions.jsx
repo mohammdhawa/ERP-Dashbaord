@@ -1,7 +1,6 @@
-import Swal from "sweetalert2";
 import api from "../api";
 import { parseApiError, fetchAllPages } from "../../utils/apiHelpers";
-import { toastNotify } from "../../utils";
+import { toastNotify, confirmDestructive } from "../../utils";
 import { refreshCurrentUser } from "./authActions";
 
 // Roles & RBAC module — /api/auth/roles.
@@ -144,6 +143,15 @@ const holdsRole = (state, roleName) => {
 const roleNameBeforeWrite = (state, roleId) =>
   (state?.roles?.items || []).find((r) => r.id === roleId)?.name;
 
+// What to CALL the role when speaking to the user: the Arabic label if the role
+// has one, else the machine name. Resolved from the same loaded page as above,
+// so the delete confirmation can name the role without the caller passing it
+// down — the table row is already in state, addressed by the id we were given.
+const roleDisplayName = (state, roleId) => {
+  const role = (state?.roles?.items || []).find((r) => r.id === roleId);
+  return role?.label || role?.name;
+};
+
 const refreshOwnPermissionsIfAffected = (getState, roleName) => (dispatch) => {
   if (holdsRole(getState(), roleName)) dispatch(refreshCurrentUser());
 };
@@ -186,21 +194,12 @@ export const deleteRole =
   // is no way to tell whether it was one of the current user's roles.
   const deletedRoleName = roleNameBeforeWrite(getState(), roleId);
 
-  const confirm = await Swal.fire({
-    title: "هل أنت متأكد من حذف هذا الدور؟",
+  const confirmed = await confirmDestructive({
+    action: "حذف الدور",
+    subject: roleDisplayName(getState(), roleId),
     text: "سيفقد جميع المستخدمين المرتبطين به صلاحياته!",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "حذف",
-    cancelButtonText: "إلغاء",
-    reverseButtons: true,
-    customClass: {
-      confirmButton: "btn btn-danger me-2",
-      cancelButton: "btn btn-light me-2",
-    },
-    buttonsStyling: false,
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     const response = await api.delete(`/auth/roles/${roleId}`);

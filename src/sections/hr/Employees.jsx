@@ -7,11 +7,11 @@ import React, {
   Suspense,
   lazy,
 } from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { Card, Col, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { PageHeader } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import EmployeeFilters from "./EmployeeFilters";
@@ -40,11 +40,30 @@ const ltr = (value) => (value ? <span dir="ltr">{value}</span> : dash);
 // Rendering it unconditionally would show a column of "—" to everyone else,
 // which reads as "this company records no ID numbers" rather than "you may not
 // see them".
+// SORTABLE COLUMNS carry `sortKey` — the exact key the SERVER accepts
+// (EMPLOYEE_SORT_KEYS). Only three of these nine columns can have one:
+//
+//   employee_number, hire_date  — direct column sorts.
+//   full_name → `first_name`    — see below.
+//
+// The rest are deliberately NOT sortable and must stay that way:
+//   legacy_number, national_id, phone, status_label  — no server sort key.
+//   job_title, department  — embedded objects; the server orders by the
+//     foreign key, which sorts by id and looks like no order at all.
+// Giving any of them a header button would advertise a sort that 422s.
+//
+// `first_name` on the الاسم الكامل column is a MAPPING, not a mislabel. The
+// server cannot order by `full_name` (a computed accessor with no column), but
+// full_name is rendered "first middle last", so ordering by first_name is
+// exactly the alphabetical order of the strings on screen. The filter dropdown
+// still exposes first_name and last_name separately for anyone who wants the
+// distinction; this is the "sort this column alphabetically" shortcut.
 const buildColumns = ({ canViewIdentity }) =>
   [
     {
       key: "employee_number",
       label: "الرقم الوظيفي",
+      sortKey: "employee_number",
       render: (value) => ltr(value),
     },
     {
@@ -54,8 +73,9 @@ const buildColumns = ({ canViewIdentity }) =>
       label: "الرقم القديم",
       render: (value) => ltr(value),
     },
-    // Read-only accessor joining the three name parts. NOT sortable.
-    { key: "full_name", label: "الاسم الكامل" },
+    // Read-only accessor joining the three name parts; ordered by first_name,
+    // which is the same order as the rendered string. See the note above.
+    { key: "full_name", label: "الاسم الكامل", sortKey: "first_name" },
     canViewIdentity && {
       key: "national_id",
       label: "رقم الهوية",
@@ -84,6 +104,7 @@ const buildColumns = ({ canViewIdentity }) =>
       // can shift it a day across a timezone boundary.
       key: "hire_date",
       label: "تاريخ التعيين",
+      sortKey: "hire_date",
       render: (value) => ltr(value),
     },
     {
@@ -130,8 +151,8 @@ const Employees = () => {
   // The job-titles catalogue links here with ?job_title_id=N to answer "which
   // units use this title?", since that catalogue holds no unit of its own.
   // Seeding from the query string is what makes that link actually filter.
-  const [searchParams] = useSearchParams();
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [filters, setFilters] = useState(() => {
     const seeded = { ...EMPTY_FILTERS };
@@ -141,6 +162,24 @@ const Employees = () => {
     });
     return seeded;
   });
+
+  // The URL is written back as well as read. Seeding on mount alone meant a
+  // filtered view could be arrived at but never returned to: refreshing, using
+  // the back button, or sharing the link all dropped every filter and showed
+  // the unfiltered first page instead. `replace` keeps typing in the search box
+  // from stacking a history entry per keystroke.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== "" && value != null) next.set(key, value);
+    });
+    if (page > 1) next.set("page", String(page));
+
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, page]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
 
@@ -186,8 +225,19 @@ const Employees = () => {
     setEditingEmployee(employee);
     setModalOpen(true);
   };
-  const handleDelete = (id) => {
-    dispatch(deleteEmployee(id, page, items.length, itemsPerPage, filters));
+  // The row follows the id so the confirmation can name the person being
+  // deleted rather than asking about "هذا الموظف".
+  const handleDelete = (id, employee) => {
+    dispatch(
+      deleteEmployee(
+        id,
+        page,
+        items.length,
+        itemsPerPage,
+        filters,
+        employee?.full_name
+      )
+    );
   };
 
   return (
@@ -233,6 +283,13 @@ const Employees = () => {
                 itemsPerPage={appliedPerPage}
                 onItemsPerPageChange={setItemsPerPage}
                 onRowClick={openProfile}
+                // Headers and the "الترتيب" dropdown write the SAME filter
+                // field, so the two controls can never disagree and the chosen
+                // sort lands in the URL with everything else. Sorting resets to
+                // page 1: keeping the offset while reordering shows an
+                // arbitrary slice of a list the user has just re-ranked.
+                sort={filters.sort}
+                onSortChange={(next) => handleFilterChange({ sort: next })}
                 updatePermission="hr.employees.update"
                 deletePermission="hr.employees.delete"
                 functions={{
@@ -252,7 +309,12 @@ const Employees = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={modalOpen ? <ModalFallback /> : null}>
         <EmployeeFormModal
           open={modalOpen}
           close={() => setModalOpen(false)}

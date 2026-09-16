@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Col, Form, Row, Modal, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import { useDispatch, useSelector } from "react-redux";
 import { createUser, updateUser } from "../../redux/actions/usersActions";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { useResourceOptions } from "../departments/useResourceOptions";
+import { confirmDiscardChanges } from "../../utils";
 
 // Create + edit user accounts. Notes from the API doc (§4):
 // - An account stores NO name of its own: the display name tracks the linked
@@ -50,6 +51,9 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  // The values the modal opened with, so "has anything been typed?" can be
+  // answered without a dirty flag on every field.
+  const [initialForm, setInitialForm] = useState(form);
 
   // Full employee list for the picker: loaded only while the modal is open and
   // only when the user owns hr.employees.view. Walks documented pages so the
@@ -62,16 +66,33 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
 
   useEffect(() => {
     if (open) {
-      setForm({
+      const values = {
         employee_id: user?.employee_id ?? "",
         email: user?.email || "",
         password: "",
         is_active: user ? Boolean(user.is_active) : true,
-      });
+      };
+      setForm(values);
+      setInitialForm(values);
       setErrors({});
       setShowPassword(false);
     }
   }, [open, user]);
+
+  const isDirty = useMemo(
+    () => Object.keys(form).some((key) => form[key] !== initialForm[key]),
+    [form, initialForm]
+  );
+
+  // The × and "إلغاء" both run the guard. This modal refuses Escape and
+  // backdrop clicks to protect the form, then let these two discard it silently.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
 
   const setField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -144,7 +165,13 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
   const showEmployeePicker = canReadEmployees && !employees.error;
 
   return (
-    <Modal show={open} onHide={close} keyboard={false} centered backdrop="static">
+    <Modal
+      show={open}
+      onHide={handleCancel}
+      keyboard={false}
+      centered
+      backdrop="static"
+    >
       <Modal.Header closeButton>
         <Modal.Title as="h6">
           {isEdit
@@ -243,16 +270,29 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
                   onChange={(e) => setField("password", e.target.value)}
                   isInvalid={!!fieldError("password")}
                 />
+                {/* Named and stateful, matching the sign-in screen's reveal
+                    button. Without the label a screen reader announced an
+                    unlabelled button; without aria-pressed it could not tell
+                    whether the password was currently visible — which is the
+                    one thing this control is for. `tabIndex={-1}` is gone too:
+                    it put the button out of tab order, so a keyboard user could
+                    not reach the only way to check what they had typed. */}
                 <button
                   type="button"
                   className="btn btn-link show-password-button text-muted p-0"
                   onClick={() => setShowPassword(!showPassword)}
-                  tabIndex={-1}
+                  aria-label={
+                    showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
+                  }
+                  aria-pressed={showPassword}
                 >
                   {showPassword ? (
-                    <i className="ri-eye-line align-middle"></i>
+                    <i className="ri-eye-line align-middle" aria-hidden="true"></i>
                   ) : (
-                    <i className="ri-eye-off-line align-middle"></i>
+                    <i
+                      className="ri-eye-off-line align-middle"
+                      aria-hidden="true"
+                    ></i>
                   )}
                 </button>
               </div>
@@ -322,7 +362,8 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={close}
+                onClick={handleCancel}
+                disabled={saving}
               >
                 إلغاء
               </button>

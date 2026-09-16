@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pagination } from "react-bootstrap";
 import Select from "react-select";
 
@@ -29,12 +29,16 @@ const TablePagination = ({
     dataCount
   );
 
-  const pageOptions = Array.from(
-    { length: normalizedTotalPages },
-    (_, index) => ({
-      value: index + 1,
-      label: `${index + 1}`,
-    })
+  // Rebuilt only when the page count actually changes. Unmemoised this
+  // allocated one object per page on every render — cheap at 20 pages, not at
+  // several thousand, and react-select re-diffs the whole list each time.
+  const pageOptions = useMemo(
+    () =>
+      Array.from({ length: normalizedTotalPages }, (_, index) => ({
+        value: index + 1,
+        label: `${index + 1}`,
+      })),
+    [normalizedTotalPages]
   );
 
   const getPaginationItems = () => {
@@ -85,20 +89,30 @@ const TablePagination = ({
         aria-label="التنقل بين صفحات الجدول"
         className="pagination-style-4 table-pagination-pages z-0"
       >
+        {/* ARROW DIRECTION IS RTL-RELATIVE. Reading runs right-to-left, so
+            BACKWARD points right and FORWARD points left. The single-step
+            chevrons used to point the opposite way from the double-step arrows
+            beside them, so the same strip disagreed with itself. */}
         <Pagination className="m-0">
           <Pagination.Item
             aria-label="الانتقال عشر صفحات للخلف"
             disabled={normalizedCurrentPage <= 10}
             onClick={() => onPageChange(normalizedCurrentPage - 10)}
           >
-            <i className="ri-arrow-right-double-line align-middle"></i>
+            <i
+              className="ri-arrow-right-double-line align-middle"
+              aria-hidden="true"
+            ></i>
           </Pagination.Item>
           <Pagination.Item
             aria-label="الصفحة السابقة"
             disabled={normalizedCurrentPage === 1}
             onClick={() => onPageChange(normalizedCurrentPage - 1)}
           >
-            <i className="ri-arrow-left-s-line align-middle"></i>
+            <i
+              className="ri-arrow-right-s-line align-middle"
+              aria-hidden="true"
+            ></i>
           </Pagination.Item>
 
           {getPaginationItems().map((page, index) => (
@@ -117,14 +131,20 @@ const TablePagination = ({
             disabled={normalizedCurrentPage === normalizedTotalPages}
             onClick={() => onPageChange(normalizedCurrentPage + 1)}
           >
-            <i className="ri-arrow-right-s-line align-middle"></i>
+            <i
+              className="ri-arrow-left-s-line align-middle"
+              aria-hidden="true"
+            ></i>
           </Pagination.Item>
           <Pagination.Item
             aria-label="الانتقال عشر صفحات للأمام"
             disabled={normalizedCurrentPage > normalizedTotalPages - 10}
             onClick={() => onPageChange(normalizedCurrentPage + 10)}
           >
-            <i className="ri-arrow-left-double-line align-middle"></i>
+            <i
+              className="ri-arrow-left-double-line align-middle"
+              aria-hidden="true"
+            ></i>
           </Pagination.Item>
         </Pagination>
       </nav>

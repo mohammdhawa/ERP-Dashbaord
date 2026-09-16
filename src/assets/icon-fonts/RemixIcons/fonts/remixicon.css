@@ -8,14 +8,21 @@
 *
 * Date: 2024-01-14
 */
+/*
+ * LOCAL MODIFICATION — woff2 + woff only.
+ *
+ * Vite bundles every URL this rule references, so the upstream five-format
+ * stack shipped remixicon.eot (492 KB), remixicon.ttf (492 KB) and
+ * remixicon.svg (2.3 MB) into dist alongside the two that browsers actually
+ * use — about 3.3 MB of assets for IE6-9 and iOS 4.1, neither of which this
+ * app supports. woff2 covers everything current; woff is the fallback.
+ *
+ * Re-apply this trim if the Remix Icon vendor files are ever updated.
+ */
 @font-face {
   font-family: "remixicon";
-  src: url('remixicon.eot?t=1705244689813'); /* IE9*/
-  src: url('remixicon.eot?t=1705244689813#iefix') format('embedded-opentype'), /* IE6-IE8 */
-  url("remixicon.woff2?t=1705244689813") format("woff2"),
-  url("remixicon.woff?t=1705244689813") format("woff"),
-  url('remixicon.ttf?t=1705244689813') format('truetype'), /* chrome, firefox, opera, Safari, Android, iOS 4.2+*/
-  url('remixicon.svg?t=1705244689813#remixicon') format('svg'); /* iOS 4.1- */
+  src: url("remixicon.woff2?t=1705244689813") format("woff2"),
+  url("remixicon.woff?t=1705244689813") format("woff");
   font-display: swap;
 }
 

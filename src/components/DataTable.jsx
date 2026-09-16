@@ -97,13 +97,9 @@ const DataTable = ({
   return (
     <Fragment>
       <div className="table-responsive ">
-        <table
-          style={{
-            userSelect: "none",
-            caretColor: "transparent",
-          }}
-          className="table text-nowrap table-hover table-striped"
-        >
+        {/* Selection left enabled, matching DataTableServer: table cells hold
+            the identifiers users copy out of this app. */}
+        <table className="table text-nowrap table-hover table-striped">
           <thead>
             <tr>
               {columns?.map((column, index) => (

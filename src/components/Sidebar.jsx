@@ -1,9 +1,10 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import ALLImages from "../data/Imagedata";
 import { Link, useLocation } from "react-router-dom";
 import { MENUITEMS } from "../data/Sidemenudata";
 import store from "../redux/Store";
-import { connect, useDispatch, useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { hasPermission } from "../data/permissionsCatalog";
 
 import Menuloop from "./Menuloop";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
@@ -19,8 +20,18 @@ export function closeMenuRecursively(items) {
 const Sidebar = () => {
   const location = useLocation();
   const [menuitems, setMenuitems] = useState(MENUITEMS);
-  const theme = useSelector((state) => state.them);
+  // `state.them` — the slice is `theme`. The typo left this undefined, so every
+  // `theme?.…` guard below short-circuited and the hover-to-expand behaviour
+  // (the default, since dataverticalstyle starts as "overlay") never ran.
+  const theme = useSelector((state) => state.theme);
+  const { permissions } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
+
+  // The document listeners below are attached once but read theme/menu state on
+  // every event. Routing them through a ref keeps the handlers stable (so they
+  // can actually be removed again) while still seeing current values.
+  const handlersRef = useRef({});
+
   function closeMenuFn() {
     closeMenuRecursively(MENUITEMS);
 
@@ -29,8 +40,15 @@ const Sidebar = () => {
 
   useEffect(() => {
     const mainContent = document.querySelector(".main-content");
-    mainContent.addEventListener("click", menuClose);
-    window.addEventListener("resize", menuResizeFn);
+    const onMainContentClick = () => handlersRef.current.menuClose?.();
+    const onResize = () => handlersRef.current.menuResizeFn?.();
+
+    mainContent?.addEventListener("click", onMainContentClick);
+    window.addEventListener("resize", onResize);
+    return () => {
+      mainContent?.removeEventListener("click", onMainContentClick);
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
   function Onhover() {
@@ -162,7 +180,9 @@ const Sidebar = () => {
       let mainContainer1Width = mainContainer1.offsetWidth;
 
       if (menuNav.scrollWidth > mainContainer1.offsetWidth) {
-        if (!(theme?.dataverticalstyle.dir === "rtl")) {
+        // `dataverticalstyle` is a string ("overlay", "closed", …) and has no
+        // `.dir` — reading it threw once `theme` was actually defined.
+        if (theme?.dir !== "rtl") {
           if (Math.abs(check) > Math.abs(marginLeftValue)) {
             menuNav.style.marginInlineEnd = "0";
 
@@ -250,7 +270,10 @@ const Sidebar = () => {
       let mainContainer1Width = mainContainer1.offsetWidth;
 
       if (menuNav.scrollWidth > mainContainer1.offsetWidth) {
-        if (!(local_varaiable.dataverticalstyle.dir === "rtl")) {
+        // `local_varaiable` was a connect() prop name that never existed in
+        // this scope — this threw a ReferenceError every time the horizontal
+        // menu overflowed. The direction lives on the theme slice.
+        if (theme?.dir !== "rtl") {
           if (Math.abs(check) <= Math.abs(marginLeftValue)) {
             menuNav.style.marginInlineStart = "0px";
           }
@@ -298,23 +321,28 @@ const Sidebar = () => {
     switcherArrowFn();
   }
 
-  const Topup = () => {
-    if (window.scrollY > 30 && document.querySelector(".app-sidebar")) {
-      const Scolls = document.querySelectorAll(".app-sidebar");
-      Scolls.forEach((e) => {
-        e.classList.add("sticky-pin");
+  // Attached ONCE, in an effect with a teardown. Registering it in the render
+  // body added a fresh listener on every render and removed none of them, so
+  // scrolling got progressively more expensive for as long as the app stayed
+  // open.
+  useEffect(() => {
+    const Topup = () => {
+      const sidebars = document.querySelectorAll(".app-sidebar");
+      sidebars.forEach((e) => {
+        e.classList.toggle("sticky-pin", window.scrollY > 30);
       });
-    } else {
-      const Scolls = document.querySelectorAll(".app-sidebar");
-      Scolls.forEach((e) => {
-        e.classList.remove("sticky-pin");
-      });
-    }
-  };
+    };
 
-  window.addEventListener("scroll", Topup);
+    window.addEventListener("scroll", Topup);
+    return () => window.removeEventListener("scroll", Topup);
+  }, []);
 
   const level = 0;
+  // Drives the collapsed-rail tooltips. Sourced from the theme slice because
+  // the localStorage keys this used to read are never written by anything.
+  const isDoubleMenu =
+    theme?.datanavlayout !== "horizontal" &&
+    theme?.dataverticalstyle === "doublemenu";
   let hasParent = false;
   let hasParentLevel = 0;
 
@@ -428,19 +456,19 @@ const Sidebar = () => {
   }
   const [previousUrl, setPreviousUrl] = useState("/");
 
+  // The observer is torn down with the effect that created it. Without the
+  // cleanup a new one was attached to <html> on every navigation and none were
+  // ever disconnected, so each route change permanently added another callback
+  // firing on every theme attribute write.
   useEffect(() => {
-    // Select the target element
-    const targetElement = document.documentElement;
-
-    // Create a MutationObserver instance
     const observer = new MutationObserver(handleAttributeChange);
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // Configure the observer to watch for attribute changes
-    const config = { attributes: true };
-
-    // Start observing the target element
-    observer.observe(targetElement, config);
-    let currentPath = location.pathname.endsWith("/")
+  useEffect(() => {
+    const currentPath = location.pathname.endsWith("/")
       ? location.pathname.slice(0, -1)
       : location.pathname;
 
@@ -448,6 +476,7 @@ const Sidebar = () => {
       setMenuUsingUrl(currentPath);
       setPreviousUrl(currentPath);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
   function toggleSidemenu(event, targetObject, MENUITEMS = menuitems) {
@@ -617,6 +646,15 @@ const Sidebar = () => {
     }
   };
 
+  // Kept current AFTER each render so the once-attached document listeners
+  // above always call the latest closures. Written in an effect rather than
+  // during render: mutating a ref mid-render is a side effect React is free to
+  // run twice or discard under concurrent rendering.
+  useEffect(() => {
+    handlersRef.current.menuClose = menuClose;
+    handlersRef.current.menuResizeFn = menuResizeFn;
+  });
+
   function handleAttributeChange(mutationsList) {
     for (const mutation of mutationsList) {
       if (
@@ -642,7 +680,17 @@ const Sidebar = () => {
 
   return (
     <Fragment>
-      <div id="responsive-overlay" onClick={() => menuClose()}></div>
+      {/* The mobile backdrop. Its `active` class comes from the store rather
+          than from Header reaching in with classList.add(): that imperative
+          path was gated on a stale `theme.toggled` and never fired, so below
+          992px the menu opened over the page with nothing dimmed behind it and
+          no tap-outside-to-close. Rendering it from state also means it clears
+          itself when a resize past the breakpoint writes `toggled`. */}
+      <div
+        id="responsive-overlay"
+        className={theme?.toggled === "open" ? "active" : ""}
+        onClick={() => menuClose()}
+      ></div>
       <aside
         className="app-sidebar sticky"
         id="sidebar"
@@ -697,8 +745,18 @@ const Sidebar = () => {
             </div>
 
             <ul className="main-menu" onClick={() => Sideclick()}>
-              {MENUITEMS.map((levelone) => (
-                <Fragment key={Math.random()}>
+              {MENUITEMS.filter((levelone) =>
+                // Top-level `link` entries carried requiredPermissions that
+                // nothing read. Menuloop already gates the `sub` branches; this
+                // closes the same hole for flat entries so a user can never be
+                // shown a menu item that only leads to /no_access.
+                levelone.type === "link"
+                  ? hasPermission(permissions, levelone.requiredPermissions)
+                  : true
+              ).map((levelone) => (
+                // Keyed by identity, not Math.random(): a random key made React
+                // unmount and remount the whole menu tree on every render.
+                <Fragment key={levelone.title || levelone.menutitle}>
                   <li
                     className={`${levelone.menutitle ? "slide__category" : ""} 
 									                ${levelone.type === "link" ? "slide" : ""}
@@ -724,15 +782,21 @@ const Sidebar = () => {
                         className={`side-menu__item ${
                           levelone.selected ? "active" : ""
                         }`}
+                        // "You are here" was expressed only as a CSS class, so
+                        // it reached sighted users and nobody else.
+                        aria-current={levelone.selected ? "page" : undefined}
                       >
-                        {localStorage.layout === "horizontal" ? (
-                          <i
-                            className={`${levelone.icon} side-menu__icon  align-items-center`}
-                          ></i>
-                        ) : localStorage.verticalstyles === "doublemenu" ? (
+                        {/* Read from the theme slice, not localStorage. Nothing
+                            in this app ever writes `layout`, `verticalstyles`
+                            or `rtl` — only `datathememode` and the auth tokens
+                            — so these conditions were permanently false and the
+                            doublemenu tooltip never rendered at all. The first
+                            and third branches were also byte-identical; the
+                            only real question is "doublemenu or not". */}
+                        {isDoubleMenu ? (
                           <div className="custom-tooltip">
                             <OverlayTrigger
-                              placement={localStorage.rtl ? "left" : "right"}
+                              placement={theme?.dir === "rtl" ? "left" : "right"}
                               overlay={<Tooltip>{levelone.title}</Tooltip>}
                             >
                               <i
@@ -754,10 +818,16 @@ const Sidebar = () => {
                     )}
 
                     {levelone.type === "empty" ? (
-                      <Link to="#" className="side-menu__item">
+                      // A non-navigating menu entry, so a <button> rather than
+                      // an anchor to "#". (No current MENUITEMS row uses this
+                      // type — the branch is kept for the template's sake.)
+                      <button
+                        type="button"
+                        className="side-menu__item btn border-0 bg-transparent w-100 text-end"
+                      >
                         {levelone.icon}
                         <span className="">{levelone.title}</span>
-                      </Link>
+                      </button>
                     ) : (
                       ""
                     )}
@@ -801,8 +871,8 @@ const Sidebar = () => {
   );
 };
 
-const mapStateToProps = (state) => ({
-  local_varaiable: state,
-});
-
-export default connect(mapStateToProps, { ThemeChanger })(Sidebar);
+// No connect() wrapper: it mapped the ENTIRE store to an unused
+// `local_varaiable` prop, handing back a new object identity on every dispatch
+// and re-rendering the whole menu tree on every unrelated state change. The
+// component reads what it needs through hooks.
+export default Sidebar;

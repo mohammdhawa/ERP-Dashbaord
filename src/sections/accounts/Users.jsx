@@ -1,8 +1,16 @@
-import React, { Fragment, useEffect, useMemo, useState, Suspense, lazy } from "react";
-import { Helmet } from "react-helmet";
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  Suspense,
+  lazy,
+} from "react";
+import { Helmet } from "react-helmet-async";
 import { Card, Col, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import { PageHeader } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import {
@@ -15,7 +23,9 @@ const UserFormModal = lazy(() => import("./UserFormModal"));
 
 const Users = () => {
   const dispatch = useDispatch();
-  const { items, meta, fetchLoading } = useSelector((state) => state.users);
+  const { items, meta, fetchLoading, error } = useSelector(
+    (state) => state.users
+  );
   const { user: currentUser, permissions } = useSelector((state) => state.auth);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -28,9 +38,13 @@ const Users = () => {
 
   // Server-paginated: the API returns one page plus `meta`. It used to return
   // the whole collection, which is what let search and paging run client-side.
-  useEffect(() => {
+  const load = useCallback(() => {
     dispatch(fetchUsers(page, perPage));
   }, [dispatch, page, perPage]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Keep the COMPONENT page in step with the server. A delete that empties
   // the last page makes the action re-fetch the preceding one, but nothing
@@ -56,6 +70,8 @@ const Users = () => {
         u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
+
+  const isSearching = searchQuery !== "";
 
   const canToggleActive = permissions.includes("auth.users.update");
 
@@ -98,14 +114,37 @@ const Users = () => {
         ),
     },
     {
-      key: "employee_id",
+      // Embedded on the resource now — `employee: { id, full_name,
+      // employee_number }` beside the untouched `employee_id`. Three states,
+      // not two: unlinked (dash), linked (the person), and linked-to-a-
+      // soft-deleted-record, where the id survives but the employee does not.
+      // That last one must not read as "unlinked" — the account IS bound to an
+      // employee row, and an admin needs to see that to fix it.
+      key: "employee",
       label: "الموظف المرتبط",
-      render: (value) =>
-        value ? (
-          <span className="badge bg-info-transparent">موظف #{value}</span>
-        ) : (
-          <span className="text-muted">—</span>
-        ),
+      render: (employee, row) => {
+        if (!row.employee_id) return <span className="text-muted">—</span>;
+
+        if (!employee) {
+          return (
+            <span
+              className="badge bg-secondary-transparent"
+              title="الموظف المرتبط لم يعد متاحاً (سجل محذوف)"
+            >
+              موظف #{row.employee_id} — سجل غير متاح
+            </span>
+          );
+        }
+
+        return (
+          <span
+            className="badge bg-info-transparent"
+            title={employee.employee_number || undefined}
+          >
+            {employee.full_name}
+          </span>
+        );
+      },
     },
     {
       key: "is_active",
@@ -162,27 +201,57 @@ const Users = () => {
       <Row>
         <Col xl={12}>
           <Card className="custom-card">
+            {/* A bare <Col> outside a <Row> gets no gutter compensation, so
+                the control sat flush against the card edge. */}
             <div className="p-3 pb-0">
-              <Col md={6} lg={4}>
-                <input
-                  className="form-control"
-                  type="text"
-                  placeholder="ابحث في هذه الصفحة بالاسم أو البريد.."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </Col>
+              <Row>
+                <Col md={6} lg={4}>
+                  <label htmlFor="users-search" className="form-label fs-12 mb-1">
+                    بحث
+                  </label>
+                  <input
+                    id="users-search"
+                    className="form-control"
+                    type="search"
+                    placeholder="ابحث في هذه الصفحة بالاسم أو البريد.."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {isSearching && (
+                    <div className="text-muted small mt-1">
+                      البحث ضمن هذه الصفحة فقط ({visibleUsers.length} من{" "}
+                      {items.length}). امسح البحث للتنقل بين الصفحات.
+                    </div>
+                  )}
+                </Col>
+              </Row>
             </div>
             <Card.Body>
               <DataTableServer
                 columns={columns}
                 data={visibleUsers}
                 loading={fetchLoading}
-                currentPage={meta?.current_page || page}
-                totalPages={meta?.last_page || 1}
-                dataCount={meta?.total || 0}
+                error={error}
+                onRetry={load}
+                emptyMessage={
+                  isSearching
+                    ? "لا يوجد مستخدمون مطابقون ضمن هذه الصفحة"
+                    : "لا توجد بيانات لعرضها"
+                }
+                // While the page-local search is active the pagination bar
+                // describes the FILTERED rows, not the server's page. Reporting
+                // meta.total here made it claim "عرض 21–22 من 250" over two
+                // matched rows, which reads as a broken directory-wide search.
+                currentPage={isSearching ? 1 : meta?.current_page || page}
+                totalPages={isSearching ? 1 : meta?.last_page || 1}
+                dataCount={isSearching ? visibleUsers.length : meta?.total || 0}
                 onPageChange={setPage}
-                itemsPerPage={meta?.per_page || perPage}
+                showPageSizeSelector={!isSearching}
+                itemsPerPage={
+                  isSearching
+                    ? visibleUsers.length || 1
+                    : meta?.per_page || perPage
+                }
                 onItemsPerPageChange={(size) => {
                   setPerPage(size);
                   setPage(1);
@@ -194,8 +263,21 @@ const Users = () => {
                     setEditingUser(row);
                     setModalOpen(true);
                   },
-                  handleDelete: (id) =>
-                    dispatch(deleteUser(id, page, items.length, perPage)),
+                  // An account stores no name of its own, so the confirmation
+                  // is named by the linked employee and falls back to the
+                  // email — the only other thing that identifies the account
+                  // to a human. `employee.full_name` is preferred over `name`
+                  // because it still resolves for a row where `name` is null.
+                  handleDelete: (id, row) =>
+                    dispatch(
+                      deleteUser(
+                        id,
+                        page,
+                        items.length,
+                        perPage,
+                        row?.employee?.full_name || row?.name || row?.email
+                      )
+                    ),
                   // Self-deletion guard: the server rejects it with 422 anyway,
                   // but we disable the button up-front to avoid the error.
                   disableDelete: (row) => row.id === currentUser?.id,
@@ -207,7 +289,12 @@ const Users = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={modalOpen ? <ModalFallback /> : null}>
         <UserFormModal
           open={modalOpen}
           close={() => setModalOpen(false)}

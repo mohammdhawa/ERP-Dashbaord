@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import ALLImages from "../data/Imagedata";
 import { Dropdown, DropdownDivider } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
-import { connect, useDispatch, useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { ThemeChanger } from "../redux/actions/themeActions";
 import { logout } from "../redux/actions/authActions";
 import {
@@ -73,180 +73,165 @@ const Header = () => {
     localStorage.setItem("datathememode", isDarkMode ? "light" : "dark");
   };
 
-  function menuClose() {
-    dispatch(ThemeChanger({ ...theme, toggled: "close" }));
-  }
-
   const toggleSidebar = () => {
-    let sidemenuType = theme.datanavlayout;
-
-    if (window.innerWidth <= 992) {
-      dispatch(ThemeChanger({ ...theme, toggled: "close" }));
+    // MOBILE: one dispatch, derived from the current state.
+    //
+    // This used to dispatch `toggled: "close"` unconditionally and THEN fall
+    // into a branch that read `theme.toggled` from the same render closure —
+    // the value before that write. Both dispatches spread the same stale
+    // `theme`, so the first was always discarded by the second, and the second
+    // decided what to do from a state that no longer existed. A tap on a fresh
+    // load therefore did nothing visible at all.
+    //
+    // The backdrop went with it: the old code added `.active` to
+    // #responsive-overlay inside a setTimeout gated on that same stale
+    // `theme.toggled == "open"`, which could never be true, so the dim layer
+    // and tap-outside-to-close never worked on a phone. The overlay now renders
+    // its own state from the store in Sidebar.jsx, which also disposes of the
+    // un-removed window "resize" listener that block registered on every tap.
+    //
+    // Strict `< 992` / `>= 992`: the old `<= 992` and `>= 992` pair both ran at
+    // exactly 992.
+    if (window.innerWidth < 992) {
+      dispatch(
+        ThemeChanger({
+          ...theme,
+          toggled: theme.toggled === "open" ? "close" : "open",
+        })
+      );
+      return;
     }
-    if (window.innerWidth >= 992) {
-      if (sidemenuType === "vertical") {
-        let verticalStyle = theme.dataverticalstyle;
-        const navStyle = theme.datanavstyle;
-        switch (verticalStyle) {
-          // closed
-          case "closed":
-            dispatch(ThemeChanger({ ...theme, datanavstyle: "" }));
-            if (theme.toggled === "close-menu-close") {
-              dispatch(ThemeChanger({ ...theme, toggled: "" }));
-            } else {
-              dispatch(ThemeChanger({ ...theme, toggled: "close-menu-close" }));
-            }
-            break;
-          // icon-overlay
-          case "overlay":
-            dispatch(ThemeChanger({ ...theme, datanavstyle: "" }));
-            if (theme.toggled === "icon-overlay-close") {
-              dispatch(
-                ThemeChanger({
-                  ...theme,
-                  toggled: "",
-                  iconOverlay: "",
-                  dataverticalstyle: "default",
-                })
-              );
-            } else {
-              if (window.innerWidth >= 992) {
-                dispatch(
-                  ThemeChanger({
-                    ...theme,
-                    toggled: "icon-overlay-close",
-                    iconOverlay: "",
-                  })
-                );
-              }
-            }
-            break;
-          // icon-text
-          case "icontext":
-            dispatch(ThemeChanger({ ...theme, datanavstyle: "" }));
-            if (theme.toggled === "icon-text-close") {
-              dispatch(ThemeChanger({ ...theme, toggled: "" }));
-            } else {
-              dispatch(ThemeChanger({ ...theme, toggled: "icon-text-close" }));
-            }
-            break;
-          // doublemenu
-          case "doublemenu":
+
+    // DESKTOP (>= 992): the vertical-layout state machine, unchanged.
+    const sidemenuType = theme.datanavlayout;
+    if (sidemenuType === "vertical") {
+      let verticalStyle = theme.dataverticalstyle;
+      const navStyle = theme.datanavstyle;
+      switch (verticalStyle) {
+        // closed
+        case "closed":
+          dispatch(ThemeChanger({ ...theme, datanavstyle: "" }));
+          if (theme.toggled === "close-menu-close") {
+            dispatch(ThemeChanger({ ...theme, toggled: "" }));
+          } else {
+            dispatch(ThemeChanger({ ...theme, toggled: "close-menu-close" }));
+          }
+          break;
+        // icon-overlay
+        case "overlay":
+          dispatch(ThemeChanger({ ...theme, datanavstyle: "" }));
+          if (theme.toggled === "icon-overlay-close") {
             dispatch(
               ThemeChanger({
                 ...theme,
-                datanavstyle: "",
-                toggled: "double-menu-close",
+                toggled: "",
+                iconOverlay: "",
+                dataverticalstyle: "default",
               })
             );
-            if (theme.toggled !== "double-menu-close") {
-              dispatch(
-                ThemeChanger({ ...theme, toggled: "double-menu-close" })
-              );
-            } else {
-              dispatch(ThemeChanger({ ...theme, toggled: "double-menu-open" }));
-            }
-            break;
-          // detached
-          case "detached":
-            if (theme.toggled === "detached-close") {
-              dispatch(
-                ThemeChanger({ ...theme, toggled: "", iconOverlay: "" })
-              );
-            } else {
+          } else {
+            if (window.innerWidth >= 992) {
               dispatch(
                 ThemeChanger({
                   ...theme,
-                  toggled: "detached-close",
+                  toggled: "icon-overlay-close",
                   iconOverlay: "",
                 })
               );
-            }
-            break;
-
-          // default
-          case "default":
-            dispatch(
-              ThemeChanger({
-                ...theme,
-                toggled: "icon-overlay-close",
-                dataverticalstyle: "overlay",
-              })
-            );
-            break;
-        }
-        switch (navStyle) {
-          case "menu-click":
-            if (theme.toggled === "menu-click-closed") {
-              dispatch(ThemeChanger({ ...theme, toggled: "" }));
-            } else {
-              dispatch(
-                ThemeChanger({ ...theme, toggled: "menu-click-closed" })
-              );
-            }
-            break;
-          case "menu-hover":
-            if (theme.toggled === "menu-hover-closed") {
-              dispatch(ThemeChanger({ ...theme, toggled: "" }));
-            } else {
-              dispatch(
-                ThemeChanger({ ...theme, toggled: "menu-hover-closed" })
-              );
-            }
-            break;
-          case "icon-click":
-            if (theme.toggled === "icon-click-closed") {
-              dispatch(ThemeChanger({ ...theme, toggled: "" }));
-            } else {
-              dispatch(
-                ThemeChanger({ ...theme, toggled: "icon-click-closed" })
-              );
-            }
-            break;
-          case "icon-hover":
-            if (theme.toggled === "icon-hover-closed") {
-              dispatch(ThemeChanger({ ...theme, toggled: "" }));
-            } else {
-              dispatch(
-                ThemeChanger({ ...theme, toggled: "icon-hover-closed" })
-              );
-            }
-            break;
-        }
-      }
-    } else {
-      if (theme.toggled === "close") {
-        dispatch(ThemeChanger({ ...theme, toggled: "open" }));
-
-        setTimeout(() => {
-          if (theme.toggled == "open") {
-            const overlay = document.querySelector("#responsive-overlay");
-
-            if (overlay) {
-              overlay.classList.add("active");
-              overlay.addEventListener("click", () => {
-                const overlay = document.querySelector("#responsive-overlay");
-
-                if (overlay) {
-                  overlay.classList.remove("active");
-                  menuClose();
-                }
-              });
             }
           }
+          break;
+        // icon-text
+        case "icontext":
+          dispatch(ThemeChanger({ ...theme, datanavstyle: "" }));
+          if (theme.toggled === "icon-text-close") {
+            dispatch(ThemeChanger({ ...theme, toggled: "" }));
+          } else {
+            dispatch(ThemeChanger({ ...theme, toggled: "icon-text-close" }));
+          }
+          break;
+        // doublemenu
+        case "doublemenu":
+          dispatch(
+            ThemeChanger({
+              ...theme,
+              datanavstyle: "",
+              toggled: "double-menu-close",
+            })
+          );
+          if (theme.toggled !== "double-menu-close") {
+            dispatch(
+              ThemeChanger({ ...theme, toggled: "double-menu-close" })
+            );
+          } else {
+            dispatch(ThemeChanger({ ...theme, toggled: "double-menu-open" }));
+          }
+          break;
+        // detached
+        case "detached":
+          if (theme.toggled === "detached-close") {
+            dispatch(
+              ThemeChanger({ ...theme, toggled: "", iconOverlay: "" })
+            );
+          } else {
+            dispatch(
+              ThemeChanger({
+                ...theme,
+                toggled: "detached-close",
+                iconOverlay: "",
+              })
+            );
+          }
+          break;
 
-          window.addEventListener("resize", () => {
-            if (window.screen.width >= 992) {
-              const overlay = document.querySelector("#responsive-overlay");
-
-              if (overlay) {
-                overlay.classList.remove("active");
-              }
-            }
-          });
-        }, 100);
-      } else {
-        dispatch(ThemeChanger({ ...theme, toggled: "close" }));
+        // default
+        case "default":
+          dispatch(
+            ThemeChanger({
+              ...theme,
+              toggled: "icon-overlay-close",
+              dataverticalstyle: "overlay",
+            })
+          );
+          break;
+      }
+      switch (navStyle) {
+        case "menu-click":
+          if (theme.toggled === "menu-click-closed") {
+            dispatch(ThemeChanger({ ...theme, toggled: "" }));
+          } else {
+            dispatch(
+              ThemeChanger({ ...theme, toggled: "menu-click-closed" })
+            );
+          }
+          break;
+        case "menu-hover":
+          if (theme.toggled === "menu-hover-closed") {
+            dispatch(ThemeChanger({ ...theme, toggled: "" }));
+          } else {
+            dispatch(
+              ThemeChanger({ ...theme, toggled: "menu-hover-closed" })
+            );
+          }
+          break;
+        case "icon-click":
+          if (theme.toggled === "icon-click-closed") {
+            dispatch(ThemeChanger({ ...theme, toggled: "" }));
+          } else {
+            dispatch(
+              ThemeChanger({ ...theme, toggled: "icon-click-closed" })
+            );
+          }
+          break;
+        case "icon-hover":
+          if (theme.toggled === "icon-hover-closed") {
+            dispatch(ThemeChanger({ ...theme, toggled: "" }));
+          } else {
+            dispatch(
+              ThemeChanger({ ...theme, toggled: "icon-hover-closed" })
+            );
+          }
+          break;
       }
     }
   };
@@ -304,36 +289,45 @@ const Header = () => {
                 </div>
               </div>
 
-              <div
-                className="header-element mx-lg-0 mx-2"
-                style={{ cursor: "pointer" }}
-                onClick={() => toggleSidebar()}
-              >
-                <Link
-                  aria-label="Hide Sidebar"
-                  className="sidemenu-toggle header-link animated-arrow hor-toggle horizontal-navtoggle"
-                  to="#"
+              {/* A real <button>: as a <Link to="#"> this pushed a history
+                  entry on every toggle and announced itself as a link to
+                  assistive tech rather than as the control it is. */}
+              <div className="header-element mx-lg-0 mx-2">
+                <button
+                  type="button"
+                  aria-label="إظهار أو إخفاء القائمة الجانبية"
+                  className="sidemenu-toggle header-link animated-arrow hor-toggle horizontal-navtoggle btn border-0 bg-transparent p-0"
+                  onClick={() => toggleSidebar()}
                 >
                   <span></span>
-                </Link>
+                </button>
               </div>
             </div>
           </div>
 
           <ul className="header-content-right">
             <li className="header-element header-theme-mode">
-              <Link
-                to="#"
-                className="header-link layout-setting"
+              <button
+                type="button"
+                className="header-link layout-setting btn border-0 bg-transparent"
                 onClick={() => ToggleDark()}
+                aria-label={
+                  theme.datathememode === "dark"
+                    ? "التبديل إلى الوضع الفاتح"
+                    : "التبديل إلى الوضع الداكن"
+                }
+                aria-pressed={theme.datathememode === "dark"}
               >
                 <span className="light-layout">
-                  <i className="bi bi-moon header-link-icon"></i>
+                  <i className="bi bi-moon header-link-icon" aria-hidden="true"></i>
                 </span>
                 <span className="dark-layout">
-                  <i className="bi bi-brightness-high header-link-icon"></i>
+                  <i
+                    className="bi bi-brightness-high header-link-icon"
+                    aria-hidden="true"
+                  ></i>
                 </span>
-              </Link>
+              </button>
             </li>
 
             {/* Notifications: badge fed by the 60s unread-count poll */}
@@ -390,9 +384,13 @@ const Header = () => {
                     </div>
                   )}
 
+                  {/* A real <button>, not a <div onClick>: as a div these rows
+                      took no focus, were not announced as actionable and could
+                      not be activated with a keyboard at all. */}
                   {latestNotifications.map((notify) => (
-                    <div
-                      className="dropdown-item"
+                    <button
+                      type="button"
+                      className="dropdown-item text-end w-100 border-0 bg-transparent"
                       key={notify.id}
                       style={{ cursor: "pointer" }}
                       onClick={() => handleNotificationClick(notify)}
@@ -412,17 +410,21 @@ const Header = () => {
                                   ? "ri-notification-line"
                                   : "ri-notification-3-fill"
                               }`}
+                              aria-hidden="true"
                             ></i>
                           </span>
                         </div>
                         <div className="flex-grow-1">
-                          <p
-                            className={`mb-0 ${
+                          {/* <span>, not <p>: a button may only contain
+                              phrasing content, and a <p> inside one is invalid
+                              markup browsers repair unpredictably. */}
+                          <span
+                            className={`d-block mb-0 ${
                               notify.is_read ? "" : "fw-semibold"
                             }`}
                           >
                             {notify.title}
-                          </p>
+                          </span>
                           {notify.body && (
                             <span className="text-muted fw-normal fs-12 header-notification-text d-block">
                               {notify.body}
@@ -435,10 +437,13 @@ const Header = () => {
                           </span>
                         </div>
                         {!notify.is_read && (
-                          <span className="p-1 rounded-circle bg-primary d-inline-block ms-2"></span>
+                          <span
+                            className="p-1 rounded-circle bg-primary d-inline-block ms-2"
+                            aria-hidden="true"
+                          ></span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <div className="p-3 empty-header-item1 border-top">
@@ -482,14 +487,20 @@ const Header = () => {
                   <p className="mb-0 fw-semibold">{user?.name}</p>
                   <span className="text-muted fs-12">{user?.email}</span>
                 </div>
+                {/* `as="button"` instead of href="#": logging out is an action,
+                    and the anchor left a stray "#" in the URL on the way out. */}
                 <Dropdown.Item
+                  as="button"
+                  type="button"
                   onClick={() => {
                     dispatch(logout());
                   }}
                   className="d-flex align-items-center"
-                  href="#"
                 >
-                  <i className="bi bi-box-arrow-right fs-16 me-2 op-7"></i>
+                  <i
+                    className="bi bi-box-arrow-right fs-16 me-2 op-7"
+                    aria-hidden="true"
+                  ></i>
                   تسجيل الخروج
                 </Dropdown.Item>
               </Dropdown.Menu>
@@ -501,8 +512,8 @@ const Header = () => {
   );
 };
 
-const mapStateToProps = (state) => ({
-  local_varaiable: state,
-});
-
-export default connect(mapStateToProps, { ThemeChanger })(Header);
+// No connect() wrapper: it mapped the ENTIRE store to an unused
+// `local_varaiable` prop, so the header re-rendered on every dispatch anywhere
+// in the app — every list fetch, every filter keystroke. It already reads the
+// slices it needs with useSelector.
+export default Header;

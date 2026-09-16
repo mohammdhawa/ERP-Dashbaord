@@ -1,8 +1,15 @@
-import React, { Fragment, useEffect, useState, Suspense, lazy } from "react";
-import { Helmet } from "react-helmet";
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  Suspense,
+  lazy,
+} from "react";
+import { Helmet } from "react-helmet-async";
 import { Card, Col, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import { PageHeader } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import {
@@ -18,7 +25,9 @@ const RoleFormModal = lazy(() => import("./RoleFormModal"));
 
 const Roles = () => {
   const dispatch = useDispatch();
-  const { items, meta, fetchLoading } = useSelector((state) => state.roles);
+  const { items, meta, fetchLoading, error } = useSelector(
+    (state) => state.roles
+  );
   const { permissions } = useSelector((state) => state.auth);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
@@ -34,9 +43,13 @@ const Roles = () => {
   // The TABLE reads one page; the assignment card needs every row. Two separate
   // reads on purpose — a picker that stops at page 1 cannot grant a role to
   // user #200, and nothing on screen would say why.
-  useEffect(() => {
+  const load = useCallback(() => {
     dispatch(fetchRoles(page, perPage));
   }, [dispatch, page, perPage]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Keep the COMPONENT page in step with the server. A delete that empties
   // the last page makes the action re-fetch the preceding one, but nothing
@@ -155,6 +168,10 @@ const Roles = () => {
                   setPage(1);
                 }}
                 loading={fetchLoading}
+                // A failed fetch used to fall through to the generic empty
+                // message, presenting an outage as "there are no roles".
+                error={error}
+                onRetry={load}
                 updatePermission="auth.roles.update"
                 deletePermission="auth.roles.delete"
                 functions={{
@@ -177,7 +194,12 @@ const Roles = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={modalOpen ? <ModalFallback /> : null}>
         <RoleFormModal
           open={modalOpen}
           close={() => setModalOpen(false)}

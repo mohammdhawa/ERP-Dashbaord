@@ -78,10 +78,28 @@ const EmployeeWarnings = ({ employee }) => {
       {
         key: "issuer",
         label: "جهة الإصدار",
-        // An employee, not a user account.
-        render: (value, item) =>
-          value?.full_name ||
-          (item.issued_by ? `موظف #${item.issued_by}` : dash),
+        // An employee, not a user account. Same three states as every other
+        // embedded relation in the app: unset, present, or set-but-soft-deleted
+        // — the last worded the way the departments and users lists word it,
+        // rather than as a bare id that reads like a failed lookup.
+        render: (issuer, item) => {
+          if (!item.issued_by) return dash;
+          if (!issuer) {
+            return (
+              <span
+                className="text-muted"
+                title="الموظف المُصدِر لم يعد متاحاً (سجل محذوف)"
+              >
+                موظف #{item.issued_by} — سجل غير متاح
+              </span>
+            );
+          }
+          return (
+            <span title={issuer.employee_number || undefined}>
+              {issuer.full_name}
+            </span>
+          );
+        },
       },
       {
         key: "notes",
@@ -107,9 +125,12 @@ const EmployeeWarnings = ({ employee }) => {
     setEditing(warning);
     setModalOpen(true);
   };
-  const handleDelete = (id) => {
+  const handleDelete = (id, warning) => {
+    // Rows here differ mainly by date, so the type plus the letter number is
+    // what lets someone recognise the one they meant to withdraw.
+    const label = [warning?.type, warning?.number].filter(Boolean).join(" — ");
     dispatch(
-      deleteWarning(id, employeeId, page, items.length, itemsPerPage)
+      deleteWarning(id, employeeId, page, items.length, itemsPerPage, label)
     );
   };
 

@@ -48,8 +48,16 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), compression({ algorithm: "gzip" })],
     define: {
+      // Mirrors the real mode instead of hardcoding "production". The constant
+      // literal meant `process.env.NODE_ENV === "production"` was true on the
+      // DEV SERVER too, so main.jsx called disableReactDevTools() every time
+      // anyone ran `npm run dev` — React DevTools simply did not work.
+      //
+      // Some template-era dependencies read process.env at module scope and
+      // throw on a bare `process`, so the object is still defined, just
+      // truthfully.
       "process.env": {
-        NODE_ENV: "production",
+        NODE_ENV: mode === "development" ? "development" : "production",
       },
     },
     build: {

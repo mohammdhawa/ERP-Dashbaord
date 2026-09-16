@@ -3,6 +3,7 @@ import { Col, Form, Row, Modal, Spinner, Alert } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import { createRole, updateRole } from "../../redux/actions/rolesActions";
 import { PERMISSIONS_CATALOG } from "../../data/permissionsCatalog";
+import { confirmDiscardChanges } from "../../utils";
 
 // Role create/edit with a checkbox matrix over the Phase-1 permission
 // catalogue. On UPDATE the `permissions` array is a full SYNC: the server
@@ -24,16 +25,50 @@ const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
   const [errors, setErrors] = useState({});
   const isSystemRole = Boolean(role?.is_system);
 
+  // The text fields as the modal opened, for the discard guard. The permission
+  // matrix is not snapshotted: `permsDirty` already records whether it was
+  // touched, and it is a better answer than comparing arrays — checking a box
+  // and unchecking it leaves an identical array but is still a session the user
+  // may not want thrown away without a word.
+  const [initialText, setInitialText] = useState({
+    name: "",
+    label: "",
+    description: "",
+  });
+
   useEffect(() => {
     if (open) {
-      setName(role?.name || "");
-      setLabel(role?.label || "");
-      setDescription(role?.description || "");
+      const values = {
+        name: role?.name || "",
+        label: role?.label || "",
+        description: role?.description || "",
+      };
+      setName(values.name);
+      setLabel(values.label);
+      setDescription(values.description);
+      setInitialText(values);
       setSelected(role?.permissions || []);
       setPermsDirty(false);
       setErrors({});
     }
   }, [open, role]);
+
+  const isDirty =
+    permsDirty ||
+    name !== initialText.name ||
+    label !== initialText.label ||
+    description !== initialText.description;
+
+  // Of every form in this app, this is the one worth guarding most: the matrix
+  // below is 28 checkboxes, and rebuilding a role's permission set from memory
+  // after an accidental "إلغاء" is genuinely expensive.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
 
   const togglePermission = (permName) => {
     setPermsDirty(true);
@@ -92,7 +127,7 @@ const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
     <Modal
       show={open}
       size="lg"
-      onHide={close}
+      onHide={handleCancel}
       keyboard={false}
       centered
       backdrop="static"
@@ -269,7 +304,8 @@ const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={close}
+                onClick={handleCancel}
+                disabled={saving}
               >
                 إلغاء
               </button>

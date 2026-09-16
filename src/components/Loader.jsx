@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import ALLImages from "../data/Imagedata";
 
 const Loader = () => {
@@ -39,13 +39,19 @@ const Loader = () => {
           `}
         </style>
       </Helmet>
+      {/* ROUTE-LEVEL loader: a viewport overlay, not an inline spinner. It was
+          `position: absolute`, which anchors to the nearest positioned ancestor
+          — drop it inside a Bootstrap .card (which is position: relative) and a
+          100vh blur spills down the page from the card's top edge. `fixed` with
+          logical inset keeps it pinned to the viewport wherever it is rendered,
+          and correct under RTL. Use MutatingDots for in-panel loading. */}
       <div
         role="status"
-        aria-label="Loading"
+        aria-label="جارٍ التحميل"
         style={{
-          position: "absolute",
-          top: "0",
-          right: "0",
+          position: "fixed",
+          insetBlockStart: "0",
+          insetInlineStart: "0",
           height: "100vh",
           width: "100%",
           zIndex: "99999",

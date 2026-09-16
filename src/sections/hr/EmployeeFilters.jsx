@@ -79,9 +79,17 @@ const EmployeeFilters = ({ filters, onChange, onReset }) => {
   const pick = (options, value) =>
     options.find((o) => o.value === Number(value)) || null;
 
+  // COLUMN BUDGET (12 per row at each breakpoint). The lg widths used to sum to
+  // 13 — 3+2+2+2+2+2 — so the sort control was pushed onto a line of its own at
+  // exactly the width this toolbar was designed for. `activity_type` is
+  // permission-gated, so the row has to add up both with and without it: the
+  // search box takes the slack (3 when activity is hidden, 2 when it shows),
+  // so the filters fill exactly 12 either way. The reset button that follows is
+  // xs="auto" and wraps to its own line on purpose — it is a secondary action,
+  // and wrapping it is better than breaking the filter row mid-way.
   return (
     <Row className="g-2 mb-3 align-items-end">
-      <Col sm={12} md={4} lg={3}>
+      <Col sm={12} md={4} lg={canViewSalary ? 2 : 3}>
         <Form.Label htmlFor="emp-search" className="fs-12 mb-1">
           بحث
         </Form.Label>

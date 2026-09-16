@@ -7,12 +7,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { Alert, Card, Col, Nav, Row, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { MutatingDots } from "react-loader-spinner";
-import { PageHeader } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import { hasPermission } from "../../data/permissionsCatalog";
 import {
@@ -287,7 +287,12 @@ const EmployeeProfile = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={editOpen ? <ModalFallback /> : null}>
         <EmployeeFormModal
           open={editOpen}
           close={() => setEditOpen(false)}

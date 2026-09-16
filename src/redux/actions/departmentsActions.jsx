@@ -1,7 +1,6 @@
-import Swal from "sweetalert2";
 import api from "../api";
 import { parseApiError } from "../../utils/apiHelpers";
-import { toastNotify } from "../../utils";
+import { toastNotify, confirmDestructive } from "../../utils";
 
 // Departments module — /api/departments (Format A: paginated, 15/page,
 // items in `data` + sibling `meta` block).
@@ -79,22 +78,13 @@ export const updateDepartment =
 };
 
 export const deleteDepartment =
-  (id, currentPage, itemsOnPage) => async (dispatch) => {
-  const confirm = await Swal.fire({
-    title: "هل أنت متأكد من حذف هذه الوحدة التنظيمية؟",
+  (id, currentPage, itemsOnPage, name) => async (dispatch) => {
+  const confirmed = await confirmDestructive({
+    action: "حذف الوحدة التنظيمية",
+    subject: name,
     text: "لن تتمكن من التراجع عن هذا الإجراء!",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "حذف",
-    cancelButtonText: "إلغاء",
-    reverseButtons: true,
-    customClass: {
-      confirmButton: "btn btn-danger me-2",
-      cancelButton: "btn btn-light me-2",
-    },
-    buttonsStyling: false,
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirmed) return;
 
   try {
     const response = await api.delete(`/departments/${id}`);

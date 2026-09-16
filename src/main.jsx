@@ -16,7 +16,7 @@ import {
   NoAccess,
   SessionsExpired,
 } from "./pages";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import {
   bootstrapSession,
   logoutSuccess,
@@ -54,31 +54,33 @@ const AuthProvider = ({ children }) => {
   return children;
 };
 
+// NOTE: no HelmetProvider here. It used to wrap ONLY the <Helmet> below rather
+// than `children`, so every page-level <Helmet> in the app rendered outside any
+// provider — which react-helmet-async treats as an error. A single provider now
+// wraps the whole tree at the root, below.
 const ThemeWrapper = ({ children }) => {
   const theme = useSelector((state) => state.theme);
   return (
     <Fragment>
-      <HelmetProvider>
-        <Helmet>
-          <html
-            dir={"rtl"}
-            data-theme-mode={theme?.datathememode}
-            data-header-styles={theme.dataheaderstyles}
-            data-vertical-style={theme.dataverticalstyle}
-            data-nav-layout={theme.datanavlayout}
-            data-menu-styles={theme.datamenustyles}
-            data-toggled={theme.toggled}
-            data-nav-style={theme.datanavstyle}
-            hor-style={theme.horstyle}
-            data-page-style={theme.datapagestyle}
-            data-width={theme.datawidth}
-            data-menu-position={theme.datamenuposition}
-            data-header-position={theme.dataheaderposition}
-            data-icon-overlay={theme.iconoverlay}
-            data-bg-img={theme.bgimg}
-          ></html>
-        </Helmet>
-      </HelmetProvider>
+      <Helmet>
+        <html
+          dir={"rtl"}
+          data-theme-mode={theme?.datathememode}
+          data-header-styles={theme.dataheaderstyles}
+          data-vertical-style={theme.dataverticalstyle}
+          data-nav-layout={theme.datanavlayout}
+          data-menu-styles={theme.datamenustyles}
+          data-toggled={theme.toggled}
+          data-nav-style={theme.datanavstyle}
+          hor-style={theme.horstyle}
+          data-page-style={theme.datapagestyle}
+          data-width={theme.datawidth}
+          data-menu-position={theme.datamenuposition}
+          data-header-position={theme.dataheaderposition}
+          data-icon-overlay={theme.iconoverlay}
+          data-bg-img={theme.bgimg}
+        ></html>
+      </Helmet>
       {children}
     </Fragment>
   );
@@ -148,21 +150,26 @@ const AppWrapper = () => {
   );
 };
 
+// One HelmetProvider for the whole app. Every page sets its own <title>, and
+// with the provider nested inside ThemeWrapper (wrapping only the <html>
+// attribute Helmet) none of them had one to register against.
 ReactDOM.createRoot(document.getElementById("root")).render(
   <Fragment>
     <Provider store={store}>
       <AuthProvider>
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <ThemeWrapper>
-            <Scrolltotop />
-            <AppWrapper />
-          </ThemeWrapper>
-        </BrowserRouter>
+        <HelmetProvider>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
+            <ThemeWrapper>
+              <Scrolltotop />
+              <AppWrapper />
+            </ThemeWrapper>
+          </BrowserRouter>
+        </HelmetProvider>
       </AuthProvider>
     </Provider>
   </Fragment>

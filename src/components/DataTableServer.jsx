@@ -19,6 +19,30 @@ import TablePaginationServer from "./TablePaginationServer";
 // - onRowClick makes rows navigate; it is skipped when the click originated
 //   inside the actions cell, so a delete button never also opens the row.
 // - error / onRetry render a failed load in place of the rows, with a retry.
+// - SORTING: a column opts in with `sortKey` — the exact key the SERVER accepts
+//   for that column. The caller passes the current `sort` value and an
+//   `onSortChange` handler; the table itself sorts nothing. See SORT below.
+
+// Three-state cycle on the column you clicked: unsorted → ascending →
+// descending → unsorted. The third state matters — without it there is no way
+// back to the server's own default ordering once you have touched a header,
+// and for these lists the default is itself meaningful (newest first).
+//
+// Clicking a DIFFERENT column always starts that column at ascending rather
+// than inheriting the previous column's direction, which would silently apply a
+// direction the user chose for something else.
+const nextSortValue = (sortKey, currentSort) => {
+  if (currentSort === sortKey) return `-${sortKey}`;
+  if (currentSort === `-${sortKey}`) return "";
+  return sortKey;
+};
+
+const sortDirection = (sortKey, currentSort) => {
+  if (currentSort === sortKey) return "asc";
+  if (currentSort === `-${sortKey}`) return "desc";
+  return null;
+};
+
 const DataTableServer = ({
   columns,
   data,
@@ -39,27 +63,91 @@ const DataTableServer = ({
   error,
   onRetry,
   emptyMessage = "لا توجد بيانات لعرضها",
+  // The sort string currently in effect, in the server's own vocabulary
+  // ("hire_date" / "-hire_date" / ""). Owned by the caller, because on these
+  // screens it is one field of a filter object that also feeds the URL and the
+  // "الترتيب" dropdown — two controls over one value, never two sources of it.
+  sort = "",
+  onSortChange,
 }) => {
   const colCount = (columns?.length || 0) + (showActions ? 1 : 0);
 
   return (
     <Fragment>
       <div className="table-responsive">
-        <table
-          style={{ userSelect: "none", caretColor: "transparent" }}
-          className="table text-nowrap table-hover table-striped"
-        >
+        {/* No `userSelect: "none"` here. Copying an employee number, a national
+            ID, a phone or an email straight out of a row is routine work in an
+            HR system, and suppressing selection on the whole table made every
+            one of those a retype-by-hand. Rows navigate on a SINGLE click, so
+            there is no double-click gesture for stray selection to interfere
+            with. */}
+        <table className="table text-nowrap table-hover table-striped">
           <thead>
             <tr>
-              {columns?.map((column, index) => (
-                <th
-                  scope="col"
-                  key={index}
-                  className={column.center ? "text-center" : ""}
-                >
-                  {column.label}
-                </th>
-              ))}
+              {columns?.map((column, index) => {
+                // A column is sortable only when it names a key the SERVER can
+                // order by AND the screen wired up a handler. A header that
+                // looks clickable but produces a 422 is worse than a plain one.
+                const sortable = Boolean(column.sortKey && onSortChange);
+                const direction = sortable
+                  ? sortDirection(column.sortKey, sort)
+                  : null;
+
+                return (
+                  <th
+                    scope="col"
+                    key={index}
+                    className={column.center ? "text-center" : ""}
+                    // aria-sort belongs on the header CELL, not the button, and
+                    // "none" on every other sortable column is what tells a
+                    // screen-reader user the rest are sortable but inactive.
+                    aria-sort={
+                      !sortable
+                        ? undefined
+                        : direction === "asc"
+                        ? "ascending"
+                        : direction === "desc"
+                        ? "descending"
+                        : "none"
+                    }
+                  >
+                    {sortable ? (
+                      <button
+                        type="button"
+                        className={`table-sort-button${
+                          direction ? " is-sorted" : ""
+                        }`}
+                        onClick={() =>
+                          onSortChange(nextSortValue(column.sortKey, sort))
+                        }
+                        // The visible label already names the column, so the
+                        // accessible name only has to add what the click does.
+                        aria-label={`${column.label} — ${
+                          direction === "asc"
+                            ? "مرتّب تصاعدياً، اضغط للترتيب تنازلياً"
+                            : direction === "desc"
+                            ? "مرتّب تنازلياً، اضغط لإلغاء الترتيب"
+                            : "اضغط للترتيب تصاعدياً"
+                        }`}
+                      >
+                        <span>{column.label}</span>
+                        <i
+                          className={
+                            direction === "asc"
+                              ? "ri-arrow-up-line"
+                              : direction === "desc"
+                              ? "ri-arrow-down-line"
+                              : "ri-arrow-up-down-line"
+                          }
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                    ) : (
+                      column.label
+                    )}
+                  </th>
+                );
+              })}
               {showActions && <th className="text-center">الاجراءات</th>}
             </tr>
           </thead>
@@ -210,8 +298,14 @@ const DataTableServer = ({
                                     <span>
                                       <button
                                         type="button"
+                                        // The whole ITEM follows the id. The
+                                        // confirmation dialog has to name the
+                                        // record being destroyed, and the id
+                                        // alone cannot produce that name. Pure
+                                        // addition — handlers that only declare
+                                        // `(id)` are unaffected.
                                         onClick={() =>
-                                          functions.handleDelete(item.id)
+                                          functions.handleDelete(item.id, item)
                                         }
                                         disabled={functions?.disableDelete?.(
                                           item

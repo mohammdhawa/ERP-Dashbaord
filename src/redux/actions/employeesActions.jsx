@@ -1,7 +1,6 @@
-import Swal from "sweetalert2";
 import api from "../api";
 import { parseApiError } from "../../utils/apiHelpers";
-import { toastNotify } from "../../utils";
+import { toastNotify, confirmDestructive } from "../../utils";
 
 // HR Employees module — /api/hr/employees (paginated list + sibling `meta`).
 //
@@ -175,23 +174,16 @@ export const updateEmployeeRecord = (id, data) => async (dispatch) => {
 };
 
 export const deleteEmployee =
-  (id, currentPage, itemsOnPage, perPage = 10, filters = {}) =>
+  (id, currentPage, itemsOnPage, perPage = 10, filters = {}, name) =>
   async (dispatch) => {
-    const confirm = await Swal.fire({
-      title: "هل أنت متأكد من حذف هذا الموظف؟",
-      text: "لن تتمكن من التراجع عن هذا الإجراء!",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "حذف",
-      cancelButtonText: "إلغاء",
-      reverseButtons: true,
-      customClass: {
-        confirmButton: "btn btn-danger me-2",
-        cancelButton: "btn btn-light me-2",
-      },
-      buttonsStyling: false,
+    const confirmed = await confirmDestructive({
+      action: "حذف الموظف",
+      // The employee's own name. Without it the dialog asked about "هذا
+      // الموظف" — unverifiable next to a table of forty similar rows.
+      subject: name,
+      text: "سيُزال الموظف من القوائم ولا يمكنك التراجع عن هذا الإجراء من الواجهة.",
     });
-    if (!confirm.isConfirmed) return;
+    if (!confirmed) return;
 
     try {
       const response = await api.delete(`/hr/employees/${id}`);

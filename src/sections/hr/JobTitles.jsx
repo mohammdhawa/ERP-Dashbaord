@@ -7,12 +7,12 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { Alert, Card, Col, Form, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
-import { PageHeader } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import {
@@ -113,9 +113,13 @@ const JobTitles = () => {
   const toggleUndescribed = () =>
     setFilter({ is_described: undescribedActive ? "" : "0" });
 
+  // Only `name` gets a header sort: JOB_TITLE_SORT_KEYS is name and created_at,
+  // and created_at has no column here. The grade, activity, description-status
+  // and active-status columns have no server sort key, so they stay plain
+  // rather than offering a click that would 422.
   const columns = useMemo(
     () => [
-      { key: "name", label: "المسمى الوظيفي" },
+      { key: "name", label: "المسمى الوظيفي", sortKey: "name" },
       {
         key: "default_organizational_grade",
         label: "الدرجة الافتراضية",
@@ -164,10 +168,17 @@ const JobTitles = () => {
     setEditing(jobTitle);
     setModalOpen(true);
   };
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, jobTitle) => {
     setConflict(null);
     const result = await dispatch(
-      deleteJobTitle(id, page, items.length, itemsPerPage, filters)
+      deleteJobTitle(
+        id,
+        page,
+        items.length,
+        itemsPerPage,
+        filters,
+        jobTitle?.name
+      )
     );
     if (result?.conflict) setConflict(result.conflict);
   };
@@ -335,6 +346,11 @@ const JobTitles = () => {
                 onPageChange={setPage}
                 itemsPerPage={appliedPerPage}
                 onItemsPerPageChange={setItemsPerPage}
+                // Shares `filters.sort` with the "الترتيب" dropdown, so the two
+                // controls always show the same answer. setFilter resets to
+                // page 1.
+                sort={filters.sort}
+                onSortChange={(next) => setFilter({ sort: next })}
                 updatePermission="hr.job_titles.update"
                 deletePermission="hr.job_titles.delete"
                 functions={{
@@ -347,6 +363,10 @@ const JobTitles = () => {
                   <button
                     type="button"
                     title="عرض الموظفين بهذا المسمى"
+                    // Icon-only: `title` alone is not an accessible name, so a
+                    // screen reader announced this as an unlabelled button.
+                    // Every other action button in DataTableServer carries one.
+                    aria-label={`عرض الموظفين بمسمى ${item.name}`}
                     className="btn btn-sm btn-primary-light btn-wave"
                     onClick={() =>
                       navigate(
@@ -354,7 +374,7 @@ const JobTitles = () => {
                       )
                     }
                   >
-                    <i className="ri-team-line align-middle"></i>
+                    <i className="ri-team-line align-middle" aria-hidden="true"></i>
                   </button>
                 )}
               />
@@ -363,7 +383,12 @@ const JobTitles = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={modalOpen ? <ModalFallback /> : null}>
         <JobTitleFormModal
           open={modalOpen}
           close={() => setModalOpen(false)}

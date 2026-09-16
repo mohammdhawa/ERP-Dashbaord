@@ -7,13 +7,18 @@ import { default as Loader } from "./Loader";
 
 import { default as DataTable } from "./DataTable";
 import { default as NoInternetConnection } from "./NoInternetConnection";
-// Statistics
+import { default as ModalFallback } from "./ModalFallback";
 
-import { default as AdsByCity } from "./statistics/AdsByCity";
-import { default as TotalRevenue } from "./statistics/TotalRevenue";
-import { default as AdsStatistics } from "./statistics/AdsStatistics";
-import { default as LineUsersWithPackages } from "./statistics/LineUsersWithPackages";
-import { default as PieUsersWithPackages } from "./statistics/PieUsersWithPackages";
+// The five ApexCharts-backed statistics widgets are deliberately NOT re-exported
+// here. App.jsx imports this barrel for Header/Sidebar/ScrollTop, so every
+// symbol it names lands in the main chunk — and because `apexcharts` is not
+// side-effect-free, Rollup cannot drop it. That put the whole charting library
+// (~750 references in the built bundle) on every page including the sign-in
+// screen, for widgets no live route renders.
+//
+// Their only consumer is sections/packages/Packages.jsx, which is not routed.
+// If charts come back, import them directly from "../components/statistics/…"
+// at the point of use — ideally behind React.lazy — never through this barrel.
 export {
   Header,
   Sidebar,
@@ -22,10 +27,6 @@ export {
   TablePagination,
   Loader,
   DataTable,
-  AdsByCity,
-  TotalRevenue,
-  AdsStatistics,
-  LineUsersWithPackages,
-  PieUsersWithPackages,
   NoInternetConnection,
+  ModalFallback,
 };

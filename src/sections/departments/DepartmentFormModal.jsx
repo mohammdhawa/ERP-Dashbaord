@@ -15,6 +15,7 @@ import {
   DEPARTMENT_SECTORS,
   getDepartmentFormValues,
 } from "./departmentPayload";
+import { confirmDiscardChanges } from "../../utils";
 
 const SECTOR_FALLBACK_LABELS = new Map([
   [1, "المكاتب الإدارية"],
@@ -25,10 +26,25 @@ const departmentToOption = (d) => ({
   value: d.id,
   label: [d.code, d.name, d.level_label].filter(Boolean).join(" — "),
 });
-const employeeToOption = (e) => ({
-  value: e.id,
-  label: e.name || `موظف #${e.id}`,
-});
+// `full_name`, NOT `name`. The employee resource has no `name` key — it was
+// replaced by the read-only `full_name` accessor — so every option here
+// degraded to the `موظف #id` fallback and this picker listed a column of id
+// numbers instead of people. The same regression was found and fixed in
+// UserFormModal and WarningFormModal; this file was missed.
+//
+// The label pairs the name with `employee_number` for the same reason those two
+// do: الاسم الثلاثي is not unique in a company this size, and the staff number
+// is what tells two people apart. The id is shown only when there is no staff
+// number to show.
+const employeeToOption = (e) => {
+  const name = e.full_name || `موظف #${e.id}`;
+  return {
+    value: e.id,
+    label: e.employee_number
+      ? `${name} — ${e.employee_number}`
+      : `${name} (#${e.id})`,
+  };
+};
 
 // Create + edit in one modal: `department` null → create, otherwise edit.
 const DepartmentFormModal = ({
@@ -174,6 +190,11 @@ const DepartmentFormModal = ({
   const inheritedSectorLabel =
     selectedParent?.sector_label || department?.sector_label || "";
 
+  // The opening snapshot for the discard guard. This form keeps its eight
+  // fields in eight separate useState hooks rather than one object, so the
+  // comparison is written out per field instead of looped.
+  const [initialValues, setInitialValues] = useState(null);
+
   useEffect(() => {
     if (open) {
       const values = getDepartmentFormValues(department);
@@ -185,9 +206,29 @@ const DepartmentFormModal = ({
       setSector(values.sector);
       setParentId(values.parentId);
       setManagerId(values.managerId);
+      setInitialValues(values);
       setErrors({});
     }
   }, [open, department]);
+
+  const isDirty =
+    initialValues !== null &&
+    (name !== initialValues.name ||
+      code !== initialValues.code ||
+      description !== initialValues.description ||
+      isActive !== initialValues.isActive ||
+      level !== initialValues.level ||
+      sector !== initialValues.sector ||
+      parentId !== initialValues.parentId ||
+      managerId !== initialValues.managerId);
+
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
 
   const clearFieldError = (field) =>
     setErrors((prev) => ({ ...prev, [field]: null }));
@@ -243,7 +284,13 @@ const DepartmentFormModal = ({
     ) : null;
 
   return (
-    <Modal show={open} onHide={close} keyboard={false} centered backdrop="static">
+    <Modal
+      show={open}
+      onHide={handleCancel}
+      keyboard={false}
+      centered
+      backdrop="static"
+    >
       <Modal.Header closeButton>
         <Modal.Title as="h6">
           {isEdit ? "تعديل الوحدة التنظيمية" : "إضافة وحدة تنظيمية"}
@@ -528,7 +575,8 @@ const DepartmentFormModal = ({
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={close}
+                onClick={handleCancel}
+                disabled={saving}
               >
                 إلغاء
               </button>
