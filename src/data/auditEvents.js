@@ -166,9 +166,56 @@ export const AUDITABLE_META = Object.freeze({
   job_title: { label: "مسمى وظيفي", route: () => "hr/job-titles" },
   employee_assignment: { label: "سجل تعيين", route: null },
   employee_warning: { label: "إنذار", route: null },
+  // Same route: null and the same reason as the two above — a document lives
+  // inside an employee profile tab and the audit row carries only the
+  // document's own id, so there is no URL that opens it.
+  employee_document: { label: "وثيقة موظف", route: null },
 });
 
 export const AUDITABLE_TYPES = Object.freeze(Object.keys(AUDITABLE_META));
+
+/**
+ * THE SECOND PERMISSION the values blobs need (API doc §9.2).
+ *
+ * `auth.audit.viewValues` alone is no longer enough to read old_values /
+ * new_values: a row about a record also requires the VIEW PERMISSION OF THAT
+ * RECORD'S MODULE. An audit row is a copy of someone else's record, and
+ * permission to read audit rows is not permission to read that record —
+ * without this, viewValues alone could page `?event=created,updated,deleted`
+ * per type and rebuild every audited table in the system out of `new_values`.
+ *
+ * ⚠️ THIS IS NOT THE CHECK. The server decides, and its answer is the presence
+ * or absence of the keys — which is what AuditDiff reads, per row. This map
+ * exists only so the LOCK MESSAGE can name the permission the reader is
+ * actually missing instead of a generic sentence. Never gate a fetch on it,
+ * and never cache its result across rows.
+ *
+ * A row with NO target (login, api_request, the rest of the auth vocabulary)
+ * is absent from this map on purpose: its blobs hold request and auth
+ * metadata, not a copy of anyone's record, so viewValues alone covers it.
+ */
+const VALUES_PERMISSION_BY_TYPE = Object.freeze({
+  employee: "hr.employees.view",
+  employee_assignment: "hr.assignments.view",
+  employee_document: "hr.employees.view",
+  employee_warning: "hr.warnings.view",
+  job_title: "hr.job_titles.view",
+  department: "departments.view",
+  user: "auth.users.view",
+  role: "auth.roles.view",
+  // Permissions have no screen of their own; they are managed inside roles,
+  // and the roles read permission is what governs them server-side too.
+  permission: "auth.roles.view",
+});
+
+/**
+ * @returns {string|null} the module view permission this row's values ALSO
+ *   require, or null when there is none to name — an action-level row, or a
+ *   target type this build has not been taught (in which case the server still
+ *   enforces something and the UI must not claim to know what).
+ */
+export const valuesPermissionFor = (type) =>
+  VALUES_PERMISSION_BY_TYPE[type] || null;
 
 /**
  * @returns {string|null} a BASE_URL-relative path, or null when the type has no
@@ -187,11 +234,23 @@ export const auditableRoute = (type, id) => {
  * The server sends `auditable_label` and it wins, per the standing rule. This
  * file's label is the fallback, and the raw key is the last resort.
  */
-export const auditableTypeLabel = (row) =>
-  row?.auditable_label ||
-  AUDITABLE_META[row?.auditable_type]?.label ||
-  row?.auditable_type ||
-  "—";
+export const auditableTypeLabel = (row) => {
+  const named =
+    row?.auditable_label ||
+    AUDITABLE_META[row?.auditable_type]?.label ||
+    row?.auditable_type;
+  if (named) return named;
+
+  // API doc §9.4: a row written before the morph map was enforced (2026-09-08)
+  // whose class has since been renamed or removed arrives with the TYPE NULL
+  // and `auditable_id` intact, because there is no honest public name left for
+  // it and a PHP class name must never reach the client.
+  //
+  // That is an UNRESOLVABLE target, not "no target" — an action-level row has
+  // a null id too, and that one is the dash. The id is still true and is the
+  // only fact the broken row still carries, so it is named rather than hidden.
+  return row?.auditable_id != null ? "سجل غير معروف" : "—";
+};
 
 export const isKnownAuditableType = (type) =>
   Object.prototype.hasOwnProperty.call(AUDITABLE_META, type);

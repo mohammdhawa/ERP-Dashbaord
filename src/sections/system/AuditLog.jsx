@@ -45,6 +45,7 @@ const AuditLogDetail = lazy(() => import("./AuditLogDetail"));
 // and it decides `event_group`. See BASE_EVENT_GROUPS below.
 const EMPTY_FILTERS = {
   user_id: "",
+  actor_type: "",
   event: [],
   auditable_type: "",
   auditable_id: "",
@@ -85,6 +86,7 @@ const readFilters = (searchParams) => {
   const seeded = { ...EMPTY_FILTERS };
   [
     "user_id",
+    "actor_type",
     "auditable_type",
     "auditable_id",
     "request_id",
@@ -103,6 +105,11 @@ const readFilters = (searchParams) => {
   seeded.includeApiRequests = csvToList(searchParams.get("event_group")).includes(
     "request"
   );
+  // `actor_type=system` and a `user_id` are a contradiction: a system row has
+  // no user, so the server ANDs them into an empty page. The user is dropped
+  // at the seed rather than carried, so the URL effect rewrites the link
+  // without it — a shared link must not display a filter that is not in force.
+  if (seeded.actor_type === "system") seeded.user_id = "";
   return seeded;
 };
 
@@ -152,6 +159,11 @@ const AuditLog = () => {
     () => ({
       ...filters,
       event_group: includeRequests ? ALL_EVENT_GROUPS : BASE_EVENT_GROUPS,
+      // Both contradictions the server would answer with a confidently empty
+      // page are resolved HERE, at the one place the query is assembled, so
+      // no combination of state can put one on the wire whatever route it
+      // took to get there.
+      user_id: filters.actor_type === "system" ? "" : filters.user_id,
     }),
     [filters, includeRequests]
   );
@@ -244,6 +256,7 @@ const AuditLog = () => {
       // happened in THIS operation", and a leftover event or date filter would
       // silently answer a narrower one.
       user_id: "",
+      actor_type: "",
       event: [],
       auditable_type: "",
       auditable_id: "",
@@ -271,6 +284,7 @@ const AuditLog = () => {
   // counting it would make every fresh visit look filtered.
   const hasAnyFilter =
     filters.user_id !== "" ||
+    filters.actor_type !== "" ||
     filters.event.length > 0 ||
     filters.auditable_type !== "" ||
     filters.auditable_id !== "" ||

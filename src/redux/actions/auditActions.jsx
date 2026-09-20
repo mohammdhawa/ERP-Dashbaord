@@ -23,9 +23,9 @@ import { toastNotify } from "../../utils";
 // under plain Node — this file imports api.js, which reads `import.meta.env`
 // and cannot be loaded outside Vite. Re-exported here so callers import from
 // the actions module as they do everywhere else.
-import { AUDIT_SORT_KEYS, buildListParams } from "./auditParams";
+import { ACTOR_TYPES, AUDIT_SORT_KEYS, buildListParams } from "./auditParams";
 
-export { AUDIT_SORT_KEYS, buildListParams };
+export { ACTOR_TYPES, AUDIT_SORT_KEYS, buildListParams };
 
 export const fetchAuditLogsStart = (requestId) => ({
   type: "FETCH_AUDIT_LOGS_START",

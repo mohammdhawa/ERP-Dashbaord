@@ -5,10 +5,6 @@
 // labels, so this file is the only source of them: keep it in step with the
 // seeder rather than inventing wording here.
 //
-// ⚠️ The last two rows (`auth.audit.*`) are NOT in API_DOCUMENTATION.md yet —
-// they come from the audit-log contract, which the document will absorb later.
-// When it does, the document wins.
-//
 // `fieldLevel: true` marks a permission that gates KEYS INSIDE A PAYLOAD rather
 // than a route. No endpoint requires them; they decide whether the server
 // includes a field at all (an absent key, never null). They are shown as such
@@ -122,10 +118,15 @@ export const PERMISSIONS_CATALOG = [
     // of every edit in it are two different grants: the first answers "who
     // touched this record", the second replays the data itself, salaries and
     // identity numbers included.
+    // ⚠️ NOT SUFFICIENT ON ITS OWN since 2026-09-20 (API doc §9.2). The values
+    // of a row ABOUT A RECORD also need that module's view permission — an
+    // audit row is a copy of someone else's record — so granting this alone
+    // widens login and api_request rows and nothing else. The note says so,
+    // because an admin ticking this box otherwise expects more than it gives.
     module: "تفاصيل سجل التدقيق (على مستوى الحقل)",
     key: "auth.audit.fields",
     fieldLevel: true,
-    note: "تتحكم بظهور القيم السابقة والجديدة داخل سجل التدقيق، لا بالوصول إلى الشاشة.",
+    note: "تتحكم بظهور القيم السابقة والجديدة داخل سجل التدقيق، لا بالوصول إلى الشاشة. لعرض قيم سجل يخص موظفاً أو قسماً أو مستخدماً، يلزم أيضاً امتلاك صلاحية عرض تلك الوحدة.",
     permissions: [
       {
         name: "auth.audit.viewValues",

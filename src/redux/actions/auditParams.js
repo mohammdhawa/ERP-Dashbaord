@@ -12,6 +12,15 @@
 // one indexed column on the one table in the system that grows without bound.
 export const AUDIT_SORT_KEYS = Object.freeze(["created_at", "-created_at"]);
 
+// The ONLY two actor_type values the endpoint accepts. `system` selects rows
+// with no authenticated actor — a seeder, console command or queued job. It
+// COMPOSES with user_id server-side rather than replacing it, which is exactly
+// why the UI must not send both: a system row has user_id null, so the pair is
+// a permanently empty page. AuditLogFilters clears the user when النظام is
+// picked; this list is the wire-level vocabulary, and anything outside it is a
+// 422 and is dropped rather than forwarded.
+export const ACTOR_TYPES = Object.freeze(["user", "system"]);
+
 // event and event_group go over the wire as CSV. Accepts the array the
 // multi-select holds and the plain string a URL seed produces.
 const csvParam = (value) => {
@@ -37,6 +46,7 @@ export const buildListParams = (page, perPage, filters = {}) => {
 
   const {
     user_id,
+    actor_type,
     event,
     event_group,
     auditable_type,
@@ -50,6 +60,12 @@ export const buildListParams = (page, perPage, filters = {}) => {
   } = filters;
 
   if (textParam(user_id) !== "") params.user_id = textParam(user_id);
+
+  // Out-of-vocabulary values are dropped rather than forwarded, the same rule
+  // as `sort` below: an unknown actor_type is a 422 with errors.actor_type,
+  // and a filter that 422s on a value the UI itself produced is a broken
+  // screen rather than a rejected request.
+  if (ACTOR_TYPES.includes(actor_type)) params.actor_type = actor_type;
 
   const events = csvParam(event);
   if (events) params.event = events;

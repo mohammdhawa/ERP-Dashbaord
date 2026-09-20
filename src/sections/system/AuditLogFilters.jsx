@@ -69,6 +69,19 @@ const AUDITABLE_OPTIONS = AUDITABLE_TYPES.map((key) => ({
   label: `${AUDITABLE_META[key].label} — ${key}`,
 }));
 
+// المنفّذ, the actor-type filter. The payload has always published three
+// distinct actor cases and auditColumns renders all three, but `user_id`
+// matches an id and no value of it expresses "nobody was authenticated" — so
+// "what happened outside any user session", the case where nobody is
+// accountable, was the one question this screen could not ask.
+//
+// `الكل` is the cleared state (the placeholder) rather than an option, the
+// same idiom as الترتيب below.
+const ACTOR_TYPE_OPTIONS = [
+  { value: "user", label: "مستخدم" },
+  { value: "system", label: "النظام (مهمة أو أمر مجدول)" },
+];
+
 const SORT_OPTIONS = [
   { value: "-created_at", label: "الأحدث أولاً (افتراضي)" },
   { value: "created_at", label: "الأقدم أولاً" },
@@ -116,6 +129,11 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
 
   const typeChosen = (filters.auditable_type || "") !== "";
 
+  // A system row has no user to name, so the user box is suppressed rather
+  // than left looking usable. AuditLog clears `user_id` at the same moment the
+  // type is set, so the suppressed box is also genuinely empty.
+  const systemOnly = filters.actor_type === "system";
+
   const advancedCount = countAdvanced(filters);
 
   // Open on first render if the incoming filters already use the section, and
@@ -161,51 +179,91 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
           />
         </Col>
 
+        {/* المنفّذ IS ONE CONTROL IN TWO BOXES, grouped for the same reason
+            النطاق الزمني below is: "who did this" is one question, asked
+            either as a kind of actor or as a specific account. Splitting them
+            into sibling Cols would also have cost the primary row its twelve
+            columns, which is what keeps it one row.
+            The group heading is a plain <span> — a <label> may name only one
+            control — and each box carries its own accessible name. */}
         <Col sm={12} md={6} lg={3}>
-          <Form.Label htmlFor="audit-f-user" className="fs-12 mb-1">
-            المستخدم
-          </Form.Label>
-          {canReadUsers && !users.error ? (
-            <>
-              <Select
-                inputId="audit-f-user"
-                classNamePrefix="Select2"
-                options={users.options}
-                value={
-                  users.options.find(
-                    (o) => String(o.value) === String(filters.user_id)
-                  ) || null
+          <span className="fs-12 mb-1 d-block">المنفّذ</span>
+          <Select
+            inputId="audit-f-actor"
+            aria-label="نوع المنفّذ"
+            classNamePrefix="Select2"
+            options={ACTOR_TYPE_OPTIONS}
+            value={
+              ACTOR_TYPE_OPTIONS.find((o) => o.value === filters.actor_type) ||
+              null
+            }
+            onChange={(opt) =>
+              // Picking النظام CLEARS the user, because the two compose rather
+              // than override: a system row has user_id null, so sending both
+              // asks for a row that cannot exist and returns a confidently
+              // empty page. Same class of contradiction as an event whose
+              // group is excluded, and refused the same way.
+              opt?.value === "system"
+                ? { actor_type: "system", user_id: "" }
+                : { actor_type: opt ? opt.value : "" }
+            }
+            isClearable
+            placeholder="الكل"
+            menuPosition="fixed"
+          />
+          <div className="mt-1">
+            {canReadUsers && !users.error ? (
+              <>
+                <Select
+                  inputId="audit-f-user"
+                  aria-label="المستخدم"
+                  // Disabled rather than hidden while النظام is selected, so
+                  // it stays visible that the filter exists and what is
+                  // suppressing it.
+                  isDisabled={systemOnly}
+                  placeholder={systemOnly ? "لا ينطبق على النظام" : "الكل"}
+                  classNamePrefix="Select2"
+                  options={users.options}
+                  value={
+                    users.options.find(
+                      (o) => String(o.value) === String(filters.user_id)
+                    ) || null
+                  }
+                  onChange={(opt) =>
+                    onChange({ user_id: opt ? opt.value : "" })
+                  }
+                  isClearable
+                  isLoading={users.loading}
+                  noOptionsMessage={() => "لا يوجد مستخدمون"}
+                  menuPosition="fixed"
+                />
+                {/* The directory is walked page by page, and a page that fails
+                    leaves it short. Said out loud for the same reason the
+                    api_request chip is: a picker that is quietly missing the
+                    person being looked for turns "they are not in the list"
+                    into a false statement. */}
+                {users.incomplete && (
+                  <div className="text-warning small mt-1">
+                    تعذّر تحميل كل المستخدمين، القائمة غير مكتملة.
+                  </div>
+                )}
+              </>
+            ) : (
+              <Form.Control
+                id="audit-f-user"
+                type="number"
+                min={1}
+                aria-label="معرّف المستخدم"
+                disabled={systemOnly}
+                title={systemOnly ? "لا ينطبق عند اختيار النظام" : undefined}
+                placeholder={
+                  systemOnly ? "لا ينطبق على النظام" : "معرّف المستخدم"
                 }
-                onChange={(opt) => onChange({ user_id: opt ? opt.value : "" })}
-                isClearable
-                isLoading={users.loading}
-                placeholder="الكل"
-                noOptionsMessage={() => "لا يوجد مستخدمون"}
-                menuPosition="fixed"
+                value={filters.user_id}
+                onChange={(e) => onChange({ user_id: e.target.value })}
               />
-              {/* The directory is walked page by page, and a page that fails
-                  leaves it short. Said out loud for the same reason the
-                  api_request chip is: a picker that is quietly missing the
-                  person being looked for turns "they are not in the list" into
-                  a false statement. The numeric id box below is not offered as
-                  a fallback here — the picker still works for everyone it did
-                  load, and the id can be typed into the URL. */}
-              {users.incomplete && (
-                <div className="text-warning small mt-1">
-                  تعذّر تحميل كل المستخدمين، القائمة غير مكتملة.
-                </div>
-              )}
-            </>
-          ) : (
-            <Form.Control
-              id="audit-f-user"
-              type="number"
-              min={1}
-              placeholder="معرّف المستخدم"
-              value={filters.user_id}
-              onChange={(e) => onChange({ user_id: e.target.value })}
-            />
-          )}
+            )}
+          </div>
         </Col>
 
         <Col sm={12} md={6} lg={3}>

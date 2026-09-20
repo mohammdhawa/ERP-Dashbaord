@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AUDIT_SORT_KEYS, buildListParams } from "./auditParams.js";
+import { ACTOR_TYPES, AUDIT_SORT_KEYS, buildListParams } from "./auditParams.js";
 
 const base = { page: 1, per_page: 15 };
 
@@ -23,6 +23,17 @@ test("an untouched filter set sends nothing but the page", () => {
     }),
     base
   );
+});
+
+test("an empty event / event_group list is OMITTED, never sent blank", () => {
+  // THE 1.5 REGRESSION CHECK. As of 2026-09-20 `?event=` and `?event=,,,` are
+  // a 422 rather than silently ignored — and on event_group, the parameter
+  // that hides the api_request firehose, being ignored used to mean the page
+  // came back as the firehose. Every request on the screen goes through this
+  // one builder, AuditTrail included, so this is the whole guarantee.
+  assert.deepEqual(buildListParams(1, 15, { event: [], event_group: [] }), base);
+  assert.deepEqual(buildListParams(1, 15, { event: "", event_group: "" }), base);
+  assert.deepEqual(buildListParams(1, 15, { event: ",,,", event_group: " , " }), base);
 });
 
 test("event and event_group are CSV-joined", () => {
@@ -52,6 +63,31 @@ test("the default hides api_request and the switch includes it", () => {
       .event_group,
     "model,auth,request"
   );
+});
+
+test("only the two legal actor_type values reach the wire", () => {
+  assert.deepEqual(ACTOR_TYPES, ["user", "system"]);
+  assert.equal(buildListParams(1, 15, { actor_type: "system" }).actor_type, "system");
+  assert.equal(buildListParams(1, 15, { actor_type: "user" }).actor_type, "user");
+  // Cleared, and anything out of vocabulary, is dropped rather than forwarded:
+  // an unknown value is a 422 with errors.actor_type, and a screen that 422s
+  // on a value it produced itself is broken rather than merely rejected.
+  assert.equal("actor_type" in buildListParams(1, 15, { actor_type: "" }), false);
+  assert.equal("actor_type" in buildListParams(1, 15, {}), false);
+  assert.equal("actor_type" in buildListParams(1, 15, { actor_type: "robot" }), false);
+  assert.equal("actor_type" in buildListParams(1, 15, { actor_type: "System" }), false);
+});
+
+test("actor_type composes with user_id rather than replacing it", () => {
+  // The server ANDs them, which is why the UI clears the user when النظام is
+  // picked — a system row has user_id null, so the pair is an empty page. The
+  // builder forwards whatever it is given; refusing the combination is the
+  // filter component's job, and this pins that the wire stays faithful.
+  assert.deepEqual(buildListParams(1, 15, { actor_type: "user", user_id: 7 }), {
+    ...base,
+    user_id: "7",
+    actor_type: "user",
+  });
 });
 
 test("only the two legal sort keys reach the wire", () => {

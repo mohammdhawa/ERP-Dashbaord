@@ -13,13 +13,16 @@ import {
   valueKind,
 } from "./auditFormat.js";
 import {
+  AUDITABLE_TYPES,
   auditableRoute,
+  auditableTypeLabel,
   eventGroup,
   eventLabel,
   eventVariant,
   isKnownAuditableType,
   isKnownEvent,
   securityNote,
+  valuesPermissionFor,
 } from "../../data/auditEvents.js";
 
 // ── Timestamps ──────────────────────────────────────────────────────────────
@@ -171,6 +174,96 @@ test("auditable keys are the server's morph aliases, not shorter synonyms", () =
   assert.ok(isKnownAuditableType("employee_warning"));
   assert.ok(!isKnownAuditableType("assignment"));
   assert.ok(!isKnownAuditableType("warning"));
+});
+
+test("all nine morph aliases from API doc §9.1 are present, and only those", () => {
+  // THE SERVER HAS A TEST FOR ITS OWN MAPS (AuditTargetStubTest); NOTHING
+  // GUARDS THIS COPY. employee_document was missing here for the whole first
+  // release — inherited from a work-order parameter table that omitted it —
+  // and the symptom was quiet: `auditableTypeLabel` falls through to the
+  // server's `auditable_label`, so rows still READ correctly. What silently
+  // broke was the type filter, which maps over AUDITABLE_TYPES and simply had
+  // no وثيقة موظف option to offer. Pin the whole set, sorted, so a future
+  // omission fails here instead of going unnoticed again.
+  assert.deepEqual([...AUDITABLE_TYPES].sort(), [
+    "department",
+    "employee",
+    "employee_assignment",
+    "employee_document",
+    "employee_warning",
+    "job_title",
+    "permission",
+    "role",
+    "user",
+  ]);
+});
+
+test("a document has nowhere truthful to link, like an assignment or warning", () => {
+  assert.ok(isKnownAuditableType("employee_document"));
+  // It lives inside an employee profile tab and the audit row carries only the
+  // document's own id, so there is no URL that opens it.
+  assert.equal(auditableRoute("employee_document", 5), null);
+});
+
+// ── The second permission on the values (API doc §9.2) ──────────────────────
+
+test("every target type names the module permission its values also need", () => {
+  // Read by the LOCK MESSAGE only, never to decide access — the server decides
+  // and its answer is the absent keys. But a message that names the wrong
+  // permission is the defect this map was added to fix, so the names are
+  // pinned. They must match permissionsCatalog exactly: `hr.job_titles.view`
+  // not `hr.jobTitles.view`, `departments.view` with no module prefix.
+  assert.equal(valuesPermissionFor("employee"), "hr.employees.view");
+  assert.equal(valuesPermissionFor("employee_document"), "hr.employees.view");
+  assert.equal(valuesPermissionFor("employee_assignment"), "hr.assignments.view");
+  assert.equal(valuesPermissionFor("employee_warning"), "hr.warnings.view");
+  assert.equal(valuesPermissionFor("job_title"), "hr.job_titles.view");
+  assert.equal(valuesPermissionFor("department"), "departments.view");
+  assert.equal(valuesPermissionFor("user"), "auth.users.view");
+  assert.equal(valuesPermissionFor("role"), "auth.roles.view");
+  // Permissions have no screen of their own; roles govern them either side.
+  assert.equal(valuesPermissionFor("permission"), "auth.roles.view");
+});
+
+test("every auditable type has a values permission, with no orphans either way", () => {
+  AUDITABLE_TYPES.forEach((type) =>
+    assert.notEqual(valuesPermissionFor(type), null, type)
+  );
+});
+
+test("an action-level row and an unknown type name no second permission", () => {
+  // A login or api_request row's blobs hold request and auth metadata, not a
+  // copy of anyone's record, so viewValues alone covers them.
+  assert.equal(valuesPermissionFor(null), null);
+  assert.equal(valuesPermissionFor(undefined), null);
+  // A retired alias: the server still enforces something and the UI must not
+  // claim to know what. The lock message falls back to naming both conditions.
+  assert.equal(valuesPermissionFor("contract"), null);
+});
+
+// ── Unresolvable vs absent targets (API doc §9.4) ───────────────────────────
+
+test("a null type with an id is an unresolvable target, not an absent one", () => {
+  // Written before the morph map was enforced, class since renamed or removed.
+  // Both of these used to be a 500 on the whole page rather than a row.
+  assert.equal(
+    auditableTypeLabel({ auditable_type: null, auditable_label: null, auditable_id: 11 }),
+    "سجل غير معروف"
+  );
+  // An ACTION-level row is the one that genuinely has no target.
+  assert.equal(
+    auditableTypeLabel({ auditable_type: null, auditable_label: null, auditable_id: null }),
+    "—"
+  );
+});
+
+test("a retired alias renders as itself rather than as a neighbour", () => {
+  assert.equal(
+    auditableTypeLabel({ auditable_type: "contract", auditable_label: null, auditable_id: 12 }),
+    "contract"
+  );
+  assert.equal(isKnownAuditableType("contract"), false);
+  assert.equal(auditableRoute("contract", 12), null);
 });
 
 // ── Event vocabulary ────────────────────────────────────────────────────────

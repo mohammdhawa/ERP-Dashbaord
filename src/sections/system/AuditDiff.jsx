@@ -1,7 +1,9 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
-import { auditableRoute } from "../../data/auditEvents";
+import { auditableRoute, valuesPermissionFor } from "../../data/auditEvents";
+import { hasPermission, permissionLabel } from "../../data/permissionsCatalog";
 import {
   diffKeys,
   enumLabelFor,
@@ -131,30 +133,93 @@ const Absent = () => (
   </span>
 );
 
-const AuditDiff = ({ detail }) => {
-  // ABSENT ≠ NULL, and here the difference is a permission.
-  //
-  // `old_values` / `new_values` are omitted entirely for a caller without
-  // auth.audit.viewValues, while `created` legitimately sends old_values: null.
-  // Checking truthiness would conflate the two and show a reader with no
-  // permission an empty table that reads as "nothing changed".
-  const canSeeValues =
-    hasKey(detail, "old_values") || hasKey(detail, "new_values");
+/**
+ * WHY the values are locked, in the reader's own terms.
+ *
+ * Since 2026-09-20 the blobs need TWO grants, not one (API doc §9.2):
+ * `auth.audit.viewValues` on every row, AND the view permission of the module
+ * the row is about — an audit row is a copy of someone else's record. A row
+ * with NO target needs only the first.
+ *
+ * ⚠️ THE ANSWER IS PER ROW, NOT PER SESSION. The same signed-in user gets the
+ * values on a login row and not on the employee row beneath it, so this is
+ * computed from the row in hand every time and nothing is remembered.
+ *
+ * The server has already decided — its answer is the absent keys. This only
+ * works out WHICH of the two to name, and it says nothing it cannot support:
+ * where the permission list and the payload disagree, or the target type is
+ * one this build has not been taught, it states both requirements rather than
+ * accusing the reader of lacking a particular one.
+ */
+const LockedValues = ({ detail }) => {
+  const { permissions } = useSelector((state) => state.auth);
 
-  if (!canSeeValues) {
-    return (
-      <div className="border rounded p-3 text-center">
-        <i className="ri-lock-line fs-4 text-muted" aria-hidden="true"></i>
-        <p className="mb-0 mt-2">
-          تفاصيل القيم غير متاحة بصلاحياتك الحالية.
-        </p>
+  // §9.4: a NULL type with an id is an unresolvable target, not "no target" —
+  // the id is what says a target exists, so that is what is tested.
+  const hasTarget = detail?.auditable_id != null;
+  const modulePermission = hasTarget
+    ? valuesPermissionFor(detail?.auditable_type)
+    : null;
+
+  const holdsViewValues = hasPermission(permissions, "auth.audit.viewValues");
+  const lacksModule =
+    modulePermission && !hasPermission(permissions, modulePermission);
+
+  return (
+    <div className="border rounded p-3 text-center">
+      <i className="ri-lock-line fs-4 text-muted" aria-hidden="true"></i>
+      <p className="mb-0 mt-2">تفاصيل القيم غير متاحة بصلاحياتك الحالية.</p>
+
+      {!hasTarget ? (
+        // No target, so there is no second permission and the original wording
+        // is still exactly right.
         <span className="text-muted fs-12">
           يتطلب عرض القيم السابقة والجديدة صلاحية «عرض تفاصيل التغييرات»
           (auth.audit.viewValues).
         </span>
-      </div>
-    );
-  }
+      ) : holdsViewValues && lacksModule ? (
+        // THE CASE THIS BRANCH WAS REWRITTEN FOR. Telling someone who already
+        // holds viewValues to go and obtain viewValues is the worst possible
+        // copy on the one screen whose job is saying truthfully who can see
+        // what. Name the grant they are actually missing.
+        <span className="text-muted fs-12">
+          لديك «عرض تفاصيل التغييرات»، لكن قيم هذا السجل تتطلب أيضاً صلاحية «
+          {permissionLabel(modulePermission)}» ({modulePermission}) — سجل
+          التدقيق يحتفظ بنسخة من السجل نفسه، والاطّلاع عليه اطّلاع على بياناته.
+        </span>
+      ) : (
+        // Either viewValues is missing too, or we cannot tell which one is:
+        // an unrecognised target type has no permission to name, and a stale
+        // permission list must not turn into a confident accusation. State
+        // both requirements instead.
+        <span className="text-muted fs-12">
+          تتطلب قيم سجل يخص سجلاً آخر صلاحيتين معاً: «عرض تفاصيل التغييرات»
+          (auth.audit.viewValues)، وصلاحية عرض الوحدة التي يخصها السجل
+          {modulePermission
+            ? ` «${permissionLabel(modulePermission)}» (${modulePermission})`
+            : ""}
+          .
+        </span>
+      )}
+    </div>
+  );
+};
+
+const AuditDiff = ({ detail }) => {
+  // ABSENT ≠ NULL, and here the difference is a permission.
+  //
+  // `old_values` / `new_values` are omitted entirely for a caller who may not
+  // read them, while `created` legitimately sends old_values: null. Checking
+  // truthiness would conflate the two and show a reader with no permission an
+  // empty table that reads as "nothing changed".
+  //
+  // This stays the ONLY test of whether the values are readable: it asks the
+  // payload, per row, which is the server's own answer. The permission
+  // catalogue is consulted afterwards for wording alone — never to decide.
+  const canSeeValues =
+    hasKey(detail, "old_values") || hasKey(detail, "new_values");
+
+  if (!canSeeValues) return <LockedValues detail={detail} />;
 
   const oldValues = detail.old_values;
   const newValues = detail.new_values;
