@@ -22,6 +22,7 @@ import {
 import EmployeeOverview from "./EmployeeOverview";
 import EmployeeAssignments from "./EmployeeAssignments";
 import EmployeeWarnings from "./EmployeeWarnings";
+import AuditTrail from "../system/AuditTrail";
 
 const EmployeeFormModal = lazy(() => import("./EmployeeFormModal"));
 
@@ -47,6 +48,7 @@ const EmployeeProfile = () => {
   // clicked. The route itself only needs hr.employees.view.
   const canViewAssignments = hasPermission(permissions, "hr.assignments.view");
   const canViewWarnings = hasPermission(permissions, "hr.warnings.view");
+  const canViewAudit = hasPermission(permissions, "auth.audit.view");
 
   const [activeTab, setActiveTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -76,8 +78,16 @@ const EmployeeProfile = () => {
           show: canViewAssignments,
         },
         { key: "warnings", title: "الإنذارات", show: canViewWarnings },
+        {
+          // Read-only history of this employee's record. Gated on
+          // auth.audit.view like every other tab gates on its own permission:
+          // a user without it sees the profile without the tab, not an error.
+          key: "audit",
+          title: "سجل التغييرات",
+          show: canViewAudit,
+        },
       ].filter((t) => t.show),
-    [canViewAssignments, canViewWarnings]
+    [canViewAssignments, canViewWarnings, canViewAudit]
   );
 
   // If the active tab disappears (permissions reloaded), fall back to overview
@@ -278,6 +288,18 @@ const EmployeeProfile = () => {
                   {canViewWarnings && (
                     <Tab.Pane eventKey="warnings" mountOnEnter>
                       <EmployeeWarnings employee={current} />
+                    </Tab.Pane>
+                  )}
+                  {canViewAudit && (
+                    // mountOnEnter: the audit list is not fetched until the tab
+                    // is actually opened. That matters more here than on the
+                    // other tabs — every fetch of this list appends a row to
+                    // the table it reads.
+                    <Tab.Pane eventKey="audit" mountOnEnter>
+                      <AuditTrail
+                        auditableType="employee"
+                        auditableId={current.id}
+                      />
                     </Tab.Pane>
                   )}
                 </Tab.Content>

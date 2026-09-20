@@ -1,0 +1,55 @@
+// سجل التدقيق — the من/إلى date pair, which is one control in two boxes.
+//
+// A native date input reports a min-content width of roughly 140px, and a flex
+// item will not shrink below min-content without being told it may. Two of them
+// side by side therefore overflowed their column at the narrower end of `lg`,
+// where the grid gives the group about 275px. `min-width: 0` is what lets the
+// pair shrink to the space that is actually there instead of pushing out of it.
+.audit-date-range > .form-control {
+  min-width: 0;
+}
+
+// سجل التدقيق — the timestamp button that opens a row's detail panel.
+//
+// This column is the row's keyboard entry point (see TimeCell in
+// auditColumns.jsx), so it has to be a real, focusable button. What it must NOT
+// be is the loudest thing on the screen: as `btn-link` it rendered every
+// timestamp primary-blue and bold, and since every row carries one, the effect
+// was a bright vertical stripe down the least informative column — the event
+// badges beside it, which are the actual signal, lost the comparison.
+//
+// So it reads as body text at rest and takes emphasis only on hover and focus,
+// where the emphasis reports something true: this one, now, is the target.
+// It carries NO bootstrap button class, for the same reason .table-sort-button
+// does not: `@use` is hoisted above the bootstrap `@import`, so `.btn-link`
+// would win every colour declaration below on source order alone. Stripping the
+// button back by hand is the house pattern and the one that actually holds.
+.audit-time-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  color: inherit;
+  // Timestamps are a column of digits read down the page; tabular figures keep
+  // the columns of that column aligned.
+  font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    // --primary-ink, not --primary-color: the brand yellow does not carry
+    // enough contrast on a white table cell to be read as text.
+    color: var(--primary-ink);
+    text-decoration: underline;
+  }
+
+  // The only thing telling a keyboard user which row they are on, since this
+  // table has no actions column to focus instead.
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+    border-radius: 0.25rem;
+  }
+}

@@ -1,9 +1,13 @@
-// Permission catalogue (API doc §2) — 28 rows: 26 route-level + 2 field-level.
+// Permission catalogue (API doc §2) — 30 rows: 27 route-level + 3 field-level.
 // Format: {module}.{resource}.{action}
 //
 // Arabic labels come from the backend seeder. No endpoint serves permission
 // labels, so this file is the only source of them: keep it in step with the
 // seeder rather than inventing wording here.
+//
+// ⚠️ The last two rows (`auth.audit.*`) are NOT in API_DOCUMENTATION.md yet —
+// they come from the audit-log contract, which the document will absorb later.
+// When it does, the document wins.
 //
 // `fieldLevel: true` marks a permission that gates KEYS INSIDE A PAYLOAD rather
 // than a route. No endpoint requires them; they decide whether the server
@@ -98,6 +102,36 @@ export const PERMISSIONS_CATALOG = [
       { name: "auth.roles.create", label: "إنشاء دور" },
       { name: "auth.roles.update", label: "تعديل دور" },
       { name: "auth.roles.delete", label: "حذف دور" },
+    ],
+  },
+  {
+    // سجل التدقيق is APPEND-ONLY, like سجل التعيين above but more strictly: the
+    // rows are written by middleware and model observers, never by a user. There
+    // is no create, no update and no delete permission because there is no
+    // endpoint any of them could authorise — and inventing one here would put a
+    // checkbox in the role matrix promising a power that does not exist.
+    module: "سجل التدقيق",
+    key: "auth.audit",
+    permissions: [{ name: "auth.audit.view", label: "عرض سجل التدقيق" }],
+  },
+  {
+    // A SEPARATE group rather than a row inside سجل التدقيق, so the role matrix
+    // renders the "على مستوى الحقل" badge and the note it already renders for
+    // hr.employees.viewSalary / viewIdentity — same convention, no change to the
+    // roles screen. Reaching the audit log and reading the before/after values
+    // of every edit in it are two different grants: the first answers "who
+    // touched this record", the second replays the data itself, salaries and
+    // identity numbers included.
+    module: "تفاصيل سجل التدقيق (على مستوى الحقل)",
+    key: "auth.audit.fields",
+    fieldLevel: true,
+    note: "تتحكم بظهور القيم السابقة والجديدة داخل سجل التدقيق، لا بالوصول إلى الشاشة.",
+    permissions: [
+      {
+        name: "auth.audit.viewValues",
+        label: "عرض تفاصيل التغييرات",
+        fieldLevel: true,
+      },
     ],
   },
 ];

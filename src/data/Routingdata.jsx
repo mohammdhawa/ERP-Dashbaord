@@ -23,6 +23,7 @@ const EmployeeProfile = lazy(() => import("../sections/hr/EmployeeProfile"));
 const JobTitles = lazy(() => import("../sections/hr/JobTitles"));
 const Users = lazy(() => import("../sections/accounts/Users"));
 const Roles = lazy(() => import("../sections/rbac/Roles"));
+const AuditLog = lazy(() => import("../sections/system/AuditLog"));
 const Notifications = lazy(() =>
   import("../sections/notifications/Notifications")
 );
@@ -77,6 +78,12 @@ export const RouteData = [
   },
   {
     id: 8,
+    path: `${import.meta.env.BASE_URL}audit-log`,
+    element: <AuditLog />,
+    requiredPermissions: ["auth.audit.view"],
+  },
+  {
+    id: 9,
     path: `${import.meta.env.BASE_URL}notifications`,
     element: <Notifications />,
     requiredPermissions: [], // owner-scoped, auth only

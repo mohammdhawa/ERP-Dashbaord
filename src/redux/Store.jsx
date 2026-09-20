@@ -10,6 +10,7 @@ import assignmentsReducer from "./redurcers/assignmentReducer";
 import warningsReducer from "./redurcers/warningReducer";
 import jobTitlesReducer from "./redurcers/jobTitleReducer";
 import notificationsReducer from "./redurcers/notificationReducer";
+import auditReducer from "./redurcers/auditReducer";
 
 const store = configureStore({
   reducer: {
@@ -23,6 +24,7 @@ const store = configureStore({
     warnings: warningsReducer,
     jobTitles: jobTitlesReducer,
     notifications: notificationsReducer,
+    audit: auditReducer,
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(thunk),
   devTools: false,

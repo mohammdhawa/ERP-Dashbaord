@@ -89,6 +89,15 @@ export const MENUITEMS = [
         title: "الأدوار والصلاحيات",
         requiredPermissions: ["auth.roles.view"],
       },
+      {
+        path: `${import.meta.env.BASE_URL}audit-log`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "سجل التدقيق",
+        requiredPermissions: ["auth.audit.view"],
+      },
     ],
   },
   {
