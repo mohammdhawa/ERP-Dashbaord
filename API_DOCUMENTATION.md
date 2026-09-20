@@ -135,6 +135,65 @@ Almost every endpoint returns the **same envelope**, so you can write a single p
 
 Most validation/business messages are returned in **Arabic**. Display `message` directly; use `errors` for per‑field highlighting.
 
+### Timestamps ⚠️ (the offset is Damascus, not UTC)
+
+**Every timestamp this API emits carries `+03:00`, not `+00:00`.** Resources
+serialize with Carbon's `toIso8601String()`, which preserves the instance's own
+zone, and the application timezone is `Asia/Damascus` with no connection-level
+override. So a real response reads:
+
+```json
+"created_at": "2026-09-16T14:03:12+03:00"
+```
+
+⚠️ **The `+00:00` in the JSON examples throughout this document is a
+transcription artefact, not the contract.** The offset in the string is the
+authoritative part — read it rather than assuming one.
+
+**Do not re-zone a timestamp into the reader's browser timezone before
+displaying it**, at least not silently. Two people comparing a record across a
+phone call need to be reading the same clock; if a screen does convert to local
+time, its column header has to say so.
+
+### Embedded objects (an FK and the thing it points at)
+
+Where a resource carries a foreign key you would otherwise resolve yourself, it
+ships the id **and** the referenced record beside it, under the same name
+without the `_id`:
+
+```json
+"manager_id": 12,
+"manager": { "id": 12, "full_name": "سامر خليل", "employee_number": "E-0012" }
+```
+
+- **The `*_id` is unchanged and is the write contract.** It is what you `POST` /
+  `PUT` back, and what permission fallbacks and client-side rules read. The
+  embedded object is read‑only decoration beside it — never send it back.
+- **The object is `null`, never missing, when there is nobody to name** — the FK
+  is null, or it points at a soft‑deleted row you could not fetch either way.
+- ⚠️ **A missing key means something else entirely: "you may not see this
+  field."** That is how field‑level gating is expressed (`national_id`, the pay
+  block — see [§8.1](#81-employee-object)). Never treat an absent key and a
+  `null` as the same thing.
+- **A person is always `{ id, full_name, employee_number }`**, wherever they are
+  embedded. `employee_number` is in there because الاسم الثلاثي is *not* unique
+  at this headcount — two people genuinely share one, and the staff number is
+  what tells them apart on screen.
+- **Embedded people are not permission‑gated.** Whoever may read the owning
+  record may see who the referenced person is; neither `full_name` nor
+  `employee_number` sits behind `viewIdentity` / `viewSalary`.
+
+Every embed below is resolved server‑side with a single query per page — reading
+a list never costs you a request per row.
+
+| Resource | FK | Embedded object |
+| --- | --- | --- |
+| Department | `manager_id` | `manager` — the employee who runs the unit |
+| User | `employee_id` | `employee` — the person the account belongs to |
+| Employee | `department_id` · `job_title_id` · `direct_manager_id` | `department` (`{id, name, level}`) · `job_title` (`{id, name}`) · `direct_manager` |
+| Employee warning | `issued_by` | `issuer` — who issued it |
+| Posting (assignment) | `department_id` · `job_title_id` | `department` · `job_title` |
+
 ### Pagination ⚠️ (important for list endpoints)
 
 **Every list endpoint in this API is paginated, and they all page identically** —
@@ -427,6 +486,7 @@ All routes are **protected** and guarded by `auth.users.*` permissions. Base pat
   "email": "jane@example.com",
   "is_active": true,
   "employee_id": 3,
+  "employee": { "id": 3, "full_name": "Jane Doe", "employee_number": "E-0003" },
   "roles": ["manager"],
   "last_login_at": "2026-06-21T09:59:00+00:00",
   "email_verified_at": null,
@@ -435,7 +495,8 @@ All routes are **protected** and guarded by `auth.users.*` permissions. Base pat
 ```
 
 - **An account stores no name of its own.** `name` is the name of the **linked HR employee** (`employee_id` → employees); it is `null` for an unlinked account. To "rename" a user you rename the employee (HR endpoints) or re‑link `employee_id`.
-- `employee_id` is **required on create** and unique — at most **one account per employee**.
+- 🆕 `employee` is that same person as an object — `{ id, full_name, employee_number }` — so a user list can show **who** each account belongs to without a lookup per row. It is **`null`, never absent**, for an unlinked account (or one whose employee was deleted); see [Embedded objects](#embedded-objects-an-fk-and-the-thing-it-points-at). `name` is unchanged and still the account's display name.
+- `employee_id` is **required on create** and unique — at most **one account per employee**. It remains the write contract: send `employee_id`, never `employee`.
 - `roles` is an array of **role names**, included only when the relation is loaded (it is loaded on all Users endpoints). Grant/revoke roles via the [assign/unassign endpoints](#54-assign-role-to-user) — not here.
 - `last_login_at` is the last successful login (`null` if the account never logged in).
 
@@ -444,7 +505,7 @@ All routes are **protected** and guarded by `auth.users.*` permissions. Base pat
 ```
 GET /api/auth/users          (permission: auth.users.view)
 ```
-Returns the full collection in `data` (array of user objects). Message: `تم جلب المستخدمين.`
+Paginated (15/page, `?page=N`, `?per_page=N`) — `data` is an array of user objects with the six `meta` keys beside it. Message: `تم جلب المستخدمين.`
 
 ### 4.2 Create user
 
@@ -729,11 +790,13 @@ The API therefore returns a **resolved** value: a section reads back
   "sector": 1,
   "sector_label": "المكاتب الإدارية",
   "manager_id": 4,
+  "manager": { "id": 4, "full_name": "سامر خليل", "employee_number": "E-0012" },
   "created_at": "2026-06-21T10:00:00+00:00",
   "updated_at": "2026-06-21T10:00:00+00:00"
 }
 ```
 
+- 🆕 `manager` is the employee `manager_id` points at — `{ id, full_name, employee_number }` — embedded so rendering "who runs this unit" costs no extra request. It is **`null`, never absent**, when the unit has no manager (or the recorded one has been deleted); see [Embedded objects](#embedded-objects-an-fk-and-the-thing-it-points-at). `manager_id` is unchanged and is still what you send on create/update.
 - `level` is the machine‑readable tier to filter on; `level_label` is the Arabic display name (resolved server‑side — do **not** hardcode a tier map in the frontend). `sector` / `sector_label` work the same way, with the addition that the value is **inherited** — see [الجهة](#الجهة--sector).
 - `code` is a stable short identifier derived from the unit's path through the tree (`FIN` → `FIN-CASH` → `FIN-CASH-VAULT`). Prefer it over `name` when matching units against an external system: names repeat across the company — `الحسابات` and `أمانة الصندوق` each occur under three different divisions.
 
@@ -854,7 +917,8 @@ which that was a migration rather than a data migration.
   "department": { "id": 2, "name": "الإدارة الهندسية", "level": 2 },
   "job_title_id": 7,
   "job_title": { "id": 7, "name": "مهندس مدني" },
-  "direct_manager_id": null,
+  "direct_manager_id": 12,
+  "direct_manager": { "id": 12, "full_name": "سامر خليل", "employee_number": "E-0012" },
   "employment_type": 1,
   "employment_type_label": "متعاقد",
   "workplace": "مجبل الإسفلت",
@@ -884,9 +948,19 @@ which that was a migration rather than a data migration.
 }
 ```
 
+🆕 `direct_manager` is the employee `direct_manager_id` points at —
+`{ id, full_name, employee_number }` — and is **`null`, never absent**, for the
+vast majority who have none. Remember what that null means here: **not** "has no
+manager" but "no manager *by exception* — resolve them from the org tree"
+(the unit's `manager_id`, walking up). `direct_manager_id` is unchanged and is
+still what you write. See
+[Embedded objects](#embedded-objects-an-fk-and-the-thing-it-points-at).
+
 **Field-level gating.** Gated keys are **absent entirely**, never `null` — an
 absent key says "you may not see this", a null would say "this employee has no
-national id".
+national id". The embedded `department`, `job_title` and `direct_manager`
+objects are the mirror image: always present, `null` when there is nothing to
+name, and never gated — a name and a staff number are not sensitive fields.
 
 | Permission | Gates |
 | --- | --- |
@@ -1113,12 +1187,18 @@ updates it in place rather than stacking a zero-length row in front of it.
   "issued_on": "2026-04-01",
   "sequence": 2,
   "issued_by": 9,
-  "issuer": { "id": 9, "full_name": "سامر خالد الحلبي" },
+  "issuer": { "id": 9, "full_name": "سامر خالد الحلبي", "employee_number": "E-0009" },
   "notes": "إنذار ثانٍ.",
   "created_at": "2026-09-13T10:00:00+00:00",
   "updated_at": "2026-09-13T10:00:00+00:00"
 }
 ```
+
+🆕 `issuer` now carries `employee_number` as well as `{ id, full_name }`, so an
+embedded person has the same three keys here as everywhere else
+([Embedded objects](#embedded-objects-an-fk-and-the-thing-it-points-at)).
+Purely additive — nothing was removed or renamed. It is `null` when no issuer is
+recorded.
 
 `sequence` is **computed, not stored** — it is this warning's position in the
 employee's sequence, counted from the live rows. Withdrawing warning #2 of 3
