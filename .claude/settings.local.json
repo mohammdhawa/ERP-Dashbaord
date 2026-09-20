@@ -49,7 +49,10 @@
       "Bash(grep -v \"^src/data/permissionsCatalog.js:.*//\")",
       "Bash(curl -s -o /dev/null -w \"audit-logs=%{http_code}\\\\n\" -H \"Accept: application/json\" --max-time 5 http://localhost:8000/api/auth/audit-logs)",
       "Bash(grep -n \"casts\\\\|created_at\\\\|datetime\\\\|protected \\\\$\" app/Shared/Models/AuditLog.php)",
-      "Bash(echo \"LINT EXIT: $?\")"
+      "Bash(echo \"LINT EXIT: $?\")",
+      "PowerShell(Copy-Item \"C:\\\\Users\\\\M.Hawa\\\\Desktop\\\\work\\\\alraqi-erp-system\\\\docs\\\\API_DOCUMENTATION.md\" \"C:\\\\Users\\\\M.Hawa\\\\Desktop\\\\work\\\\erp-dashboard\\\\API_DOCUMENTATION.md\" -Force; Write-Output \"lines: $\\(\\(Get-Content 'C:\\\\Users\\\\M.Hawa\\\\Desktop\\\\work\\\\erp-dashboard\\\\API_DOCUMENTATION.md' | Measure-Object -Line\\).Lines\\)\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(git --no-pager diff --numstat -- API_DOCUMENTATION.md)"
     ]
   }
 }
