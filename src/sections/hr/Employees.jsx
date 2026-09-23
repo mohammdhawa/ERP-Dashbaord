@@ -41,13 +41,13 @@ const ltr = (value) => (value ? <span dir="ltr">{value}</span> : dash);
 // which reads as "this company records no ID numbers" rather than "you may not
 // see them".
 // SORTABLE COLUMNS carry `sortKey` — the exact key the SERVER accepts
-// (EMPLOYEE_SORT_KEYS). Only three of these nine columns can have one:
+// (EMPLOYEE_SORT_KEYS). Only three of these eight columns can have one:
 //
 //   employee_number, hire_date  — direct column sorts.
 //   full_name → `first_name`    — see below.
 //
 // The rest are deliberately NOT sortable and must stay that way:
-//   legacy_number, national_id, phone, status_label  — no server sort key.
+//   national_id, phone, status_label  — no server sort key.
 //   job_title, department  — embedded objects; the server orders by the
 //     foreign key, which sorts by id and looks like no order at all.
 // Giving any of them a header button would advertise a sort that 422s.
@@ -64,13 +64,6 @@ const buildColumns = ({ canViewIdentity }) =>
       key: "employee_number",
       label: "الرقم الوظيفي",
       sortKey: "employee_number",
-      render: (value) => ltr(value),
-    },
-    {
-      // The imported paper number. HR will be holding documents that carry
-      // M024333 for years after the import, so it stays visible and searchable.
-      key: "legacy_number",
-      label: "الرقم القديم",
       render: (value) => ltr(value),
     },
     // Read-only accessor joining the three name parts; ordered by first_name,

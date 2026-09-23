@@ -22,7 +22,7 @@ import {
   isKnownAuditableType,
   isKnownEvent,
   securityNote,
-  valuesPermissionFor,
+  valuesPermissionsFor,
 } from "../../data/auditEvents.js";
 
 // ── Timestamps ──────────────────────────────────────────────────────────────
@@ -213,32 +213,37 @@ test("every target type names the module permission its values also need", () =>
   // permission is the defect this map was added to fix, so the names are
   // pinned. They must match permissionsCatalog exactly: `hr.job_titles.view`
   // not `hr.jobTitles.view`, `departments.view` with no module prefix.
-  assert.equal(valuesPermissionFor("employee"), "hr.employees.view");
-  assert.equal(valuesPermissionFor("employee_document"), "hr.employees.view");
-  assert.equal(valuesPermissionFor("employee_assignment"), "hr.assignments.view");
-  assert.equal(valuesPermissionFor("employee_warning"), "hr.warnings.view");
-  assert.equal(valuesPermissionFor("job_title"), "hr.job_titles.view");
-  assert.equal(valuesPermissionFor("department"), "departments.view");
-  assert.equal(valuesPermissionFor("user"), "auth.users.view");
-  assert.equal(valuesPermissionFor("role"), "auth.roles.view");
+  // An employee row needs viewSalary too since 2026-09-23: the classification
+  // axes are in the trail in cleartext, and pay is computed from them.
+  assert.deepEqual(valuesPermissionsFor("employee"), [
+    "hr.employees.view",
+    "hr.employees.viewSalary",
+  ]);
+  assert.deepEqual(valuesPermissionsFor("employee_document"), ["hr.employees.view"]);
+  assert.deepEqual(valuesPermissionsFor("employee_assignment"), ["hr.assignments.view"]);
+  assert.deepEqual(valuesPermissionsFor("employee_warning"), ["hr.warnings.view"]);
+  assert.deepEqual(valuesPermissionsFor("job_title"), ["hr.job_titles.view"]);
+  assert.deepEqual(valuesPermissionsFor("department"), ["departments.view"]);
+  assert.deepEqual(valuesPermissionsFor("user"), ["auth.users.view"]);
+  assert.deepEqual(valuesPermissionsFor("role"), ["auth.roles.view"]);
   // Permissions have no screen of their own; roles govern them either side.
-  assert.equal(valuesPermissionFor("permission"), "auth.roles.view");
+  assert.deepEqual(valuesPermissionsFor("permission"), ["auth.roles.view"]);
 });
 
 test("every auditable type has a values permission, with no orphans either way", () => {
   AUDITABLE_TYPES.forEach((type) =>
-    assert.notEqual(valuesPermissionFor(type), null, type)
+    assert.ok(valuesPermissionsFor(type)?.length > 0, type)
   );
 });
 
 test("an action-level row and an unknown type name no second permission", () => {
   // A login or api_request row's blobs hold request and auth metadata, not a
   // copy of anyone's record, so viewValues alone covers them.
-  assert.equal(valuesPermissionFor(null), null);
-  assert.equal(valuesPermissionFor(undefined), null);
+  assert.equal(valuesPermissionsFor(null), null);
+  assert.equal(valuesPermissionsFor(undefined), null);
   // A retired alias: the server still enforces something and the UI must not
   // claim to know what. The lock message falls back to naming both conditions.
-  assert.equal(valuesPermissionFor("contract"), null);
+  assert.equal(valuesPermissionsFor("contract"), null);
 });
 
 // ── Unresolvable vs absent targets (API doc §9.4) ───────────────────────────

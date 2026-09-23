@@ -193,29 +193,34 @@ export const AUDITABLE_TYPES = Object.freeze(Object.keys(AUDITABLE_META));
  * A row with NO target (login, api_request, the rest of the auth vocabulary)
  * is absent from this map on purpose: its blobs hold request and auth
  * metadata, not a copy of anyone's record, so viewValues alone covers it.
+ *
+ * ⚙️ A LIST PER TYPE, ALL REQUIRED, since 2026-09-23 — mirroring the server's
+ * `AuditLogDetailResource::TYPE_VIEW_PERMISSIONS`. `employee` needs
+ * `hr.employees.viewSalary` as well: the classification axes sit in the trail
+ * in cleartext, and they are what pay is computed from.
  */
-const VALUES_PERMISSION_BY_TYPE = Object.freeze({
-  employee: "hr.employees.view",
-  employee_assignment: "hr.assignments.view",
-  employee_document: "hr.employees.view",
-  employee_warning: "hr.warnings.view",
-  job_title: "hr.job_titles.view",
-  department: "departments.view",
-  user: "auth.users.view",
-  role: "auth.roles.view",
+const VALUES_PERMISSIONS_BY_TYPE = Object.freeze({
+  employee: Object.freeze(["hr.employees.view", "hr.employees.viewSalary"]),
+  employee_assignment: Object.freeze(["hr.assignments.view"]),
+  employee_document: Object.freeze(["hr.employees.view"]),
+  employee_warning: Object.freeze(["hr.warnings.view"]),
+  job_title: Object.freeze(["hr.job_titles.view"]),
+  department: Object.freeze(["departments.view"]),
+  user: Object.freeze(["auth.users.view"]),
+  role: Object.freeze(["auth.roles.view"]),
   // Permissions have no screen of their own; they are managed inside roles,
   // and the roles read permission is what governs them server-side too.
-  permission: "auth.roles.view",
+  permission: Object.freeze(["auth.roles.view"]),
 });
 
 /**
- * @returns {string|null} the module view permission this row's values ALSO
- *   require, or null when there is none to name — an action-level row, or a
+ * @returns {string[]|null} the permissions this row's values ALSO require, all
+ *   of them, or null when there are none to name — an action-level row, or a
  *   target type this build has not been taught (in which case the server still
  *   enforces something and the UI must not claim to know what).
  */
-export const valuesPermissionFor = (type) =>
-  VALUES_PERMISSION_BY_TYPE[type] || null;
+export const valuesPermissionsFor = (type) =>
+  VALUES_PERMISSIONS_BY_TYPE[type] || null;
 
 /**
  * @returns {string|null} a BASE_URL-relative path, or null when the type has no

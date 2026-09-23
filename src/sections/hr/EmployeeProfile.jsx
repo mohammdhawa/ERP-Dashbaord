@@ -237,12 +237,6 @@ const EmployeeProfile = () => {
                       </div>
                     </Col>
                     <Col xs={6} md={4}>
-                      <div className="text-muted fs-11">الرقم القديم</div>
-                      <div className="fw-medium">
-                        <bdi dir="ltr">{current.legacy_number || "—"}</bdi>
-                      </div>
-                    </Col>
-                    <Col xs={6} md={4}>
                       <div className="text-muted fs-11">تاريخ التعيين</div>
                       <div className="fw-medium">
                         <bdi dir="ltr">{current.hire_date || "—"}</bdi>

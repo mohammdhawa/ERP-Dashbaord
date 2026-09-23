@@ -7,6 +7,9 @@
 //    the editor could not read must not be rendered AND must not be submitted:
 //    initialising an input from a missing key yields "", and submitting "" as
 //    null would wipe a stored value the editor was never allowed to see.
+//    Since 2026-09-23 the server enforces the same rule (من لا يرى لا يكتُب):
+//    a gated key in the body — even as null — is a 422 naming that field, so
+//    breaking this rule is now a failed save, not a silent overwrite.
 //
 // 2. OMIT vs NULL. Not every optional field is nullable. Where the contract
 //    does not mark a field nullable, a blank input means OMIT the key (the
@@ -43,7 +46,6 @@ const num = (value) => (isBlank(value) ? null : Number(value));
 export const emptyEmployeeForm = Object.freeze({
   // الهوية
   employee_number: "",
-  legacy_number: "",
   first_name: "",
   middle_name: "",
   last_name: "",
@@ -119,7 +121,6 @@ export const getEmployeeFormValues = (employee) => {
   return {
     ...emptyEmployeeForm,
     employee_number: pick("employee_number"),
-    legacy_number: pick("legacy_number"),
     first_name: pick("first_name"),
     middle_name: pick("middle_name"),
     last_name: pick("last_name"),
@@ -134,7 +135,14 @@ export const getEmployeeFormValues = (employee) => {
     nationality: pick("nationality"),
     second_nationality: pick("second_nationality"),
     marital_status: pick("marital_status"),
-    wives_count: pick("wives_count"),
+    // A stored count belongs to a married employee only. Seeding it for anybody
+    // else drops a value into a box the form then DISABLES, and the modal's
+    // clearing effect does not rescue it: that effect watches the married flag,
+    // which does not change when a record is loaded into an open modal.
+    wives_count:
+      Number(employee.marital_status) === MARITAL_MARRIED
+        ? pick("wives_count")
+        : "",
     sons_count: pick("sons_count"),
     daughters_count: pick("daughters_count"),
 
@@ -228,8 +236,10 @@ export const buildEmployeePayload = (values, options = {}) => {
   setOmittableStr("middle_name", values.middle_name);
   setOmittableStr("last_name", values.last_name);
   setNullableStr("mother_name", values.mother_name);
-  setNullableStr("legacy_number", values.legacy_number);
 
+  // The ONE staff number since 2026-09-23 — `legacy_number` is gone, and a
+  // paper-file M024333 is stored here exactly as typed.
+  //
   // Omitted when blank in BOTH directions: on create that is what triggers
   // EMP-00001 generation; on update the rule is `filled`, so it cannot be
   // cleared and a blank box must not try.
@@ -404,9 +414,14 @@ export const validateEmployeeForm = (values, options = {}) => {
       "تاريخ انتهاء العمل لا يمكن أن يسبق تاريخ التعيين.",
     ];
 
+  // Only a POSITIVE count breaks the rule. 0 does not: it is precisely what
+  // buildEmployeePayload sends for a non-married employee, and what the server
+  // stores for one. Rejecting it made every عازب / مطلق / أرمل record that came
+  // back with wives_count 0 impossible to save — on a field the form disables,
+  // so there was nothing the user could do about it.
   if (
     Number(values.marital_status) !== MARITAL_MARRIED &&
-    !isBlank(values.wives_count)
+    num(values.wives_count) > 0
   )
     errors.wives_count = ["عدد الزوجات يُحدَّد للموظف المتزوج فقط."];
 

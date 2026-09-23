@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
-import { auditableRoute, valuesPermissionFor } from "../../data/auditEvents";
+import { auditableRoute, valuesPermissionsFor } from "../../data/auditEvents";
 import { hasPermission, permissionLabel } from "../../data/permissionsCatalog";
 import {
   diffKeys,
@@ -136,10 +136,11 @@ const Absent = () => (
 /**
  * WHY the values are locked, in the reader's own terms.
  *
- * Since 2026-09-20 the blobs need TWO grants, not one (API doc §9.2):
+ * Since 2026-09-20 the blobs need more than one grant (API doc §9.2):
  * `auth.audit.viewValues` on every row, AND the view permission of the module
  * the row is about — an audit row is a copy of someone else's record. A row
- * with NO target needs only the first.
+ * with NO target needs only the first. Since 2026-09-23 an `employee` row also
+ * needs `hr.employees.viewSalary`, so the module side is a LIST, all required.
  *
  * ⚠️ THE ANSWER IS PER ROW, NOT PER SESSION. The same signed-in user gets the
  * values on a login row and not on the employee row beneath it, so this is
@@ -157,13 +158,19 @@ const LockedValues = ({ detail }) => {
   // §9.4: a NULL type with an id is an unresolvable target, not "no target" —
   // the id is what says a target exists, so that is what is tested.
   const hasTarget = detail?.auditable_id != null;
-  const modulePermission = hasTarget
-    ? valuesPermissionFor(detail?.auditable_type)
+  const modulePermissions = hasTarget
+    ? valuesPermissionsFor(detail?.auditable_type)
     : null;
 
   const holdsViewValues = hasPermission(permissions, "auth.audit.viewValues");
-  const lacksModule =
-    modulePermission && !hasPermission(permissions, modulePermission);
+  // Only the ones actually missing: an HR editor with hr.employees.view but no
+  // viewSalary must be told about viewSalary, not about both.
+  const missingModule = (modulePermissions || []).filter(
+    (name) => !hasPermission(permissions, name)
+  );
+  const lacksModule = missingModule.length > 0;
+  const named = (list) =>
+    list.map((name) => `«${permissionLabel(name)}» (${name})`).join(" و");
 
   return (
     <div className="border rounded p-3 text-center">
@@ -183,9 +190,10 @@ const LockedValues = ({ detail }) => {
         // copy on the one screen whose job is saying truthfully who can see
         // what. Name the grant they are actually missing.
         <span className="text-muted fs-12">
-          لديك «عرض تفاصيل التغييرات»، لكن قيم هذا السجل تتطلب أيضاً صلاحية «
-          {permissionLabel(modulePermission)}» ({modulePermission}) — سجل
-          التدقيق يحتفظ بنسخة من السجل نفسه، والاطّلاع عليه اطّلاع على بياناته.
+          لديك «عرض تفاصيل التغييرات»، لكن قيم هذا السجل تتطلب أيضاً{" "}
+          {missingModule.length > 1 ? "صلاحيتي" : "صلاحية"}{" "}
+          {named(missingModule)} — سجل التدقيق يحتفظ بنسخة من السجل نفسه،
+          والاطّلاع عليه اطّلاع على بياناته.
         </span>
       ) : (
         // Either viewValues is missing too, or we cannot tell which one is:
@@ -193,11 +201,9 @@ const LockedValues = ({ detail }) => {
         // permission list must not turn into a confident accusation. State
         // both requirements instead.
         <span className="text-muted fs-12">
-          تتطلب قيم سجل يخص سجلاً آخر صلاحيتين معاً: «عرض تفاصيل التغييرات»
+          تتطلب قيم سجل يخص سجلاً آخر: «عرض تفاصيل التغييرات»
           (auth.audit.viewValues)، وصلاحية عرض الوحدة التي يخصها السجل
-          {modulePermission
-            ? ` «${permissionLabel(modulePermission)}» (${modulePermission})`
-            : ""}
+          {modulePermissions ? ` ${named(modulePermissions)}` : ""}
           .
         </span>
       )}

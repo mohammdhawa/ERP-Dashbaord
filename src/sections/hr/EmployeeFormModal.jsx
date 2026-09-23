@@ -66,7 +66,6 @@ const TABS = [
 // Which tab each field lives on, so a server 422 can point at it.
 const FIELD_TAB = {
   employee_number: "identity",
-  legacy_number: "identity",
   first_name: "identity",
   middle_name: "identity",
   last_name: "identity",
@@ -654,15 +653,6 @@ const EmployeeFormModal = ({
                       isInvalid={!!fieldError("employee_number")}
                     />
                     <Err field="employee_number" />
-                  </Col>
-                  <Col sm={12} md={4}>
-                    <Text
-                      field="legacy_number"
-                      label="الرقم القديم (الورقي)"
-                      maxLength={50}
-                      dir="ltr"
-                      placeholder="M024333"
-                    />
                   </Col>
                   {canViewIdentity && (
                     <Col sm={12} md={4}>

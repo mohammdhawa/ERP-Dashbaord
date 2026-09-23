@@ -127,7 +127,6 @@ const EmployeeOverview = ({ employee }) => {
           value={employee.employee_number}
           dir="ltr"
         />
-        <Field label="الرقم القديم" value={employee.legacy_number} dir="ltr" />
         {canViewIdentity && (
           <Field label="رقم الهوية" value={employee.national_id} dir="ltr" />
         )}

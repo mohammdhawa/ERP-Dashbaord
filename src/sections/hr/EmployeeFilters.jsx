@@ -96,7 +96,7 @@ const EmployeeFilters = ({ filters, onChange, onReset }) => {
         <Form.Control
           id="emp-search"
           type="search"
-          placeholder="الاسم أو الرقم الوظيفي أو الرقم القديم"
+          placeholder="الاسم أو الرقم الوظيفي"
           value={searchDraft}
           onChange={(e) => setSearchDraft(e.target.value)}
         />

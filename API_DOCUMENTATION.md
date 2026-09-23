@@ -2,6 +2,27 @@
 
 > Reference for frontend implementation. Covers every endpoint shipped in Phase 1:
 > **Auth**, **Users**, **Roles & Permissions (RBAC)**, **Notifications**, **Departments**, and **HR / Employees**.
+>
+> ⚠️ **ALSO 2026-09-23 — `viewSalary` / `viewIdentity` now gate WRITES.**
+> Sending a pay field or `national_id` without the matching permission is a
+> **422** naming the field, and `null` is refused like a value. Employee rows in
+> the audit trail need `hr.employees.viewSalary` for their `old_values` /
+> `new_values`. See §2 (field-level permissions) and §9.
+>
+> ⚠️ **BREAKING, 2026-09-23 — login takes `login`, not `email`.** Every client
+> must change its login call. The identifier is now the employee number, an
+> account may have no email at all, and a new **`POST /api/auth/password`**
+> exists. While `must_change_password` is `true` the API answers **403** on
+> everything except that route, `/auth/logout` and `/auth/me`. Read §3.1 and
+> §3.5 before touching the auth code.
+>
+> ⚙️ **Changed 2026-09-23 — `legacy_number` is gone.** The employee payload no
+> longer carries it, `search` no longer matches it, and it is rejected on create
+> and update. The company keeps **one** staff number — `employee_number` — and a
+> hand-typed `M024333` is stored exactly as given, so searching by a number off a
+> paper file still works. **If a list column or a profile header shows a separate
+> old-number field, remove it**; `FRONTEND_BATCH2_WORK_ORDER.md` asked for one
+> and that instruction is withdrawn.
 
 ---
 
@@ -134,6 +155,42 @@ Almost every endpoint returns the **same envelope**, so you can write a single p
 ### Validation messages language
 
 Most validation/business messages are returned in **Arabic**. Display `message` directly; use `errors` for per‑field highlighting.
+
+### Timestamps ⚠️ (applies to every endpoint, not just one)
+
+**Every timestamp this API returns is ISO‑8601 carrying the `+03:00` offset.**
+
+```json
+"created_at": "2026-06-21T10:00:00+03:00"
+```
+
+The app timezone is **Asia/Damascus**, and every resource serialises datetimes
+with Carbon's `toIso8601String()`, which preserves the instance's zone. So
+`created_at`, `updated_at`, `last_login_at`, `email_verified_at` and every other
+`_at` field carry `+03:00` — on Auth, Users, Roles, Notifications, Departments,
+HR and the audit log alike. There is no endpoint that returns UTC.
+
+**Parse the offset the server sent. Do not re‑zone it, and do not strip it.** A
+client that treats these as UTC renders the entire system three hours early —
+and it is a *plausible* three hours, which is what makes it dangerous: the dates
+stay right, nothing looks broken, and an evening event reads as afternoon.
+
+**The one exception, and it is not a serialised field.** Inside the audit log's
+`old_values` / `new_values` (§9.2), a timestamp appears as the raw stored
+column — `"updated_at": "2026-09-20 11:24:23"` — in DB format, Damascus local,
+with **no offset and no `T`**. Those blobs are a verbatim copy of the audited
+row, not a rendered resource, and putting an offset on them at read time would
+mean rewriting history on an append-only table. **Read a bare timestamp as
+Damascus local**; that is what the server means by one, and it is the only place
+you will meet it.
+
+> ⚠️ **Corrected 2026‑09‑20.** Every JSON example in this document below §1 used
+> to show `+00:00`. That was wrong for all of them — seventeen examples across
+> six sections — and nothing in the API ever behaved that way. The rule was
+> stated only in §9.6, where it read as a quirk of the audit log rather than as
+> what it is: a property of every response. `TimestampContractTest` now sweeps
+> every `_at` key of every shipped endpoint, at any depth, so an example and the
+> wire cannot drift apart again without failing the build.
 
 ### Embedded objects (an FK and the thing it points at)
 
@@ -294,6 +351,21 @@ classification axes (`activity_type`, `organizational_grade`, …) — the axes 
 the inputs the salary is computed from, so hiding the result while exposing them
 would be theatre.
 
+> ⚠️ **NEW 2026-09-23 — these permissions now gate WRITES too: من لا يرى لا
+> يكتُب.** Sending any field in the table above on `POST /api/hr/employees` or
+> `PUT/PATCH /api/hr/employees/{id}` **without the matching permission is a
+> 422**, with the error on that field:
+>
+> ```json
+> { "errors": { "agreed_salary": ["لا تملك صلاحية تعديل حقول الرواتب ومعاييرها."] } }
+> ```
+>
+> **The field must be ABSENT, not `null`.** Sending `"agreed_salary": null` is
+> refused exactly like sending a value — otherwise a caller who cannot read a
+> salary could clear one. This is the server half of the rule your UI already
+> follows: *don't render, don't send*. A payload that reaches the API carrying a
+> gated field is a client bug, and the 422 names which field it was.
+
 A missing permission yields:
 
 ```json
@@ -314,17 +386,25 @@ HTTP `403`.
 ```
 POST /api/auth/login
 ```
-**Public.** Rate limited to **5 requests/minute per IP**.
+**Public.** Rate limited to **5 requests/minute per IP + identifier**.
+
+> ⚠️ **BREAKING, 2026-09-23 — the field is `login`, not `email`.** Sending
+> `email` is now a 422. The identifier is the **employee number**
+> (`EMP-00042`), because most site staff have no email address and every
+> employee needs an account: attendance is recorded through the app. An account
+> with no employee — the technical department, `super_admin` — still signs in
+> with its email, through the same field. **One field, either value; the server
+> works out which.**
 
 **Request body**
 
-| Field      | Type   | Rules                            |
-| ---------- | ------ | -------------------------------- |
-| `email`    | string | required, email, max 255         |
-| `password` | string | required, 8–128 chars            |
+| Field      | Type   | Rules                                                     |
+| ---------- | ------ | --------------------------------------------------------- |
+| `login`    | string | required, max 255 — an employee number **or** an email      |
+| `password` | string | required, 8–128 chars                                       |
 
 ```json
-{ "email": "admin@example.com", "password": "secret123" }
+{ "login": "EMP-00042", "password": "secret123" }
 ```
 
 **200 Response**
@@ -339,6 +419,7 @@ POST /api/auth/login
       "name": "Test User",
       "email": "admin@example.com",
       "is_active": true,
+      "must_change_password": false,
       "roles": ["super_admin"],
       "permissions": [
         "auth.users.view", "auth.users.create", "auth.users.update", "auth.users.delete",
@@ -346,9 +427,9 @@ POST /api/auth/login
         "departments.view", "departments.create", "departments.update", "departments.delete",
         "hr.employees.view", "hr.employees.create", "hr.employees.update", "hr.employees.delete"
       ],
-      "last_login_at": "2026-06-21T09:59:00+00:00",
+      "last_login_at": "2026-06-21T09:59:00+03:00",
       "email_verified_at": null,
-      "created_at": "2026-06-21T10:00:00+00:00"
+      "created_at": "2026-06-21T10:00:00+03:00"
     },
     "access_token": "1|xxxxxxxxxxxxxxxxxxxxxxxx",
     "refresh_token": "64-character-random-string",
@@ -443,18 +524,66 @@ GET /api/auth/me
     "name": "Test User",
     "email": "admin@example.com",
     "is_active": true,
+    "must_change_password": false,
     "roles": ["super_admin"],
     "permissions": ["auth.users.view", "auth.roles.view", "hr.employees.view", "..."],
-    "last_login_at": "2026-06-21T09:59:00+00:00",
+    "last_login_at": "2026-06-21T09:59:00+03:00",
     "email_verified_at": null,
-    "created_at": "2026-06-21T10:00:00+00:00"
+    "created_at": "2026-06-21T10:00:00+03:00"
   }
 }
 ```
 
 - `name` is the **linked employee's** name (`null` when the account has no employee link).
+- `email` **may be `null`** since 2026-09-23. It is a contact field, not the identity — see §3.1.
 - `permissions` is the **union** of every permission across the user's roles, de‑duplicated. A user with no roles gets `[]`. A **super admin** gets the **entire catalogue**.
 - `roles` is an array of role names.
+- ⚠️ `must_change_password` — when `true`, **open the change-password screen, not the dashboard.** Every other endpoint answers 403 until it is cleared. See §3.5.
+
+---
+
+### 3.5 Change your own password
+
+```
+POST /api/auth/password
+```
+**Protected. Self-scoped — no permission required**, because it acts only on the caller's own credential.
+
+> **Why this exists.** The first password of every account is issued by HR, so it is a secret more than one person knows. The account carries `must_change_password` until it is replaced, and while that flag is set **the API refuses every route except this one, `/auth/logout` and `/auth/me`** with a **403**.
+>
+> **403, not 401 — do not refresh the token and do not bounce to login.** The session is valid; the *action* is refused. Treating it as an auth failure produces an infinite loop, because re-authenticating changes nothing.
+
+**Request body**
+
+| Field                   | Type   | Rules                                                        |
+| ----------------------- | ------ | ------------------------------------------------------------ |
+| `current_password`      | string | required                                                      |
+| `password`              | string | required, 8–128, **confirmed**, must differ from the current   |
+| `password_confirmation` | string | required, must match `password`                               |
+
+**200 Response** — a **fresh token pair**, because a successful change revokes every session including the caller's:
+
+```json
+{
+  "success": true,
+  "message": "تم تغيير كلمة المرور بنجاح. تم إنهاء الجلسات الأخرى.",
+  "data": {
+    "access_token": "3|xxxxxxxxxxxxxxxxxxxxxxxx",
+    "refresh_token": "64-character-random-string",
+    "token_type": "Bearer",
+    "expires_in": 900
+  }
+}
+```
+
+⚠️ **Replace your stored tokens with these.** Every previously issued token for this account — including the one that made this request — is dead by the time the response arrives. That is deliberate: if somebody else had signed in with the temporary password, a change that spared their session would have locked nobody out.
+
+**Failures**
+
+| Status | When |
+| ------ | ---- |
+| **401** | `current_password` is wrong (`كلمة المرور الحالية غير صحيحة.`) |
+| **422** | The new password is too short, unconfirmed, or identical to the current one |
 
 ---
 
@@ -475,9 +604,9 @@ All routes are **protected** and guarded by `auth.users.*` permissions. Base pat
   "employee_id": 3,
   "employee": { "id": 3, "full_name": "Jane Doe", "employee_number": "E-0003" },
   "roles": ["manager"],
-  "last_login_at": "2026-06-21T09:59:00+00:00",
+  "last_login_at": "2026-06-21T09:59:00+03:00",
   "email_verified_at": null,
-  "created_at": "2026-06-21T10:00:00+00:00"
+  "created_at": "2026-06-21T10:00:00+03:00"
 }
 ```
 
@@ -503,7 +632,7 @@ POST /api/auth/users         (permission: auth.users.create)
 | Field         | Type    | Rules                                                                       |
 | ------------- | ------- | --------------------------------------------------------------------------- |
 | `employee_id` | integer | **required**; must be an existing, non‑deleted employee; must not already have an account |
-| `email`       | string  | required, email, max 255, **unique**                                        |
+| `email`       | string  | **optional, nullable** since 2026-09-23, email, max 255, unique when present |
 | `password`    | string  | required, min 8                                                             |
 | `is_active`   | boolean | optional (defaults to `true`)                                               |
 
@@ -520,7 +649,7 @@ Partial update — all fields optional.
 | Field         | Type    | Rules                                                                        |
 | ------------- | ------- | ---------------------------------------------------------------------------- |
 | `employee_id` | integer | optional; re‑links the account to another existing, non‑deleted employee not already linked elsewhere |
-| `email`       | string  | optional, email, max 255, unique (ignores this user)                         |
+| `email`       | string  | optional, **nullable**, email, max 255, unique (ignores this user)           |
 | `password`    | string  | optional, nullable, min 8 (re‑hashed when sent)                              |
 | `is_active`   | boolean | optional                                                                     |
 
@@ -552,7 +681,7 @@ All routes **protected**, base path `/api/auth/roles`, guarded by `auth.roles.*`
   "description": "Department managers",
   "is_system": false,
   "permissions": ["hr.employees.view", "hr.employees.update"],
-  "created_at": "2026-06-21T10:00:00+00:00"
+  "created_at": "2026-06-21T10:00:00+03:00"
 }
 ```
 
@@ -658,7 +787,7 @@ Base path `/api/auth/notifications`. **Protected** (auth only — no permission 
   "type": "employee_created",
   "reference": { "type": "employee", "id": 5 },
   "is_read": false,
-  "created_at": "2026-06-21T10:00:00+00:00"
+  "created_at": "2026-06-21T10:00:00+03:00"
 }
 ```
 
@@ -778,8 +907,8 @@ The API therefore returns a **resolved** value: a section reads back
   "sector_label": "المكاتب الإدارية",
   "manager_id": 4,
   "manager": { "id": 4, "full_name": "سامر خليل", "employee_number": "E-0012" },
-  "created_at": "2026-06-21T10:00:00+00:00",
-  "updated_at": "2026-06-21T10:00:00+00:00"
+  "created_at": "2026-06-21T10:00:00+03:00",
+  "updated_at": "2026-06-21T10:00:00+03:00"
 }
 ```
 
@@ -858,7 +987,6 @@ which that was a migration rather than a data migration.
 {
   "id": 1,
   "employee_number": "EMP-00001",
-  "legacy_number": "M024333",
 
   "first_name": "سامر",
   "middle_name": "خالد",
@@ -930,8 +1058,8 @@ which that was a migration rather than a data migration.
   "agreed_salary": null,
   "sham_cash_account": "1234567890123456",
 
-  "created_at": "2026-09-13T10:00:00+00:00",
-  "updated_at": "2026-09-13T10:00:00+00:00"
+  "created_at": "2026-09-13T10:00:00+03:00",
+  "updated_at": "2026-09-13T10:00:00+03:00"
 }
 ```
 
@@ -976,7 +1104,7 @@ Both gates behave identically on the list and single endpoints.
 | `department_id` | int | must exist and not be deleted |
 | `job_title_id` | int | must exist and not be deleted |
 | `activity_type` | int | 1–5 |
-| `search` | string | matches any name part, `employee_number` **or** `legacy_number` |
+| `search` | string | matches any name part or `employee_number` |
 | `sort` | string | `employee_number`, `first_name`, `last_name`, `hire_date`, `created_at`; prefix `-` for descending |
 
 ⚠️ An unknown `sort` or an invalid filter is a **422**, not a silent fallback —
@@ -991,7 +1119,6 @@ required; required applies on create only.
 | `first_name` / `middle_name` / `last_name` | string | **required on create**, max 255 |
 | `gender` | int | **required on create**, `1` ذكر · `2` أنثى |
 | `employee_number` | string | optional, max 50, unique — **auto-generated when omitted**, and a supplied value is kept as-is |
-| `legacy_number` | string | optional, nullable, max 50, unique — the `M024333` values |
 | `national_id` | string | optional, nullable, max 50, unique |
 | `mother_name` | string | optional, nullable, max 255 |
 | `birth_date` | date | optional, nullable, must be before today |
@@ -1061,8 +1188,8 @@ answered by filtering employees on `job_title_id`.
   "is_described": false,
   "description": null,
   "is_active": true,
-  "created_at": "2026-09-13T10:00:00+00:00",
-  "updated_at": "2026-09-13T10:00:00+00:00"
+  "created_at": "2026-09-13T10:00:00+03:00",
+  "updated_at": "2026-09-13T10:00:00+03:00"
 }
 ```
 
@@ -1117,7 +1244,7 @@ one; the earliest row is their initial posting.
   "legacy_workplace": null,
   "legacy_manager_name": null,
   "notes": "قرار رقم 41",
-  "created_at": "2026-09-13T10:00:00+00:00"
+  "created_at": "2026-09-13T10:00:00+03:00"
 }
 ```
 
@@ -1176,8 +1303,8 @@ updates it in place rather than stacking a zero-length row in front of it.
   "issued_by": 9,
   "issuer": { "id": 9, "full_name": "سامر خالد الحلبي", "employee_number": "E-0009" },
   "notes": "إنذار ثانٍ.",
-  "created_at": "2026-09-13T10:00:00+00:00",
-  "updated_at": "2026-09-13T10:00:00+00:00"
+  "created_at": "2026-09-13T10:00:00+03:00",
+  "updated_at": "2026-09-13T10:00:00+03:00"
 }
 ```
 
@@ -1327,6 +1454,17 @@ Two permissions are needed for the values, not one:
    `api_request`) need only the first: their blobs hold request and auth
    metadata, which is nobody else's data.
 
+⚠️ **An `employee` row needs a THIRD permission since 2026-09-23:
+`hr.employees.viewSalary`.** The classification axes are stored in the trail in
+cleartext — they are ordinary integers, so the redaction list never covered them
+— and they are the inputs pay is computed from. Without this, a caller holding
+`hr.employees.view` + `viewValues` read a grade out of history that the same
+caller is refused on the employee itself. The axes are **not** redacted instead,
+on purpose: redaction on an append-only table is permanent, and it would erase
+*who changed this person's grade, and to what*. `changed_fields` still arrives
+either way, so "someone changed this employee's grade at 14:03" stays answerable
+without reading the grade.
+
 **So the same caller can get the values on one row and not the next.** Decide
 per row from what the payload actually contains; never from a remembered
 "may I see values" flag.
@@ -1420,10 +1558,14 @@ acceptable on an audit tool.
 
 ### 9.6 Timestamps
 
-`created_at` is ISO-8601 **carrying the `+03:00` offset**. The app timezone is
-`Asia/Damascus` and the column holds local wall-clock time. Parse the offset the
-server sent; do not re-zone it and do not strip it, or every event moves three
-hours.
+`created_at` is ISO-8601 **carrying the `+03:00` offset**, like every other
+timestamp in this API — see §1 Timestamps, which is where the rule lives. It is
+repeated here only because on this screen the consequence is sharpest: an audit
+row read three hours early puts an event in the wrong part of someone's working
+day, which is the question the screen exists to answer.
+
+Note that timestamps *inside* `old_values` / `new_values` are the raw stored
+columns and carry no offset at all (§1). Read those as Damascus local.
 
 `date_from` / `date_to` are inclusive of the whole end day, so
 `date_from=date_to=2026-09-16` returns that day including its last hour.
@@ -1438,42 +1580,43 @@ hours.
 | 2 | POST        | `/api/auth/refresh`                          | public   | — (10/min)             |
 | 3 | POST        | `/api/auth/logout`                           | bearer   | —                      |
 | 4 | GET         | `/api/auth/me`                               | bearer   | —                      |
-| 5 | GET         | `/api/auth/users`                            | bearer   | `auth.users.view`      |
-| 6 | POST        | `/api/auth/users`                            | bearer   | `auth.users.create`    |
-| 7 | PUT/PATCH   | `/api/auth/users/{user}`                     | bearer   | `auth.users.update`    |
-| 8 | DELETE      | `/api/auth/users/{user}`                     | bearer   | `auth.users.delete`    |
-| 9 | GET         | `/api/auth/roles`                            | bearer   | `auth.roles.view`      |
-| 10| POST        | `/api/auth/roles`                            | bearer   | `auth.roles.create`    |
-| 11| PUT/PATCH   | `/api/auth/roles/{role}`                     | bearer   | `auth.roles.update`    |
-| 12| DELETE      | `/api/auth/roles/{role}`                     | bearer   | `auth.roles.delete`    |
-| 13| POST        | `/api/auth/roles/assign`                     | bearer   | `auth.roles.update`    |
-| 14| POST        | `/api/auth/roles/unassign`                   | bearer   | `auth.roles.update`    |
-| 15| GET         | `/api/auth/notifications`                    | bearer   | — (owner‑scoped)       |
-| 16| GET         | `/api/auth/notifications/unread-count`       | bearer   | — (owner‑scoped)       |
-| 17| POST        | `/api/auth/notifications/{notification}/read`| bearer   | — (owner‑scoped)       |
-| 18| GET         | `/api/auth/audit-logs`                       | bearer   | `auth.audit.view`      |
-| 19| GET         | `/api/auth/audit-logs/{auditLog}`            | bearer   | `auth.audit.view`      |
-| 20| GET         | `/api/departments`                           | bearer   | `departments.view`     |
-| 21| POST        | `/api/departments`                           | bearer   | `departments.create`   |
-| 22| GET         | `/api/departments/{department}`              | bearer   | `departments.view`     |
-| 23| PUT/PATCH   | `/api/departments/{department}`              | bearer   | `departments.update`   |
-| 24| DELETE      | `/api/departments/{department}`              | bearer   | `departments.delete`   |
-| 25| GET         | `/api/hr/employees`                          | bearer   | `hr.employees.view`    |
-| 26| POST        | `/api/hr/employees`                          | bearer   | `hr.employees.create`  |
-| 27| GET         | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.view`    |
-| 28| PUT/PATCH   | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.update`  |
-| 29| DELETE      | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.delete`  |
-| 30| GET         | `/api/hr/job-titles`                         | bearer   | `hr.job_titles.view`   |
-| 31| POST        | `/api/hr/job-titles`                         | bearer   | `hr.job_titles.create` |
-| 32| GET         | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.view`   |
-| 33| PUT/PATCH   | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.update` |
-| 34| DELETE      | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.delete` |
-| 35| GET         | `/api/hr/employees/{employee}/assignments`   | bearer   | `hr.assignments.view`  |
-| 36| POST        | `/api/hr/employees/{employee}/assignments`   | bearer   | `hr.assignments.create`|
-| 37| GET         | `/api/hr/employees/{employee}/warnings`      | bearer   | `hr.warnings.view`     |
-| 38| POST        | `/api/hr/employees/{employee}/warnings`      | bearer   | `hr.warnings.create`   |
-| 39| PUT/PATCH   | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.update`   |
-| 40| DELETE      | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.delete`   |
+| 5 | POST        | `/api/auth/password`                         | bearer   | — (self-scoped)        |
+| 6 | GET         | `/api/auth/users`                            | bearer   | `auth.users.view`      |
+| 7 | POST        | `/api/auth/users`                            | bearer   | `auth.users.create`    |
+| 8 | PUT/PATCH   | `/api/auth/users/{user}`                     | bearer   | `auth.users.update`    |
+| 9 | DELETE      | `/api/auth/users/{user}`                     | bearer   | `auth.users.delete`    |
+| 10| GET         | `/api/auth/roles`                            | bearer   | `auth.roles.view`      |
+| 11| POST        | `/api/auth/roles`                            | bearer   | `auth.roles.create`    |
+| 12| PUT/PATCH   | `/api/auth/roles/{role}`                     | bearer   | `auth.roles.update`    |
+| 13| DELETE      | `/api/auth/roles/{role}`                     | bearer   | `auth.roles.delete`    |
+| 14| POST        | `/api/auth/roles/assign`                     | bearer   | `auth.roles.update`    |
+| 15| POST        | `/api/auth/roles/unassign`                   | bearer   | `auth.roles.update`    |
+| 16| GET         | `/api/auth/notifications`                    | bearer   | — (owner‑scoped)       |
+| 17| GET         | `/api/auth/notifications/unread-count`       | bearer   | — (owner‑scoped)       |
+| 18| POST        | `/api/auth/notifications/{notification}/read`| bearer   | — (owner‑scoped)       |
+| 19| GET         | `/api/auth/audit-logs`                       | bearer   | `auth.audit.view`      |
+| 20| GET         | `/api/auth/audit-logs/{auditLog}`            | bearer   | `auth.audit.view`      |
+| 21| GET         | `/api/departments`                           | bearer   | `departments.view`     |
+| 22| POST        | `/api/departments`                           | bearer   | `departments.create`   |
+| 23| GET         | `/api/departments/{department}`              | bearer   | `departments.view`     |
+| 24| PUT/PATCH   | `/api/departments/{department}`              | bearer   | `departments.update`   |
+| 25| DELETE      | `/api/departments/{department}`              | bearer   | `departments.delete`   |
+| 26| GET         | `/api/hr/employees`                          | bearer   | `hr.employees.view`    |
+| 27| POST        | `/api/hr/employees`                          | bearer   | `hr.employees.create`  |
+| 28| GET         | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.view`    |
+| 29| PUT/PATCH   | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.update`  |
+| 30| DELETE      | `/api/hr/employees/{employee}`               | bearer   | `hr.employees.delete`  |
+| 31| GET         | `/api/hr/job-titles`                         | bearer   | `hr.job_titles.view`   |
+| 32| POST        | `/api/hr/job-titles`                         | bearer   | `hr.job_titles.create` |
+| 33| GET         | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.view`   |
+| 34| PUT/PATCH   | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.update` |
+| 35| DELETE      | `/api/hr/job-titles/{jobTitle}`              | bearer   | `hr.job_titles.delete` |
+| 36| GET         | `/api/hr/employees/{employee}/assignments`   | bearer   | `hr.assignments.view`  |
+| 37| POST        | `/api/hr/employees/{employee}/assignments`   | bearer   | `hr.assignments.create`|
+| 38| GET         | `/api/hr/employees/{employee}/warnings`      | bearer   | `hr.warnings.view`     |
+| 39| POST        | `/api/hr/employees/{employee}/warnings`      | bearer   | `hr.warnings.create`   |
+| 40| PUT/PATCH   | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.update`   |
+| 41| DELETE      | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.delete`   |
 
 **40 endpoints.** Batch 2 added eleven — the job-title catalogue (5), posting
 history (2, read and append only), and warnings (4). سجل التدقيق added the two
