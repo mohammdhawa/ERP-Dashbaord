@@ -54,6 +54,37 @@ const emptyForm = {
   organizational_grade: "",
 };
 
+// One radio row.
+//
+// NOT `<Form.Check label="…" />`, which renders Bootstrap's float layout: the
+// input is floated to the inline-start edge and dragged into the row's 1.5em
+// padding by a negative margin of exactly that width. The marker itself is
+// 1.1em (the theme shrinks it), so the whole clearance between it and the first
+// letter is the 0.4em left over — 5.6px at this app's 0.8725rem base. In Arabic
+// that is not a gap: the circle sits against the text and the row reads as one
+// smudge. The gutter is also nothing but two lengths agreeing to cancel out, so
+// anything that changes one of them — a browser minimum font size, a zoom step,
+// a theme that resizes the marker again — puts the marker THROUGH the label.
+//
+// A flex row has no float, no negative margin and no padding to keep in sync:
+// `gap` is the clearance, it cannot collapse, and it mirrors by itself.
+const CarryOption = ({ modeField, value, label, mode, onModeChange }) => {
+  const id = `${modeField}-${value}`;
+  return (
+    <Form.Check className="d-flex align-items-center gap-2 ps-0 mb-0">
+      <Form.Check.Input
+        type="radio"
+        id={id}
+        name={modeField}
+        className="m-0 flex-shrink-0"
+        checked={mode === value}
+        onChange={() => onModeChange(value)}
+      />
+      <Form.Check.Label htmlFor={id}>{label}</Form.Check.Label>
+    </Form.Check>
+  );
+};
+
 // One three-way control: keep / set / clear.
 //
 // Module scope, not inline: defined inside the component it would be a new
@@ -81,30 +112,27 @@ const CarryControl = ({
   <fieldset className="border rounded p-3 h-100">
     <legend className="fw-semibold mb-1 fs-6 float-none w-auto">{label}</legend>
     <div className="text-muted fs-11 mb-2">الحالي: {currentLabel || "بدون"}</div>
-    <div className="d-flex flex-column gap-1 mb-2">
-      <Form.Check
-        type="radio"
-        id={`${modeField}-keep`}
-        name={modeField}
+    <div className="d-flex flex-column gap-2 mb-2">
+      <CarryOption
+        modeField={modeField}
+        value={MODE_KEEP}
         label="بدون تغيير (يُرحَّل الحالي)"
-        checked={mode === MODE_KEEP}
-        onChange={() => onModeChange(MODE_KEEP)}
+        mode={mode}
+        onModeChange={onModeChange}
       />
-      <Form.Check
-        type="radio"
-        id={`${modeField}-set`}
-        name={modeField}
+      <CarryOption
+        modeField={modeField}
+        value={MODE_SET}
         label="تغيير إلى"
-        checked={mode === MODE_SET}
-        onChange={() => onModeChange(MODE_SET)}
+        mode={mode}
+        onModeChange={onModeChange}
       />
-      <Form.Check
-        type="radio"
-        id={`${modeField}-clear`}
-        name={modeField}
+      <CarryOption
+        modeField={modeField}
+        value={MODE_CLEAR}
         label="إزالة (بدون)"
-        checked={mode === MODE_CLEAR}
-        onChange={() => onModeChange(MODE_CLEAR)}
+        mode={mode}
+        onModeChange={onModeChange}
       />
     </div>
     {mode === MODE_SET && children}
