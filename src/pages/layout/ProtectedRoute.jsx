@@ -18,6 +18,13 @@ const ProtectedRoute = ({ element, requiredPermissions = [] }) => {
     return <Navigate to="/signin" replace />;
   }
 
+  // Still on the temporary password HR issued: the API 403s every route but
+  // /auth/password, /auth/me and /auth/logout, so rendering a page here would
+  // only produce a screen of failures. The flag comes from login and /auth/me.
+  if (user.must_change_password) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (!hasPermission(permissions, requiredPermissions)) {
     return <Navigate to="/no_access" replace />;
   }

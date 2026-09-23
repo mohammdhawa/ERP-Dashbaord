@@ -200,7 +200,13 @@ const Users = () => {
     {
       key: "email",
       label: "البريد الإلكتروني",
-      render: (value) => <span dir="ltr">{value}</span>,
+      // Nullable since the account model — most staff have no email.
+      render: (value) =>
+        value ? (
+          <span dir="ltr">{value}</span>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
     },
     {
       key: "roles",

@@ -9,9 +9,10 @@ import { ThemeChanger } from "../redux/actions/themeActions";
 
 const Signin = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  // `login` is an employee number OR an email — see authActions.login.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({ login: "", password: "" });
   // Local countdown mirroring the server's Retry-After (429, 5 req/min/IP);
   // blocks resubmission until it reaches zero.
   const [cooldown, setCooldown] = useState(0);
@@ -61,17 +62,17 @@ const Signin = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     if (cooldown > 0) return;
-    setErrors({ email: "", password: "" });
+    setErrors({ login: "", password: "" });
     let formValid = true;
 
-    const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!email) {
-      setErrors((prev) => ({ ...prev, email: "البريد الالكتروني مطلوب" }));
-      formValid = false;
-    } else if (!emailPattern.test(email)) {
+    // Presence only — NO email-shape check. Most staff sign in with their
+    // employee number, and an email pattern would reject `EMP-00042` before
+    // the request is ever sent. The server decides which kind it is.
+    const trimmed = identifier.trim();
+    if (!trimmed) {
       setErrors((prev) => ({
         ...prev,
-        email: "يرجى إدخال بريد إلكتروني صالح",
+        login: "رقم الموظف أو البريد الإلكتروني مطلوب",
       }));
       formValid = false;
     }
@@ -86,7 +87,7 @@ const Signin = () => {
       formValid = false;
     }
     if (formValid) {
-      dispatch(login(email, password));
+      dispatch(login(trimmed, password));
     }
   };
 
@@ -204,32 +205,34 @@ const Signin = () => {
                 <form onSubmit={handleLogin}>
                   <Row className="gy-3">
                     <Col xl={12}>
-                      <Form.Group controlId="signin-email">
+                      <Form.Group controlId="signin-login">
                         <Form.Label className="text-default">
-                          البريد الالكتروني
+                          رقم الموظف أو البريد الإلكتروني
                         </Form.Label>
-                        {/* type="email" + autoComplete: as a bare text input
-                            with no autocomplete hint, password managers and
-                            mobile keyboards had nothing to go on. */}
+                        {/* type="text", NOT "email": the browser's own email
+                            check would block an employee number before submit.
+                            autoComplete="username" still gives password
+                            managers their hint. */}
                         <Form.Control
-                          type="email"
+                          type="text"
                           size="lg"
-                          name="email"
+                          name="login"
                           autoComplete="username"
-                          inputMode="email"
+                          autoCapitalize="off"
+                          spellCheck={false}
                           dir="ltr"
-                          placeholder="name@example.com"
-                          value={email}
+                          placeholder="EMP-00042 / name@example.com"
+                          value={identifier}
                           onChange={(e) => {
-                            setEmail(e.target.value);
-                            setErrors((prev) => ({ ...prev, email: "" }));
+                            setIdentifier(e.target.value);
+                            setErrors((prev) => ({ ...prev, login: "" }));
                           }}
-                          isInvalid={!!errors.email || !!serverFieldError("email")}
+                          isInvalid={!!errors.login || !!serverFieldError("login")}
                           autoFocus
                         />
-                        {(errors.email || serverFieldError("email")) && (
+                        {(errors.login || serverFieldError("login")) && (
                           <Form.Control.Feedback type="invalid">
-                            {errors.email || serverFieldError("email")}
+                            {errors.login || serverFieldError("login")}
                           </Form.Control.Feedback>
                         )}
                       </Form.Group>

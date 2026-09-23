@@ -163,11 +163,14 @@ api.interceptors.response.use(
     //  - requests that have already used their auth recoveries
     //    (config.__authAttempts, see MAX_AUTH_ATTEMPTS)
     const attempts = config?.__authAttempts || 0;
+    // A request may lower its own budget: /auth/password answers a wrong
+    // current password with 401, and retrying that cannot fix it.
+    const maxAttempts = config?.__maxAuthAttempts ?? MAX_AUTH_ATTEMPTS;
 
     if (
       status === 401 &&
       !isAuthEndpoint(config?.url) &&
-      attempts < MAX_AUTH_ATTEMPTS
+      attempts < maxAttempts
     ) {
       config.__authAttempts = attempts + 1;
       const staleAccessToken = config.__accessToken;

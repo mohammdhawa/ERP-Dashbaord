@@ -12,6 +12,7 @@ import {
   ProtectedRoute,
   PublicRoute,
   Signin,
+  ChangePassword,
   Error404,
   NoAccess,
   SessionsExpired,
@@ -112,6 +113,12 @@ const AppWrapper = () => {
         <Route
           path={`${import.meta.env.BASE_URL}/signin`}
           element={<PublicRoute element={<Signin />} />}
+        />
+        {/* Outside the <App> layout and outside ProtectedRoute: it guards
+            itself, and ProtectedRoute is what redirects here. */}
+        <Route
+          path={`${import.meta.env.BASE_URL}/change-password`}
+          element={<ChangePassword />}
         />
         <Route
           path={`${import.meta.env.BASE_URL}`}

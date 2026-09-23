@@ -105,9 +105,12 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
     if (!isEdit && (form.employee_id === "" || form.employee_id == null)) {
       clientErrors.employee_id = ["يجب ربط الحساب بموظف."];
     }
-    if (!form.email.trim()) {
-      clientErrors.email = ["البريد الإلكتروني مطلوب."];
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email)) {
+    // Email is OPTIONAL since the account model (2026-09-22): most staff have
+    // none and sign in with their employee number. Shape-checked only if given.
+    if (
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())
+    ) {
       clientErrors.email = ["يرجى إدخال بريد إلكتروني صالح."];
     }
     if (!isEdit && form.password.length < 8) {
@@ -127,7 +130,9 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
     }
 
     const payload = {
-      email: form.email.trim(),
+      // Blank → null, never "": the rule is `nullable|email`, so "" would be a
+      // 422, while null clears the address on edit.
+      email: form.email.trim() || null,
       is_active: form.is_active,
     };
     // On edit, omit password entirely unless the admin typed a new one
@@ -241,7 +246,9 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
             </Col>
 
             <Col sm={12}>
-              <Form.Label htmlFor="user-email">البريد الإلكتروني *</Form.Label>
+              <Form.Label htmlFor="user-email">
+                البريد الإلكتروني (اختياري)
+              </Form.Label>
               <Form.Control
                 id="user-email"
                 type="email"
@@ -255,6 +262,9 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
               {fieldError("email") && (
                 <div className="text-danger small mt-1">{fieldError("email")}</div>
               )}
+              <div className="text-muted small mt-1">
+                يسجّل الموظف دخوله برقمه الوظيفي؛ البريد وسيلة تواصل فقط.
+              </div>
             </Col>
 
             <Col sm={12}>
@@ -301,6 +311,11 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
                   {fieldError("password")}
                 </div>
               )}
+              {/* The server sets must_change_password on create AND on any
+                  admin password reset, so this is always a temporary one. */}
+              <div className="text-muted small mt-1">
+                كلمة مرور مؤقتة: سيُطلب من المستخدم تغييرها عند أول تسجيل دخول.
+              </div>
             </Col>
 
             <Col sm={12}>

@@ -29,7 +29,11 @@ const AssignRoleCard = () => {
     () =>
       users.map((u) => ({
         value: u.id,
-        label: `${u.name} (${u.email})`,
+        // email is nullable now; the employee number is what staff sign in
+        // with, so it disambiguates just as well when there is no address.
+        label: `${u.name || `مستخدم #${u.id}`} (${
+          u.email || u.employee?.employee_number || `#${u.id}`
+        })`,
       })),
     [users]
   );

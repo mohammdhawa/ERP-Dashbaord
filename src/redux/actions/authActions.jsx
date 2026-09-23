@@ -47,10 +47,16 @@ export const bootstrapDone = () => ({ type: "AUTH_BOOTSTRAP_DONE" });
 
 export const logoutSuccess = () => ({ type: "LOGOUT_SUCCESS" });
 
-export const login = (email, password) => async (dispatch) => {
+// The field is `login`, not `email` (account model, 2026-09-22): it carries an
+// employee number (e.g. EMP-00042) or an email, and the server decides which.
+// Sending `email` is now a 422 — `login` is required.
+export const login = (identifier, password) => async (dispatch) => {
   dispatch(loginStart());
   try {
-    const response = await api.post("/auth/login", { email, password });
+    const response = await api.post("/auth/login", {
+      login: identifier,
+      password,
+    });
     const { user, access_token, refresh_token } = response.data.data;
 
     // access token in memory, refresh token persisted (single-use rotation).
@@ -108,6 +114,42 @@ export const refreshCurrentUser = () => async (dispatch) => {
     /* non-fatal — keep the cached user */
   }
 };
+
+// POST /auth/password — replaces the caller's own password. Self-scoped, and one
+// of the three routes reachable while `must_change_password` is set (the others
+// are /auth/me and /auth/logout); it is the only one that clears the flag.
+//
+// The server revokes EVERY session on success, this one included, and hands
+// back a fresh pair — so the new tokens must be stored before anything else is
+// called, or the next request is a 401 against a dead refresh token.
+//
+// A wrong current password is a 401 on this endpoint (not a 422), so the call
+// allows ONE auth recovery instead of the usual two: enough to survive an
+// access token that expired while the form was open, without rotating the
+// session twice more just to learn the password was wrong.
+//
+// Throws the parsed error so the form can map the 422 bag onto its fields.
+export const changePassword =
+  ({ current_password, password, password_confirmation }) =>
+  async (dispatch) => {
+    try {
+      const response = await api.post(
+        "/auth/password",
+        { current_password, password, password_confirmation },
+        { __maxAuthAttempts: 1 }
+      );
+      const { access_token, refresh_token } = response.data.data;
+      setTokens(access_token, refresh_token);
+
+      // Re-read the user rather than flipping the flag locally: /auth/me is the
+      // authority on must_change_password.
+      const me = await api.get("/auth/me");
+      dispatch(bootstrapSuccess(me.data.data));
+      toastNotify(response.data.message, "success");
+    } catch (error) {
+      throw parseApiError(error);
+    }
+  };
 
 export const logout = () => async (dispatch) => {
   try {
