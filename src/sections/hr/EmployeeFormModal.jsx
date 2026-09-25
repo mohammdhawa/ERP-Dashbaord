@@ -2,14 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Col, Form, Modal, Nav, Row, Spinner, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
-import { confirmDiscardChanges } from "../../utils";
+import { confirmDiscardChanges, toastNotify } from "../../utils";
 import {
   createEmployee,
   updateEmployee,
   updateEmployeeRecord,
 } from "../../redux/actions/employeesActions";
 import { hasPermission } from "../../data/permissionsCatalog";
-import { useResourceOptions } from "../departments/useResourceOptions";
+import {
+  departmentToOption,
+  useResourceOptions,
+} from "../departments/useResourceOptions";
 import {
   GENDER_OPTIONS,
   MARITAL_STATUS_OPTIONS,
@@ -27,6 +30,8 @@ import {
   derivedChildrenCount,
   emptyEmployeeForm,
   getEmployeeFormValues,
+  recordFieldAccess,
+  untouchedSuggestionRejections,
   validateEmployeeForm,
   EMPLOYEE_CONSTANTS,
 } from "./employeePayload";
@@ -102,7 +107,6 @@ const FIELD_TAB = {
 
   department_id: "work",
   job_title_id: "work",
-  direct_manager_id: "work",
   employment_type: "work",
   workplace: "work",
   hire_date: "work",
@@ -122,17 +126,6 @@ const FIELD_TAB = {
   agreed_salary: "classification",
   sham_cash_account: "classification",
 };
-
-const departmentToOption = (d) => ({
-  value: d.id,
-  label: d.name || `قسم #${d.id}`,
-});
-const employeeToOption = (e) => ({
-  value: e.id,
-  label: e.employee_number
-    ? `${e.full_name || `موظف #${e.id}`} — ${e.employee_number}`
-    : e.full_name || `موظف #${e.id}`,
-});
 
 // Tri-state boolean: "" (unset / leave alone), "true", "false". A plain
 // checkbox cannot express "not recorded", and submitting false for a field the
@@ -262,21 +255,24 @@ const EmployeeFormModal = ({
   const { saving } = useSelector((state) => state.employees);
   const { permissions } = useSelector((state) => state.auth);
 
-  // FIELD-LEVEL PERMISSIONS. Thirteen inputs hang off these two flags: the
-  // twelve pay/classification keys and national_id. Without the permission the
-  // key is ABSENT from the response, so the input is neither rendered nor
-  // submitted — rendering it would show a blank box over a value that exists,
-  // and submitting that blank would destroy it.
-  const canViewSalary = hasPermission(permissions, "hr.employees.viewSalary");
-  const canViewIdentity = hasPermission(
-    permissions,
-    "hr.employees.viewIdentity"
-  );
+  // FIELD-LEVEL ACCESS. Thirteen inputs hang off these two flags: the twelve
+  // pay/classification keys and national_id. Without access the key is ABSENT
+  // from the response, so the input is neither rendered nor submitted —
+  // rendering it would show a blank box over a value that exists, and
+  // submitting that blank would destroy it.
+  //
+  // ⚙️ PER RECORD since GAP-3 (2026-09-24): a viewSalary granted over one
+  // section shows pay on that section's staff only, so editing, the record's
+  // own keys decide; creating, holding the permission is the only signal there
+  // is. See recordFieldAccess.
+  const { canViewSalary, canViewIdentity } = recordFieldAccess(employee, {
+    salary: hasPermission(permissions, "hr.employees.viewSalary"),
+    identity: hasPermission(permissions, "hr.employees.viewIdentity"),
+  });
   const isEdit = Boolean(employee);
 
   const canReadDepartments = hasPermission(permissions, "departments.view");
   const canReadJobTitles = hasPermission(permissions, "hr.job_titles.view");
-  const canReadEmployees = hasPermission(permissions, "hr.employees.view");
 
   const departments = useResourceOptions(
     "/departments",
@@ -288,12 +284,6 @@ const EmployeeFormModal = ({
     (t) => t,
     open && canReadJobTitles
   );
-  const managers = useResourceOptions(
-    "/hr/employees",
-    employeeToOption,
-    open && canReadEmployees
-  );
-
   const [form, setForm] = useState(emptyEmployeeForm);
   const [errors, setErrors] = useState({});
   const [activeTab, setActiveTab] = useState("identity");
@@ -340,41 +330,10 @@ const EmployeeFormModal = ({
     setSuggested((prev) => ({ ...prev, [field]: false }));
   };
 
-  // ⚠️ THE SELECTED MANAGER IS RESOLVED FROM THE RECORD, NOT ONLY FROM THE LIST.
-  //
-  // Looking the value up in `managers.options` alone means that whenever the
-  // stored manager is absent from that list, `.find(...) || null` falls through
-  // to null and the control renders its placeholder — "بدون مدير مباشر",
-  // asserting this employee reports to nobody. That happens on every first
-  // render, because the list walk is async, and permanently when the manager's
-  // own record has been soft-deleted.
-  //
-  // The employee resource now carries `direct_manager` embedded, so the truth is
-  // already in hand: use the loaded option when there is one, fall back to the
-  // embedded object, and fall back again to the bare id. `direct_manager_id` in
-  // form state is untouched either way, so nothing here changes what is saved —
-  // this is only about the form not stating something false.
-  const managerOptions = useMemo(
-    () => managers.options.filter((o) => !isEdit || o.value !== employee?.id),
-    [managers.options, isEdit, employee?.id]
-  );
-
-  const selectedManagerOption = useMemo(() => {
-    if (form.direct_manager_id === "" || form.direct_manager_id == null)
-      return null;
-    const id = Number(form.direct_manager_id);
-
-    const loaded = managerOptions.find((o) => o.value === id);
-    if (loaded) return loaded;
-
-    // Only trust the embedded record while the id is still the one it describes
-    // — the user may have picked someone else since the modal opened.
-    if (employee?.direct_manager && employee.direct_manager.id === id) {
-      return employeeToOption(employee.direct_manager);
-    }
-
-    return { value: id, label: `موظف #${id}` };
-  }, [form.direct_manager_id, managerOptions, employee]);
+  // NO MANAGER FIELD (2026-09-24). `direct_manager_id` is gone from the API: a
+  // manager is not a property of a person here but a consequence of the unit
+  // they are in, resolved by the server from the org tree. The profile shows
+  // the resolved `manager`; this form moves people by department_id only.
 
   // Active titles first; an inactive one stays selectable only so an existing
   // record that already holds it can still be saved without silently losing it.
@@ -479,28 +438,67 @@ const EmployeeFormModal = ({
       return;
     }
 
+    // `original` makes an edit send a gated key only when it changed — see
+    // rule 1 in employeePayload.js for why a transfer needs that.
     const payload = buildEmployeePayload(form, {
       isEdit,
       canViewSalary,
       canViewIdentity,
+      original: isEdit ? initialForm : null,
     });
 
-    try {
+    const save = (body) => {
       if (isEdit && standalone) {
-        await dispatch(updateEmployeeRecord(employee.id, payload));
-      } else if (isEdit) {
-        await dispatch(
-          updateEmployee(
-            employee.id,
-            payload,
-            currentPage,
-            itemsPerPage,
-            filters
-          )
+        return dispatch(updateEmployeeRecord(employee.id, body));
+      }
+      if (isEdit) {
+        return dispatch(
+          updateEmployee(employee.id, body, currentPage, itemsPerPage, filters)
         );
-      } else {
-        await dispatch(
-          createEmployee(payload, currentPage, itemsPerPage, filters)
+      }
+      return dispatch(createEmployee(body, currentPage, itemsPerPage, filters));
+    };
+
+    try {
+      try {
+        await save(payload);
+      } catch (parsed) {
+        // CREATE ONLY: the server refused nothing but pay values a job title
+        // suggested and the user never touched — the usual reason being a
+        // viewSalary grant that does not reach the chosen unit, which the
+        // client cannot know in advance. Drop them and save once more rather
+        // than make the user clear values they never typed.
+        const dropped = !isEdit
+          ? untouchedSuggestionRejections(parsed?.errors, suggested)
+          : null;
+        if (!dropped) throw parsed;
+
+        const cleared = { ...form };
+        dropped.forEach((key) => {
+          cleared[key] = "";
+        });
+        setForm(cleared);
+        setSuggested((prev) => {
+          const next = { ...prev };
+          dropped.forEach((key) => {
+            next[key] = false;
+          });
+          return next;
+        });
+        await save(
+          buildEmployeePayload(cleared, {
+            isEdit,
+            canViewSalary,
+            canViewIdentity,
+            original: null,
+          })
+        );
+        // Worded as "the server refused them", not as a claim about the
+        // caller's grant: an out-of-scope unit is the likely cause, not the
+        // only possible one.
+        toastNotify(
+          "حُفظ الموظف دون قيم التصنيف المقترحة من المسمى الوظيفي، لأن الخادم رفضها لهذه الوحدة (غالباً لأنها خارج نطاق صلاحية الرواتب لديك).",
+          "warning"
         );
       }
       onSaved?.();
@@ -954,6 +952,10 @@ const EmployeeFormModal = ({
                       </>
                     )}
                     <Err field="department_id" />
+                    <div className="text-muted small mt-1">
+                      المدير المباشر يُحدَّد تلقائياً من الهيكل التنظيمي للوحدة
+                      المختارة.
+                    </div>
                   </Col>
 
                   {isEdit && (
@@ -972,48 +974,6 @@ const EmployeeFormModal = ({
                       </Alert>
                     </Col>
                   )}
-
-                  <Col sm={12} md={6}>
-                    <Form.Label htmlFor="emp-direct_manager_id">
-                      المدير المباشر
-                    </Form.Label>
-                    {canReadEmployees && !managers.error ? (
-                      <Select
-                        inputId="emp-direct_manager_id"
-                        classNamePrefix="Select2"
-                        // A person may not be their own manager, so they are
-                        // not offered as one.
-                        options={managerOptions}
-                        value={selectedManagerOption}
-                        onChange={(opt) =>
-                          setField("direct_manager_id", opt ? opt.value : "")
-                        }
-                        isClearable
-                        isLoading={managers.loading}
-                        placeholder="بدون مدير مباشر"
-                        noOptionsMessage={() => "لا يوجد موظفون"}
-                        menuPosition="fixed"
-                      />
-                    ) : (
-                      <>
-                        <Form.Control
-                          id="emp-direct_manager_id"
-                          type="number"
-                          min={1}
-                          placeholder="معرّف الموظف"
-                          value={form.direct_manager_id}
-                          onChange={(e) =>
-                            setField("direct_manager_id", e.target.value)
-                          }
-                          isInvalid={!!fieldError("direct_manager_id")}
-                        />
-                        <div className="text-muted small mt-1">
-                          تعذّر تحميل قائمة الموظفين، أدخل المعرّف يدوياً.
-                        </div>
-                      </>
-                    )}
-                    <Err field="direct_manager_id" />
-                  </Col>
 
                   <Col sm={12} md={6}>
                     <Enum

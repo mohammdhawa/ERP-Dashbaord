@@ -15,6 +15,7 @@ import { PageHeader, ModalFallback } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
 import EmployeeFilters from "./EmployeeFilters";
+import { hasKey } from "../../utils/hasKey";
 import {
   fetchEmployees,
   deleteEmployee,
@@ -34,6 +35,17 @@ const STATUS_VARIANTS = {
 
 const dash = <span className="text-muted">—</span>;
 const ltr = (value) => (value ? <span dir="ltr">{value}</span> : dash);
+
+// A gated key ABSENT from one row while the column is shown: since GAP-3
+// (2026-09-24) viewIdentity can be granted over some units only, so the key is
+// present on the rows it reaches and missing on the rest. A dash there would
+// say "no ID on file" — a claim about the data — when the truth is "not yours
+// to see".
+const outOfReach = (
+  <span className="text-muted" title="خارج نطاق صلاحياتك">
+    <i className="ri-lock-line" aria-label="خارج نطاق صلاحياتك"></i>
+  </span>
+);
 
 // Columns are built per-render because one is FIELD-GATED: `national_id` is
 // absent from the payload unless the caller holds hr.employees.viewIdentity.
@@ -72,7 +84,10 @@ const buildColumns = ({ canViewIdentity }) =>
     canViewIdentity && {
       key: "national_id",
       label: "رقم الهوية",
-      render: (value) => ltr(value),
+      render: (value, row) =>
+        hasKey(row, "national_id")
+          ? ltr(value)
+          : outOfReach,
     },
     {
       // An embedded object since Batch 2. Falls back to a dash, never to the

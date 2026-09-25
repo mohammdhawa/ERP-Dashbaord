@@ -14,6 +14,7 @@ import {
   // The extension is required: `npm test` runs this module under plain Node
   // ESM, which does not resolve extensionless specifiers the way Vite does.
 } from "../../data/hrEnums.js";
+import { hasKey } from "../../utils/hasKey.js";
 
 /**
  * The absolute timestamp, RENDERED IN THE OFFSET THE SERVER SENT.
@@ -178,10 +179,8 @@ export const diffKeys = (oldValues, newValues) => {
   return keys;
 };
 
-export const hasKey = (object, key) =>
-  Boolean(object) &&
-  typeof object === "object" &&
-  Object.prototype.hasOwnProperty.call(object, key);
+// Re-exported so the audit screens keep importing their helpers from one place.
+export { hasKey };
 
 /**
  * An FK column whose id can be linked to a record.
@@ -200,6 +199,10 @@ export const foreignKeyType = (field) => {
   const base = match[1];
   // direct_manager_id / issued_by-style columns point at an employee; the
   // mapping is only for the names the audited models actually carry.
+  //
+  // `direct_manager` is KEPT although the column was dropped on 2026-09-24:
+  // the audit trail is append-only, so rows written before then still carry
+  // it, and they should keep resolving to a person rather than a bare number.
   const KNOWN = {
     department: "department",
     job_title: "job_title",

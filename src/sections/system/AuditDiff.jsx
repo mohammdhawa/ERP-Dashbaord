@@ -151,6 +151,15 @@ const Absent = () => (
  * where the permission list and the payload disagree, or the target type is
  * one this build has not been taught, it states both requirements rather than
  * accusing the reader of lacking a particular one.
+ *
+ * ⚙️ AND THE MODULE PERMISSIONS MUST BE COMPANY-WIDE since 2026-09-24 (GAP-3,
+ * API doc §9.2). A grant carries a scope now, and the trail is not scoped, so
+ * a module permission held over one unit or «الوحدات التي أديرها» does not
+ * unlock values. A reader can therefore hold every name on the list and still
+ * be refused. The client cannot see its own scopes (/auth/me lists permission
+ * names only), and "every name held" is ALSO what a stale permission list looks
+ * like after a revoke — so that case gets the neutral copy, which now states
+ * the company-wide requirement, rather than a diagnosis it cannot support.
  */
 const LockedValues = ({ detail }) => {
   const { permissions } = useSelector((state) => state.auth);
@@ -197,14 +206,16 @@ const LockedValues = ({ detail }) => {
         </span>
       ) : (
         // Either viewValues is missing too, or we cannot tell which one is:
-        // an unrecognised target type has no permission to name, and a stale
-        // permission list must not turn into a confident accusation. State
-        // both requirements instead.
+        // an unrecognised target type has no permission to name, every name
+        // may be held but over a unit (a scope the client cannot see), or the
+        // permission list may be stale. None of that may turn into a confident
+        // diagnosis, so state the requirements — scope included — instead.
         <span className="text-muted fs-12">
           تتطلب قيم سجل يخص سجلاً آخر: «عرض تفاصيل التغييرات»
           (auth.audit.viewValues)، وصلاحية عرض الوحدة التي يخصها السجل
-          {modulePermissions ? ` ${named(modulePermissions)}` : ""}
-          .
+          {modulePermissions ? ` ${named(modulePermissions)}` : ""}، ممنوحةً
+          على مستوى «الشركة كاملة» — سجل التدقيق غير مقيّد بنطاق، فلا تكفي
+          الصلاحية الممنوحة على وحدة محددة أو على «الوحدات التي أديرها».
         </span>
       )}
     </div>

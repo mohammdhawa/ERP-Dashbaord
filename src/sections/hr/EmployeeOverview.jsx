@@ -2,6 +2,7 @@ import React from "react";
 import { Col, Row } from "react-bootstrap";
 import { useSelector } from "react-redux";
 import { hasPermission } from "../../data/permissionsCatalog";
+import { recordFieldAccess } from "./employeePayload";
 
 // نظرة عامة — the whole record, read-only, honouring BOTH field gates exactly
 // as the form does.
@@ -106,13 +107,26 @@ const boolText = (value) =>
 
 const EmployeeOverview = ({ employee }) => {
   const { permissions } = useSelector((state) => state.auth);
-  const canViewSalary = hasPermission(permissions, "hr.employees.viewSalary");
-  const canViewIdentity = hasPermission(
-    permissions,
-    "hr.employees.viewIdentity"
-  );
+  const holdsSalary = hasPermission(permissions, "hr.employees.viewSalary");
+  const holdsIdentity = hasPermission(permissions, "hr.employees.viewIdentity");
 
   if (!employee) return null;
+
+  // ⚙️ THE RECORD DECIDES, NOT THE PERMISSION LIST (GAP-3, 2026-09-24). A
+  // viewSalary granted over one section puts the pay keys on that section's
+  // staff only, so holding the permission no longer means this record carries
+  // them. What is rendered is exactly what arrived.
+  const { canViewSalary, canViewIdentity } = recordFieldAccess(employee);
+
+  // Held, but not for THIS person. Said out loud rather than left as a gap: a
+  // payroll clerk who can see pay on most records would otherwise read a
+  // missing block as a missing salary. The likely cause (a unit-scoped grant)
+  // is offered as a possibility only — "held but absent" is also what a stale
+  // permission list looks like after a revoke.
+  const outOfReach = [
+    holdsSalary && !canViewSalary && "التصنيف والرواتب",
+    holdsIdentity && !canViewIdentity && "رقم الهوية",
+  ].filter(Boolean);
 
   return (
     <div>
@@ -193,22 +207,16 @@ const EmployeeOverview = ({ employee }) => {
       <Section title="العمل" icon="ri-briefcase-line">
         <Field label="القسم" value={employee.department?.name} />
         <Field label="المسمى الوظيفي" value={employee.job_title?.name} />
-        {/* Embedded now — `direct_manager: { id, full_name, employee_number }`
-            beside the untouched `direct_manager_id`. The id-set-but-object-null
-            case means the manager's own record has been soft-deleted: the
-            reporting line is still recorded, the person is not. Field() renders
-            a plain dash for null, which would claim this employee reports to
-            nobody, so that case is spelled out instead. */}
+        {/* `manager` is RESOLVED by the server from the org tree — the unit's
+            head, climbing past vacant posts — and replaced `direct_manager` on
+            2026-09-24. Null means the top of the tree or an employee with no
+            unit, so the plain dash Field() renders is the true statement. */}
         <Field
           label="المدير المباشر"
           value={
-            employee.direct_manager ? (
-              <span title={employee.direct_manager.employee_number || undefined}>
-                {employee.direct_manager.full_name}
-              </span>
-            ) : employee.direct_manager_id ? (
-              <span className="text-muted">
-                موظف #{employee.direct_manager_id} — سجل غير متاح
+            employee.manager ? (
+              <span title={employee.manager.employee_number || undefined}>
+                {employee.manager.full_name}
               </span>
             ) : null
           }
@@ -224,10 +232,19 @@ const EmployeeOverview = ({ employee }) => {
         <Field label="الحالة" value={employee.status_label} />
       </Section>
 
-      {/* The whole classification and pay block exists only with viewSalary.
-          Without it these twelve keys are absent from the response, so the
-          section is not rendered at all rather than shown as a wall of dashes,
-          which would read as "nothing is recorded" instead of "not for you". */}
+      {outOfReach.length > 0 && (
+        <p className="text-muted fs-12 mb-3">
+          <i className="ri-lock-line align-middle me-1" aria-hidden="true"></i>
+          {outOfReach.join(" و")} لهذا الموظف غير متاحة بصلاحياتك الحالية —
+          قد تكون صلاحيتك ممنوحة على وحدات لا يتبع لها هذا الموظف.
+        </p>
+      )}
+
+      {/* The whole classification and pay block exists only when the record
+          carries it. Without access these twelve keys are absent from the
+          response, so the section is not rendered at all rather than shown as a
+          wall of dashes, which would read as "nothing is recorded" instead of
+          "not for you". */}
       {canViewSalary && (
         <Section title="التصنيف والرواتب" icon="ri-money-dollar-circle-line">
           <Field label="نوع النشاط" value={employee.activity_type_label} />

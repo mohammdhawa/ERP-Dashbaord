@@ -221,14 +221,24 @@ export const deleteRole =
 
 // Role grants live on dedicated endpoints (single source of truth for RBAC
 // changes) — NOT on the user create/update payloads.
-export const assignRole = (userId, roleId) => async (dispatch) => {
+//
+// ⚙️ Both take a prepared BODY since 2026-09-24 (GAP-3): a grant is a role plus
+// a scope, and the scope keys follow rules the builders in
+// sections/rbac/grantScope.js own (`scope_department_id` only for a unit, and
+// no scope at all on /unassign to revoke every grant of the role). The
+// response's `data` is the user, now carrying `grants` — it is patched straight
+// into the users slice, so the grants list is current the moment the request
+// resolves instead of after a walk of the whole directory.
+const roleAssignmentChanged = (user) => ({
+  type: "ROLE_ASSIGNMENT_CHANGED",
+  payload: user,
+});
+
+export const assignRole = (body) => async (dispatch) => {
   try {
-    const response = await api.post("/auth/roles/assign", {
-      user_id: userId,
-      role_id: roleId,
-    });
+    const response = await api.post("/auth/roles/assign", body);
     toastNotify(response.data.message, "success");
-    dispatch({ type: "ROLE_ASSIGNMENT_CHANGED" });
+    dispatch(roleAssignmentChanged(response.data.data));
     return response.data;
   } catch (error) {
     const parsed = parseApiError(error);
@@ -237,14 +247,11 @@ export const assignRole = (userId, roleId) => async (dispatch) => {
   }
 };
 
-export const unassignRole = (userId, roleId) => async (dispatch) => {
+export const unassignRole = (body) => async (dispatch) => {
   try {
-    const response = await api.post("/auth/roles/unassign", {
-      user_id: userId,
-      role_id: roleId,
-    });
+    const response = await api.post("/auth/roles/unassign", body);
     toastNotify(response.data.message, "success");
-    dispatch({ type: "ROLE_ASSIGNMENT_CHANGED" });
+    dispatch(roleAssignmentChanged(response.data.data));
     return response.data;
   } catch (error) {
     const parsed = parseApiError(error);

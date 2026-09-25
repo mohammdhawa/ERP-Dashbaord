@@ -11,6 +11,20 @@
 //    a gated key in the body — even as null — is a 422 naming that field, so
 //    breaking this rule is now a failed save, not a silent overwrite.
 //
+//    ⚙️ PER RECORD SINCE 2026-09-24 (GAP-3). A grant carries a scope, so
+//    holding viewSalary no longer means "for everyone" — the server includes
+//    the pay keys only on rows the grant reaches. Editing, the RECORD decides
+//    (`recordFieldAccess`): the keys are present or they are not. Creating,
+//    there is no record yet, so holding the permission is the best guess and
+//    the server rules on the destination unit (a 422 naming the field if the
+//    grant does not reach it — see untouchedSuggestionRejections for the case
+//    where the rejected values were only job-title suggestions).
+//
+//    And on edit a gated key is sent only when its value CHANGED. The server
+//    checks the grant against every unit the row sits in before and after the
+//    save, so re-sending untouched pay while transferring someone across the
+//    edge of a section-scoped grant would be refused for fields nobody edited.
+//
 // 2. OMIT vs NULL. Not every optional field is nullable. Where the contract
 //    does not mark a field nullable, a blank input means OMIT the key (the
 //    rules are `sometimes`, so an absent key leaves the stored value alone).
@@ -21,6 +35,10 @@
 //    another (engineering_rank with activity_type 1, agreed_salary with
 //    salary_mode 2, wives_count with marital_status 2). The disallowed one is
 //    not sent at all.
+
+// The extension is required: employeePayload.test.js runs this module under
+// plain Node ESM.
+import { hasKey } from "../../utils/hasKey.js";
 
 const ACTIVITY_ENGINEERING = 1;
 const ACTIVITY_INDUSTRIAL = 2;
@@ -80,7 +98,6 @@ export const emptyEmployeeForm = Object.freeze({
   // العمل
   department_id: "",
   job_title_id: "",
-  direct_manager_id: "",
   employment_type: "",
   workplace: "",
   hire_date: "",
@@ -162,7 +179,6 @@ export const getEmployeeFormValues = (employee) => {
 
     department_id: pick("department_id"),
     job_title_id: pick("job_title_id"),
-    direct_manager_id: pick("direct_manager_id"),
     employment_type: pick("employment_type"),
     workplace: pick("workplace"),
     hire_date: pick("hire_date"),
@@ -187,17 +203,93 @@ export const getEmployeeFormValues = (employee) => {
   };
 };
 
+// The keys each field permission gates — the server's SALARY_GATED_FIELDS and
+// IDENTITY_GATED_FIELDS, which mirror what EmployeeResource hides. The `_label`
+// twins are output only and never written, so they are not listed.
+export const SALARY_GATED_FIELDS = Object.freeze([
+  "activity_type",
+  "organizational_grade",
+  "experience_level",
+  "engineering_rank",
+  "industrial_experience_years",
+  "has_hazard_pay",
+  "has_scarcity_pay",
+  "has_dual_role_pay",
+  "distinction_grade",
+  "salary_mode",
+  "agreed_salary",
+  "sham_cash_account",
+]);
+export const IDENTITY_GATED_FIELDS = Object.freeze(["national_id"]);
+
+
+/**
+ * Which gated groups the caller may read — and so render and write — for ONE
+ * record (GAP-3).
+ *
+ * With a record, the answer is in the record: the server sends the whole pay
+ * block or none of it, and national_id or not, per row. A key PRESENT with a
+ * null value is readable-and-empty; a key ABSENT is not the caller's to see.
+ * Without a record (a create), fall back to whether the caller holds the
+ * permission at all.
+ *
+ * @param record  the server employee, or null/undefined when creating
+ * @param holds   { salary: bool, identity: bool } — the caller's permissions
+ */
+export const recordFieldAccess = (record, holds = {}) => {
+  if (!record) {
+    return {
+      canViewSalary: Boolean(holds.salary),
+      canViewIdentity: Boolean(holds.identity),
+    };
+  }
+  return {
+    canViewSalary: SALARY_GATED_FIELDS.some((key) => hasKey(record, key)),
+    canViewIdentity: IDENTITY_GATED_FIELDS.some((key) => hasKey(record, key)),
+  };
+};
+
+/**
+ * On CREATE, the pay keys a 422 rejected that the user never typed — values a
+ * job title suggested and nobody touched since. Null unless EVERY rejected
+ * field is one of those.
+ *
+ * Why this exists: creating, `recordFieldAccess` can only say "holds
+ * viewSalary", and a grant scoped to section A does not reach a new employee
+ * put in section B. Picking a job title fills activity_type and
+ * organizational_grade, the server refuses them for that unit, and the user is
+ * left clearing values they never entered on a tab they may never have opened.
+ * When the rejection is entirely about such values, the form drops them and
+ * saves again; anything the user did type is left to the normal error path.
+ *
+ * @param errors     the parsed 422 bag, `{ field: [message] }`
+ * @param suggested  `{ field: true }` for values applied from a job title and
+ *                   not edited since
+ */
+export const untouchedSuggestionRejections = (errors, suggested = {}) => {
+  const keys = Object.keys(errors || {}).filter((key) => errors[key]);
+  if (keys.length === 0) return null;
+  const allSuggested = keys.every(
+    (key) => SALARY_GATED_FIELDS.includes(key) && suggested[key] === true
+  );
+  return allSuggested ? keys : null;
+};
+
 /**
  * Builds the create/update body.
  *
  * @param values   form state
- * @param options  { isEdit, canViewSalary, canViewIdentity }
+ * @param options  { isEdit, canViewSalary, canViewIdentity, original }
+ *   `original` — on edit, the form values the record was opened with. When
+ *   given, a gated key is sent only if its built value differs from the value
+ *   built from `original` (see rule 1 above).
  */
 export const buildEmployeePayload = (values, options = {}) => {
   const {
     isEdit = false,
     canViewSalary = false,
     canViewIdentity = false,
+    original = null,
   } = options;
 
   const payload = {};
@@ -224,11 +316,6 @@ export const buildEmployeePayload = (values, options = {}) => {
   const setOmittableNum = (key, value) => {
     if (!isBlank(value)) payload[key] = Number(value);
   };
-  const setOmittableBool = (key, value) => {
-    if (value === "") return;
-    payload[key] = value === "true" || value === true;
-  };
-
   // ---- الهوية -------------------------------------------------------------
   // Names are required on create and `sometimes` on update; a blank one on
   // update is omitted rather than sent as "" (which would be a 422).
@@ -299,7 +386,9 @@ export const buildEmployeePayload = (values, options = {}) => {
   // ---- العمل --------------------------------------------------------------
   setNullableNum("department_id", values.department_id);
   setNullableNum("job_title_id", values.job_title_id);
-  setNullableNum("direct_manager_id", values.direct_manager_id);
+  // No manager key: since 2026-09-24 the manager is resolved by the server from
+  // the org tree and `direct_manager_id` is no longer accepted. Moving someone
+  // is changing department_id; changing who runs a unit is a departments edit.
   setNullableNum("employment_type", values.employment_type);
   setNullableStr("workplace", values.workplace);
   setNullable("hire_date", values.hire_date || "");
@@ -309,53 +398,23 @@ export const buildEmployeePayload = (values, options = {}) => {
 
   // ---- التصنيف والرواتب (hr.employees.viewSalary) --------------------------
   // Without the permission NOT ONE of these twelve keys is sent. The editor
-  // never saw them, so they must not overwrite them.
+  // never saw them, so they must not overwrite them. On an edit with
+  // `original`, only the ones whose value changed are sent (rule 1).
+  const before = isEdit && original ? original : null;
+  const addChanged = (block, previous) => {
+    Object.entries(block).forEach(([key, value]) => {
+      if (previous && hasKey(previous, key) && previous[key] === value) return;
+      payload[key] = value;
+    });
+  };
+
   if (canViewSalary) {
-    const activity = num(values.activity_type);
-    setNullableNum("activity_type", values.activity_type);
-    setNullableNum("organizational_grade", values.organizational_grade);
-    setNullableNum("experience_level", values.experience_level);
-    setNullableNum("distinction_grade", values.distinction_grade);
-
-    // engineering_rank belongs to هندسي only; industrial years to صناعي only.
-    // For the other activity the field is explicitly cleared (both ARE
-    // nullable), so switching activity cannot leave a contradictory value
-    // behind that the server would then reject.
-    if (activity === ACTIVITY_ENGINEERING) {
-      setNullableNum("engineering_rank", values.engineering_rank);
-      payload.industrial_experience_years = null;
-    } else if (activity === ACTIVITY_INDUSTRIAL) {
-      setNullableNum(
-        "industrial_experience_years",
-        values.industrial_experience_years
-      );
-      payload.engineering_rank = null;
-    } else {
-      payload.engineering_rank = null;
-      payload.industrial_experience_years = null;
-    }
-
-    setOmittableBool("has_hazard_pay", values.has_hazard_pay);
-    setOmittableBool("has_scarcity_pay", values.has_scarcity_pay);
-    setOmittableBool("has_dual_role_pay", values.has_dual_role_pay);
-    setNullableStr("sham_cash_account", values.sham_cash_account);
-
-    const mode = num(values.salary_mode);
-    setOmittableNum("salary_mode", values.salary_mode);
-    if (mode === SALARY_MODE_AGREED) {
-      // Kept as the exact decimal STRING: a numeric string satisfies the
-      // server rule while preserving precision no float round-trip can.
-      payload.agreed_salary = str(values.agreed_salary);
-    } else if (mode === SALARY_MODE_SYSTEM) {
-      // Forbidden on the نظام رواتب track — null is the documented way to say
-      // "there is none", and agreed_salary IS nullable.
-      payload.agreed_salary = null;
-    }
+    addChanged(salaryBlock(values), before ? salaryBlock(before) : null);
   }
 
   // ---- رقم الهوية (hr.employees.viewIdentity) ------------------------------
   if (canViewIdentity) {
-    setNullableStr("national_id", values.national_id);
+    addChanged(identityBlock(values), before ? identityBlock(before) : null);
   }
 
   // Creating: drop the explicit nulls that exist only to CLEAR a stored value.
@@ -369,6 +428,63 @@ export const buildEmployeePayload = (values, options = {}) => {
 
   return payload;
 };
+
+// The twelve pay keys as they would be sent, cross-field rules applied. Built
+// the same way for the edited values and for the original ones, so "did this
+// change?" compares like with like — including the keys a rule clears.
+function salaryBlock(values) {
+  const block = {};
+  const activity = num(values.activity_type);
+
+  block.activity_type = activity;
+  block.organizational_grade = num(values.organizational_grade);
+  block.experience_level = num(values.experience_level);
+  block.distinction_grade = num(values.distinction_grade);
+
+  // engineering_rank belongs to هندسي only; industrial years to صناعي only.
+  // For the other activity the field is explicitly cleared (both ARE
+  // nullable), so switching activity cannot leave a contradictory value
+  // behind that the server would then reject.
+  if (activity === ACTIVITY_ENGINEERING) {
+    block.engineering_rank = num(values.engineering_rank);
+    block.industrial_experience_years = null;
+  } else if (activity === ACTIVITY_INDUSTRIAL) {
+    block.industrial_experience_years = num(values.industrial_experience_years);
+    block.engineering_rank = null;
+  } else {
+    block.engineering_rank = null;
+    block.industrial_experience_years = null;
+  }
+
+  // Non-nullable booleans: "" means leave the stored value alone.
+  ["has_hazard_pay", "has_scarcity_pay", "has_dual_role_pay"].forEach((key) => {
+    if (values[key] === "") return;
+    block[key] = values[key] === "true" || values[key] === true;
+  });
+
+  const sham = str(values.sham_cash_account);
+  block.sham_cash_account = sham === "" ? null : sham;
+
+  // salary_mode is optional but NOT nullable: a blank one is omitted.
+  const mode = num(values.salary_mode);
+  if (mode !== null) block.salary_mode = mode;
+  if (mode === SALARY_MODE_AGREED) {
+    // Kept as the exact decimal STRING: a numeric string satisfies the server
+    // rule while preserving precision no float round-trip can.
+    block.agreed_salary = str(values.agreed_salary);
+  } else if (mode === SALARY_MODE_SYSTEM) {
+    // Forbidden on the نظام رواتب track — null is the documented way to say
+    // "there is none", and agreed_salary IS nullable.
+    block.agreed_salary = null;
+  }
+
+  return block;
+}
+
+function identityBlock(values) {
+  const nationalId = str(values.national_id);
+  return { national_id: nationalId === "" ? null : nationalId };
+}
 
 // Client-side mirror of the documented cross-field rules, so the common
 // mistakes are caught before the request. The server still decides: a 422 is

@@ -13,6 +13,15 @@ import { parseApiError } from "../../utils/apiHelpers";
 const PER_PAGE = 100;
 const MAX_PAGES = 20;
 
+// The one way a unit is labelled in a plain picker (employee form, filters,
+// assignments, role grants). A unit is any level of the tree, so the fallback
+// says «وحدة», as the departments screen itself does. DepartmentFormModal's
+// parent picker is deliberately richer (code — name — level) and keeps its own.
+export const departmentToOption = (d) => ({
+  value: d.id,
+  label: d.name || `وحدة #${d.id}`,
+});
+
 export const useResourceOptions = (path, mapItem, enabled = true) => {
   const [state, setState] = useState({
     items: [],

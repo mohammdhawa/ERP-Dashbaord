@@ -4,17 +4,16 @@ import Select from "react-select";
 import { useSelector } from "react-redux";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { STATUS_OPTIONS, ACTIVITY_TYPE_OPTIONS } from "../../data/hrEnums";
-import { useResourceOptions } from "../departments/useResourceOptions";
+import {
+  departmentToOption,
+  useResourceOptions,
+} from "../departments/useResourceOptions";
 import { EMPLOYEE_SORT_KEYS } from "../../redux/actions/employeesActions";
 
 // SERVER-SIDE filter toolbar. Every control here maps to a documented query
 // parameter; nothing is filtered in the browser. Only these six are sent:
 // status, department_id, job_title_id, activity_type, search, sort.
 
-const departmentToOption = (d) => ({
-  value: d.id,
-  label: d.name || `قسم #${d.id}`,
-});
 const jobTitleToOption = (t) => ({ value: t.id, label: t.name });
 
 // Each sort key, ascending and descending. `full_name` is absent on purpose:

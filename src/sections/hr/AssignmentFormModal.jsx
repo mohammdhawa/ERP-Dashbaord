@@ -4,7 +4,10 @@ import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
 import { createAssignment } from "../../redux/actions/assignmentsActions";
 import { hasPermission } from "../../data/permissionsCatalog";
-import { useResourceOptions } from "../departments/useResourceOptions";
+import {
+  departmentToOption,
+  useResourceOptions,
+} from "../departments/useResourceOptions";
 import { confirmDiscardChanges } from "../../utils";
 import {
   ASSIGNMENT_REASON_OPTIONS,
@@ -18,10 +21,6 @@ import {
   validateAssignmentForm,
 } from "./assignmentPayload";
 
-const departmentToOption = (d) => ({
-  value: d.id,
-  label: d.name || `قسم #${d.id}`,
-});
 const jobTitleToOption = (t) => ({
   value: t.id,
   label: t.is_active ? t.name : `${t.name} (معطّل)`,

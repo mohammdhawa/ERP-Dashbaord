@@ -74,6 +74,23 @@ const usersReducer = (state = initialState, action) => {
     case "SAVE_USER_FAILURE":
       return { ...state, saving: false, error: action.payload };
 
+    // assign/unassign answers with the whole user, `grants` included. Patching
+    // that one row in place (both the directory and the visible page) is exact
+    // — no ordering or counters change — and it lands before the busy flag
+    // clears, so a revoked grant's button is gone by the time it could be
+    // clicked again.
+    case "ROLE_ASSIGNMENT_CHANGED": {
+      const updated = action.payload;
+      if (!updated?.id) return state;
+      const patch = (list) =>
+        list.map((u) => (u.id === updated.id ? { ...u, ...updated } : u));
+      return {
+        ...state,
+        allItems: patch(state.allItems),
+        items: patch(state.items),
+      };
+    }
+
     default:
       return state;
   }

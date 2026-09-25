@@ -10,7 +10,7 @@ import React, {
 import { Helmet } from "react-helmet-async";
 import { Alert, Card, Col, Nav, Row, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { MutatingDots } from "react-loader-spinner";
 import { PageHeader, ModalFallback } from "../../components";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
@@ -240,6 +240,29 @@ const EmployeeProfile = () => {
                       <div className="text-muted fs-11">تاريخ التعيين</div>
                       <div className="fw-medium">
                         <bdi dir="ltr">{current.hire_date || "—"}</bdi>
+                      </div>
+                    </Col>
+                    {/* Read-only and resolved by the server from the org tree
+                        (2026-09-24) — there is nothing to edit here, and no
+                        manager field on the form. Linked like the department
+                        tree links a unit's head. The manager may sit outside
+                        the reader's scope (a section head's own superior); the
+                        server still names them, and following the link then
+                        shows the server's 403 message rather than a broken
+                        page. */}
+                    <Col xs={12} md={4}>
+                      <div className="text-muted fs-11">المدير المباشر</div>
+                      <div className="fw-medium">
+                        {current.manager ? (
+                          <Link
+                            to={`${import.meta.env.BASE_URL}hr/employees/${current.manager.id}`}
+                            title={current.manager.employee_number || undefined}
+                          >
+                            {current.manager.full_name}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
                       </div>
                     </Col>
                   </Row>

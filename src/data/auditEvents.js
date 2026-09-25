@@ -198,6 +198,12 @@ export const AUDITABLE_TYPES = Object.freeze(Object.keys(AUDITABLE_META));
  * `AuditLogDetailResource::TYPE_VIEW_PERMISSIONS`. `employee` needs
  * `hr.employees.viewSalary` as well: the classification axes sit in the trail
  * in cleartext, and they are what pay is computed from.
+ *
+ * ⚙️ EACH HELD COMPANY-WIDE since 2026-09-24 (GAP-3). Holding the name is not
+ * enough: a grant scoped to a unit does not unlock values in the trail, which
+ * is not scoped itself. This list cannot express that — the client does not
+ * see its scopes — so AuditDiff's lock message states the company-wide
+ * requirement rather than diagnosing which grant falls short.
  */
 const VALUES_PERMISSIONS_BY_TYPE = Object.freeze({
   employee: Object.freeze(["hr.employees.view", "hr.employees.viewSalary"]),

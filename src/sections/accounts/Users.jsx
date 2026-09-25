@@ -20,6 +20,7 @@ import {
   deleteUser,
   updateUser,
 } from "../../redux/actions/usersActions";
+import { describeGrantScope, grantKey } from "../rbac/grantScope";
 
 // How an account is named to a human. An account stores no name of its own, so
 // this walks the linked employee, then the legacy `name`, then the email —
@@ -209,10 +210,36 @@ const Users = () => {
         ),
     },
     {
+      // One chip per GRANT, not per role name (GAP-3, 2026-09-24): a grant is
+      // a role plus how far it reaches, and the same role may be held over two
+      // units. `roles` is still the de-duplicated name list and is the
+      // fallback if a response ever arrives without `grants`.
       key: "roles",
       label: "الأدوار",
-      render: (value) =>
-        value?.length ? (
+      render: (value, row) => {
+        if (Array.isArray(row.grants)) {
+          return row.grants.length ? (
+            <div className="d-flex gap-1 flex-wrap">
+              {row.grants.map((grant) => (
+                <span
+                  key={grantKey(grant)}
+                  className="badge bg-primary-transparent"
+                  title={grant.scope_label || undefined}
+                >
+                  {grant.role}
+                  <span className="fw-normal opacity-75">
+                    {" "}
+                    · {describeGrantScope(grant)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted">بدون أدوار</span>
+          );
+        }
+
+        return value?.length ? (
           <div className="d-flex gap-1 flex-wrap">
             {value.map((role) => (
               <span key={role} className="badge bg-primary-transparent">
@@ -222,7 +249,8 @@ const Users = () => {
           </div>
         ) : (
           <span className="text-muted">بدون أدوار</span>
-        ),
+        );
+      },
     },
     {
       // Embedded on the resource now — `employee: { id, full_name,
