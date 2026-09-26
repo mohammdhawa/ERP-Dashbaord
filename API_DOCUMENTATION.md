@@ -784,6 +784,17 @@ user object now carries `grants`:
 `roles` stays a de-duplicated list of names; `grants` is where the scopes are.
 `department` is `null` for scope types `1` and `3`.
 
+**`super_admin` is company-wide only.** Its power is a bypass, and a bypass has no
+scope, so `scope_type` `2` or `3` with the `super_admin` role is a **422** on
+`scope_type`.
+
+**You can only grant what you reach.** The grant may not reach further than the
+caller's own `auth.roles.update` grant. A company-wide caller may grant anything;
+a caller holding `auth.roles.update` over a unit may grant `2` inside that unit,
+or `3` to someone whose managed units are all inside it — and **never** `1`, not
+even to themselves. Anything else is a **403**:
+`لا يمكنك منح أو سحب صلاحية تتجاوز نطاق صلاحياتك.`
+
 **422** — unknown user/role: `المستخدم المحدد غير موجود.` / `الدور المحدد غير موجود.`;
 a malformed scope names the field (`scope_type` or `scope_department_id`).
 
@@ -796,6 +807,11 @@ Same body as assign. **With** `scope_type` (and `scope_department_id` for a unit
 only that one grant is revoked; **without** it, **every** grant of the role is
 revoked — the pre-GAP-3 meaning of "take this role away". Takes effect on the
 user's next request. **200 Response** → `{ data: <user object>, message: "تم سحب الدور من المستخدم." }`
+
+Differences from assign: `scope_department_id` **may name a soft-deleted unit**
+(a grant on a unit deleted afterwards keeps working, so it has to stay revocable
+on its own). Every grant being revoked must lie within the caller's reach, as for
+assign; if any one does not, **nothing** is revoked and the answer is **403**.
 
 ### 5.6 Delete role
 
@@ -1177,7 +1193,7 @@ carries **that** permission decides which employees it reaches.
 | `status` | int | `1` نشط · `2` موقوف · `3` منتهي الخدمة |
 | `department_id` | int | must exist and not be deleted |
 | `job_title_id` | int | must exist and not be deleted |
-| `activity_type` | int | 1–5 |
+| `activity_type` | int | 1–5. ⚙️ **Gated by `hr.employees.viewSalary` (2026-09-26)** — it is a pay input, and a filter reads it. Without the permission: **422** on `activity_type` (`لا تملك صلاحية التصفية حسب حقول الرواتب ومعاييرها.`). With it over some units only: the rows are limited to those units, as with every other scoped read (see Row scope below) |
 | `search` | string | matches any name part or `employee_number` |
 | `sort` | string | `employee_number`, `first_name`, `last_name`, `hire_date`, `created_at`; prefix `-` for descending |
 
@@ -1339,7 +1355,7 @@ what a payslip was computed against, with no trace of the original.
 | `reason` | int | **required, no default** — `1` تعيين · `2` نقل داخلي · `3` ترقية · `4` تعديل مسمى وظيفي · `5` إعادة هيكلة · `6` إنهاء عمل |
 | `department_id` | int | optional, nullable, existing non-deleted — **omit to carry forward** |
 | `job_title_id` | int | optional, nullable, existing non-deleted — **omit to carry forward** |
-| `organizational_grade` | int | optional, nullable, 1–5 — **omit to carry forward** |
+| `organizational_grade` | int | optional, nullable, 1–5 — **omit to carry forward**. **Must be absent** unless the caller's `hr.employees.viewSalary` reaches the employee's unit, and the new unit too if `department_id` is sent (422 `لا تملك صلاحية تعديل حقول الرواتب ومعاييرها.`) |
 | `notes` | string | optional, nullable, max 2000 |
 
 ⚠️ **An omitted field carries forward; an explicit `null` clears it.** These are
