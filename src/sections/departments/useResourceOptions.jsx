@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../../redux/api";
 import { parseApiError } from "../../utils/apiHelpers";
 
@@ -9,7 +9,10 @@ import { parseApiError } from "../../utils/apiHelpers";
 //
 // Returns the raw `items`, mapped `options`, and honest loading/error/
 // incomplete flags so the caller can show a truthful fallback when the
-// related list cannot be read in full.
+// related list cannot be read in full. `loaded` is true only once a walk has
+// succeeded: before the first effect runs `loading` is still false and
+// `items` empty, which a caller reasoning about the list must not mistake
+// for "there are none".
 const PER_PAGE = 100;
 const MAX_PAGES = 20;
 
@@ -23,23 +26,27 @@ export const departmentToOption = (d) => ({
 });
 
 export const useResourceOptions = (path, mapItem, enabled = true) => {
+  // Bumped by reload(): walks the list again with the same path and gate.
+  const [attempt, setAttempt] = useState(0);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState({
     items: [],
     options: [],
     loading: false,
+    loaded: false,
     error: null,
     incomplete: false,
   });
 
   useEffect(() => {
     if (!enabled) {
-      setState({ items: [], options: [], loading: false, error: null, incomplete: false });
+      setState({ items: [], options: [], loading: false, loaded: false, error: null, incomplete: false });
       return;
     }
 
     let cancelled = false;
     const load = async () => {
-      setState((s) => ({ ...s, loading: true, error: null, incomplete: false }));
+      setState((s) => ({ ...s, loading: true, loaded: false, error: null, incomplete: false }));
       try {
         // `per_page` at the API maximum (100, clamped server-side). Walking at
         // the server default of 15 meant ~17 sequential requests to fill one
@@ -76,6 +83,7 @@ export const useResourceOptions = (path, mapItem, enabled = true) => {
           items,
           options: items.map(mapItem),
           loading: false,
+          loaded: true,
           error: null,
           incomplete: incomplete || lastPage > MAX_PAGES,
         });
@@ -85,6 +93,7 @@ export const useResourceOptions = (path, mapItem, enabled = true) => {
           items: [],
           options: [],
           loading: false,
+          loaded: false,
           error: parseApiError(error).message,
           incomplete: false,
         });
@@ -95,9 +104,10 @@ export const useResourceOptions = (path, mapItem, enabled = true) => {
     return () => {
       cancelled = true;
     };
-    // mapItem is a stable module-scope fn per caller; path/enabled drive reloads.
+    // mapItem is a stable module-scope fn per caller; path/enabled/attempt
+    // drive reloads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, enabled]);
+  }, [path, enabled, attempt]);
 
-  return state;
+  return { ...state, reload };
 };

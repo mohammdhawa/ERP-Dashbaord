@@ -18,7 +18,10 @@ import {
   deleteRole,
 } from "../../redux/actions/rolesActions";
 import { fetchAllUsers } from "../../redux/actions/usersActions";
-import { permissionLabel } from "../../data/permissionsCatalog";
+import {
+  ASSIGN_ROLES_PERMISSION,
+  permissionLabel,
+} from "../../data/permissionsCatalog";
 import AssignRoleCard from "./AssignRoleCard";
 
 const RoleFormModal = lazy(() => import("./RoleFormModal"));
@@ -37,7 +40,9 @@ const Roles = () => {
   // it showed "10" while fetching 15, and picking 10 changed nothing.
   const [perPage, setPerPage] = useState(10);
 
-  const canAssign = permissions.includes("auth.roles.update");
+  // auth.roles.assign since 2026-09-26 (GAP-15) — split out of
+  // auth.roles.update, which now means editing role definitions only.
+  const canAssign = permissions.includes(ASSIGN_ROLES_PERMISSION);
   const canListUsers = permissions.includes("auth.users.view");
 
   // The TABLE reads one page; the assignment card needs every row. Two separate
@@ -145,10 +150,11 @@ const Roles = () => {
         />
       </PageHeader>
 
-      {/* Assignment block needs auth.roles.update */}
+      {/* Assignment block needs auth.roles.assign (auth.roles.update until
+          GAP-15, 2026-09-26) */}
       <ProtectedElement
         element={<AssignRoleCard />}
-        requiredPermissions={["auth.roles.update"]}
+        requiredPermissions={[ASSIGN_ROLES_PERMISSION]}
       />
 
       <Row>

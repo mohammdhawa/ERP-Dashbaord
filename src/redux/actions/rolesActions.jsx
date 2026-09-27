@@ -1,4 +1,5 @@
 import api from "../api";
+import { ASSIGN_ROLES_PERMISSION } from "../../data/permissionsCatalog";
 import { parseApiError, fetchAllPages } from "../../utils/apiHelpers";
 import { toastNotify, confirmDestructive } from "../../utils";
 import { refreshCurrentUser } from "./authActions";
@@ -104,14 +105,15 @@ export const createRole =
  * Refreshes the flattened all-roles list ONLY when something consumes it.
  *
  * `allItems` exists for the assign/unassign picker, which Roles.jsx renders
- * behind `auth.roles.update`. An admin holding only auth.roles.create never
- * sees that card, so firing fetchAllRoles() after every mutation walked up to
+ * behind `auth.roles.assign` (auth.roles.update until GAP-15, 2026-09-26 — the
+ * two gates must stay the same permission). An admin holding only
+ * auth.roles.create never sees that card, so firing fetchAllRoles() after every mutation walked up to
  * 20 pages to populate a slice nothing reads — two extra round trips per save,
  * discarded on arrival. The same permission that gates the card gates the load.
  */
 const refreshAssignmentRoles = (getState) => (dispatch) => {
   const permissions = getState()?.auth?.permissions || [];
-  if (permissions.includes("auth.roles.update")) dispatch(fetchAllRoles());
+  if (permissions.includes(ASSIGN_ROLES_PERMISSION)) dispatch(fetchAllRoles());
 };
 
 /**

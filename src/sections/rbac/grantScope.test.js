@@ -4,9 +4,13 @@ import {
   SCOPE_COMPANY,
   SCOPE_MANAGED,
   SCOPE_UNIT,
+  assignReachIsCompany,
   buildGrantBody,
   buildRevokeAllBody,
   describeGrantScope,
+  grantAdvisories,
+  grantInertPermissions,
+  managesAnyUnit,
   revokeGrantBody,
 } from "./grantScope.js";
 
@@ -143,4 +147,117 @@ test("a unit grant with no unit id at all cannot be revoked on its own", () => {
   const grant = { id: 9, role: "supervisor", scope_type: 2, department: null };
   assert.equal(revokeGrantBody(5, grant, roles), null);
   assert.equal(describeGrantScope(grant), "وحدة غير متاحة");
+});
+
+// ── What the assign card says before sending ────────────────────────────────
+
+const superAdmin = { name: "super_admin", is_system: true, permissions: [] };
+const clerk = { name: "clerk", permissions: ["hr.employees.view", "departments.update"] };
+const deptEditor = { name: "dept-editor", permissions: ["departments.update"] };
+const roleAdmin = { name: "role-admin", permissions: ["auth.roles.view", "auth.roles.assign"] };
+
+test("super_admin over a unit is blocked by name, though it carries no permissions", () => {
+  // Found in review: the inert check reads permissions, super_admin has none,
+  // so it passed silently to a guaranteed 422.
+  for (const scope of [SCOPE_UNIT, SCOPE_MANAGED]) {
+    const advice = grantAdvisories(superAdmin, scope);
+    assert.equal(advice.blocked, "دور مدير النظام لا يُمنح إلا على نطاق «الشركة كاملة».");
+  }
+  assert.equal(grantAdvisories(superAdmin, SCOPE_COMPANY).blocked, null);
+});
+
+test("inert permissions are reported, never blocking — the cache may be stale", () => {
+  const partly = grantAdvisories(clerk, SCOPE_UNIT);
+  assert.deepEqual(partly.inert, ["departments.update"]);
+  assert.equal(partly.whollyInert, false);
+  assert.equal(partly.blocked, null);
+
+  const wholly = grantAdvisories(deptEditor, SCOPE_MANAGED);
+  assert.equal(wholly.whollyInert, true);
+  assert.equal(wholly.blocked, null);
+});
+
+test("nothing is inert company-wide, and no role means no advice", () => {
+  assert.deepEqual(grantAdvisories(deptEditor, SCOPE_COMPANY).inert, []);
+  assert.deepEqual(grantAdvisories(null, SCOPE_UNIT), {
+    blocked: null,
+    inert: [],
+    whollyInert: false,
+    grantsAssign: false,
+  });
+});
+
+test("auth.roles.assign over a unit is flagged (GAP-16), and only over a unit", () => {
+  assert.equal(grantAdvisories(roleAdmin, SCOPE_UNIT).grantsAssign, true);
+  assert.equal(grantAdvisories(roleAdmin, SCOPE_COMPANY).grantsAssign, false);
+  assert.equal(grantAdvisories(clerk, SCOPE_UNIT).grantsAssign, false);
+});
+
+// ── Existing grants that do less than their role says ───────────────────────
+
+test("an existing scoped grant names the permissions it carries in vain", () => {
+  const roles = [clerk, deptEditor];
+  assert.deepEqual(
+    grantInertPermissions({ role: "clerk", scope_type: SCOPE_UNIT }, roles),
+    ["departments.update"]
+  );
+  assert.deepEqual(
+    grantInertPermissions({ role: "clerk", scope_type: SCOPE_COMPANY }, roles),
+    []
+  );
+  // A role missing from the list says nothing rather than guessing.
+  assert.deepEqual(
+    grantInertPermissions({ role: "gone", scope_type: SCOPE_UNIT }, roles),
+    []
+  );
+});
+
+test("a role with no permissions is not wholly inert — the server exempts it", () => {
+  const empty = { name: "empty", permissions: [] };
+  assert.equal(grantAdvisories(empty, SCOPE_UNIT).whollyInert, false);
+});
+
+// ── «الوحدات التي أديرها» to someone who manages nothing ─────────────────────
+
+test("the caller's assign reach is company-wide only through a company grant", () => {
+  const roles = [roleAdmin, clerk];
+  const caller = (grants) => ({ id: 1, grants });
+
+  assert.equal(
+    assignReachIsCompany(caller([{ role: roleAdmin.name, scope_type: SCOPE_COMPANY }]), roles),
+    true
+  );
+  assert.equal(
+    assignReachIsCompany(caller([{ role: roleAdmin.name, scope_type: SCOPE_UNIT }]), roles),
+    false
+  );
+  // A company grant of a role without assign reaches nothing to assign with.
+  assert.equal(
+    assignReachIsCompany(caller([{ role: "clerk", scope_type: SCOPE_COMPANY }]), roles),
+    false
+  );
+  // super_admin carries no permission rows; its bypass reaches everything.
+  assert.equal(
+    assignReachIsCompany(caller([{ role: "super_admin", scope_type: SCOPE_COMPANY }]), roles),
+    true
+  );
+  // Cannot tell: no directory row, or a company grant of an unknown role.
+  assert.equal(assignReachIsCompany(null, roles), null);
+  assert.equal(
+    assignReachIsCompany(caller([{ role: "gone", scope_type: SCOPE_COMPANY }]), roles),
+    null
+  );
+});
+
+test("an employee manages a unit only through a live manager record", () => {
+  const departments = [
+    { id: 1, manager_id: 7, manager: { id: 7 } },
+    { id: 2, manager_id: 9, manager: null }, // manager soft-deleted
+    { id: 3, manager_id: null, manager: null },
+  ];
+  assert.equal(managesAnyUnit(7, departments), true);
+  assert.equal(managesAnyUnit("7", departments), true);
+  assert.equal(managesAnyUnit(9, departments), false);
+  assert.equal(managesAnyUnit(8, departments), false);
+  assert.equal(managesAnyUnit(null, departments), false);
 });

@@ -1,4 +1,4 @@
-// Permission catalogue (API doc §2) — 30 rows: 27 route-level + 3 field-level.
+// Permission catalogue (API doc §2) — 31 rows: 28 route-level + 3 field-level.
 // Format: {module}.{resource}.{action}
 //
 // Arabic labels come from the backend seeder. No endpoint serves permission
@@ -98,6 +98,10 @@ export const PERMISSIONS_CATALOG = [
       { name: "auth.roles.create", label: "إنشاء دور" },
       { name: "auth.roles.update", label: "تعديل دور" },
       { name: "auth.roles.delete", label: "حذف دور" },
+      // Split out of auth.roles.update on 2026-09-26 (GAP-15): granting a role
+      // to a user is bounded by the assigner's own reach and may be scoped;
+      // editing what a role carries is company-wide and may not.
+      { name: "auth.roles.assign", label: "إسناد الأدوار للمستخدمين" },
     ],
   },
   {
@@ -140,6 +144,47 @@ export const PERMISSIONS_CATALOG = [
 export const ALL_PERMISSION_NAMES = PERMISSIONS_CATALOG.flatMap((group) =>
   group.permissions.map((p) => p.name)
 );
+
+// The permission the assign/unassign endpoints require. Split out of
+// auth.roles.update on 2026-09-26 (GAP-15). One constant because three places
+// must agree on it: the gate on the assign card, the `canAssign` flag beside it,
+// and the refresh of the roles picker — a mismatch shows a card that cannot
+// load its picker, or loads a picker nothing shows.
+export const ASSIGN_ROLES_PERMISSION = "auth.roles.assign";
+
+// WHAT A SCOPED GRANT CONFERS (GAP-15, API doc §5.4). A grant over a unit or
+// «الوحدات التي أديرها» confers only these; every other permission in its role
+// counts only from a company-wide grant, and is simply not held over a unit.
+//
+// ⚠️ A MIRROR of the server's PermissionReach, kept for ONE purpose: warning an
+// admin who is about to assign a role over a unit that some of what it carries
+// will do nothing there. It is never the check — the server's /auth/me already
+// lists only the effective permissions, and that is what the UI gates on. If
+// this list drifts, the warning is wrong; access is not.
+export const HONOURED_FROM_SCOPED_GRANT = Object.freeze([
+  // Row-scoped: the server filters and refuses rows by the grant's scope.
+  "hr.employees.view",
+  "hr.employees.create",
+  "hr.employees.update",
+  "hr.employees.delete",
+  "hr.employees.viewSalary",
+  "hr.employees.viewIdentity",
+  "hr.assignments.view",
+  "hr.assignments.create",
+  "hr.warnings.view",
+  "hr.warnings.create",
+  "hr.warnings.update",
+  "hr.warnings.delete",
+  "auth.roles.assign",
+  // Company catalogues, readable from any grant so a scoped user's pickers work.
+  "departments.view",
+  "hr.job_titles.view",
+  "auth.roles.view",
+]);
+
+/** The permissions in `names` that a grant narrower than the company does NOT confer. */
+export const companyOnlyPermissions = (names = []) =>
+  names.filter((name) => !HONOURED_FROM_SCOPED_GRANT.includes(name));
 
 export const permissionLabel = (name) => {
   for (const group of PERMISSIONS_CATALOG) {

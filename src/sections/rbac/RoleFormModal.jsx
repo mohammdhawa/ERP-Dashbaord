@@ -1,9 +1,45 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Col, Form, Row, Modal, Spinner, Alert } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import { createRole, updateRole } from "../../redux/actions/rolesActions";
-import { PERMISSIONS_CATALOG } from "../../data/permissionsCatalog";
+import {
+  ASSIGN_ROLES_PERMISSION,
+  PERMISSIONS_CATALOG,
+} from "../../data/permissionsCatalog";
 import { confirmDiscardChanges } from "../../utils";
+
+// One checkbox row — the same flex layout as AssignmentFormModal's CarryOption,
+// for the same reason: `<Form.Check label="…" />` floats the marker into a
+// padding it only just fits, leaving ~5.6px before the first Arabic letter, and
+// a label that wraps runs its second line under the marker. Here `gap` is the
+// clearance, and the label is its own flex item, so a wrapped line stays
+// aligned with the first. `align-items-start` + the marker's small top margin
+// keep the box on the first line of a multi-line label.
+//
+// `indeterminate` is a DOM property with no HTML attribute, so it is set
+// through a ref rather than a prop.
+const CheckRow = ({ id, checked, indeterminate = false, disabled, onChange, children }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <Form.Check className="d-flex align-items-start gap-2 ps-0 mb-0">
+      <Form.Check.Input
+        ref={ref}
+        type="checkbox"
+        id={id}
+        className="flex-shrink-0 m-0 mt-1"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      <Form.Check.Label htmlFor={id} className="flex-grow-1">
+        {children}
+      </Form.Check.Label>
+    </Form.Check>
+  );
+};
 
 // Role create/edit with a checkbox matrix over the Phase-1 permission
 // catalogue. On UPDATE the `permissions` array is a full SYNC: the server
@@ -218,54 +254,77 @@ const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
                 <strong>إزالة جميع الصلاحيات</strong> من هذا الدور.
               </Alert>
             )}
+            {/* The assign card lives on the Roles screen, and both the screen
+                and the role picker on it need auth.roles.view. A role granting
+                only «إسناد الأدوار للمستخدمين» gives its holder a power they
+                have no way to reach. Legal, so a warning — the holder may get
+                the view from another role. */}
+            {selected.includes(ASSIGN_ROLES_PERMISSION) &&
+              !selected.includes("auth.roles.view") && (
+                <Alert variant="warning" className="py-2 px-3 mb-2">
+                  <i className="ri-alert-line align-middle me-1"></i>
+                  «إسناد الأدوار للمستخدمين» يحتاج إلى «عرض الأدوار» أيضاً:
+                  شاشة الأدوار وقائمة الأدوار فيها تتطلبانها، وبدونها لن يصل
+                  حامل هذا الدور إلى بطاقة الإسناد — إلا إن كان يملكها من دور
+                  آخر.
+                </Alert>
+              )}
             <Row className="g-3">
               {PERMISSIONS_CATALOG.map((group) => {
                 const groupNames = group.permissions.map((p) => p.name);
-                const allChecked = groupNames.every((n) =>
+                const checkedCount = groupNames.filter((n) =>
                   selected.includes(n)
-                );
+                ).length;
+                const allChecked = checkedCount === groupNames.length;
                 return (
                   <Col sm={12} md={6} key={group.key}>
-                    <div className="border rounded p-3 h-100">
-                      <Form.Check
-                        type="checkbox"
-                        id={`group-${group.key}`}
-                        className="fw-semibold mb-2"
-                        label={
-                          <span>
-                            {group.module}{" "}
+                    <div className="border rounded h-100">
+                      <div className="bg-light rounded-top border-bottom px-3 py-2">
+                        <CheckRow
+                          id={`group-${group.key}`}
+                          checked={allChecked}
+                          indeterminate={checkedCount > 0 && !allChecked}
+                          disabled={isSystemRole}
+                          onChange={() => toggleGroup(group)}
+                        >
+                          <span className="d-flex align-items-center flex-wrap gap-2">
+                            <span className="fw-semibold">{group.module}</span>
                             {group.fieldLevel && (
                               <span className="badge bg-warning-transparent fs-11">
                                 على مستوى الحقل
                               </span>
                             )}
+                            <span className="text-muted fs-11 ms-auto">
+                              {checkedCount}/{groupNames.length}
+                            </span>
                           </span>
-                        }
-                        checked={allChecked}
-                        disabled={isSystemRole}
-                        onChange={() => toggleGroup(group)}
-                      />
-                      {group.note && (
-                        <p className="text-muted fs-11 mb-2">{group.note}</p>
-                      )}
-                      <div className="d-flex flex-column gap-1 ps-3">
+                        </CheckRow>
+                        {group.note && (
+                          <p className="text-muted fs-11 mb-0 mt-1">
+                            {group.note}
+                          </p>
+                        )}
+                      </div>
+                      <div className="d-flex flex-column gap-2 p-3">
                         {group.permissions.map((perm) => (
-                          <Form.Check
+                          <CheckRow
                             key={perm.name}
-                            type="checkbox"
                             id={`perm-${perm.name}`}
-                            label={
-                              <span>
-                                {perm.label}{" "}
-                                <code className="fs-11 text-muted">
-                                  {perm.name}
-                                </code>
-                              </span>
-                            }
                             checked={selected.includes(perm.name)}
                             disabled={isSystemRole}
                             onChange={() => togglePermission(perm.name)}
-                          />
+                          >
+                            <span className="d-block">{perm.label}</span>
+                            {/* Own line, isolated LTR: inline beside Arabic
+                                text, the dotted name reorders under the bidi
+                                algorithm and forces the row to wrap. */}
+                            <code
+                              dir="ltr"
+                              className="d-block fs-11 text-muted text-end"
+                            >
+                              {perm.name}
+                            </code>
+                          </CheckRow>
                         ))}
                       </div>
                     </div>

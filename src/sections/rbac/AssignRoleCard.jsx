@@ -6,7 +6,7 @@ import Swal from "sweetalert2";
 import { assignRole, unassignRole } from "../../redux/actions/rolesActions";
 import { fetchAllUsers } from "../../redux/actions/usersActions";
 import { refreshCurrentUser } from "../../redux/actions/authActions";
-import { hasPermission } from "../../data/permissionsCatalog";
+import { hasPermission, permissionLabel } from "../../data/permissionsCatalog";
 import {
   departmentToOption,
   useResourceOptions,
@@ -16,17 +16,23 @@ import {
   SCOPE_MANAGED,
   SCOPE_OPTIONS,
   SCOPE_UNIT,
+  assignReachIsCompany,
   buildGrantBody,
   buildRevokeAllBody,
   describeGrantScope,
+  grantAdvisories,
+  grantInertPermissions,
   grantKey,
+  managesAnyUnit,
   revokeGrantBody,
 } from "./grantScope";
 
 // Assign/unassign roles ⇄ users via the dedicated RBAC endpoints
 // (POST /auth/roles/assign|unassign) — the single source of truth for grants.
-// Requires auth.roles.update; the user dropdown additionally needs
-// auth.users.view, so we fall back to a raw user-ID input without it.
+// Requires auth.roles.assign (auth.roles.update until GAP-15, 2026-09-26, when
+// assigning was split from editing role definitions); the user dropdown
+// additionally needs auth.users.view, so we fall back to a raw user-ID input
+// without it.
 //
 // ⚙️ A GRANT HAS A SCOPE since 2026-09-24 (GAP-3, API doc §5.4) — the role
 // says which verbs, the scope says which employees: the whole company, a named
@@ -85,12 +91,6 @@ const AssignRoleCard = () => {
   const [submitting, setSubmitting] = useState(null);
 
   const needsUnit = scopeType === SCOPE_UNIT;
-  const departments = useResourceOptions(
-    "/departments",
-    departmentToOption,
-    needsUnit && canReadDepartments
-  );
-  const unitPickerAvailable = canReadDepartments && !departments.error;
 
   const userOptions = useMemo(
     () =>
@@ -131,6 +131,31 @@ const AssignRoleCard = () => {
   );
   const currentGrants = selectedUserRecord?.grants || [];
 
+  // The unit picker needs the list, and so does the «الوحدات التي أديرها»
+  // check (see managesNothing) — but only for a user it could say something
+  // about: a live linked employee, about to be given that scope or already
+  // holding it. An unlinked account needs no list to be known to manage
+  // nothing, and no user needs no check at all.
+  const needsManagers =
+    !!selectedUserRecord?.employee &&
+    (scopeType === SCOPE_MANAGED ||
+      currentGrants.some((g) => Number(g.scope_type) === SCOPE_MANAGED));
+  const departments = useResourceOptions(
+    "/departments",
+    departmentToOption,
+    (needsUnit || needsManagers) && canReadDepartments
+  );
+  const unitPickerAvailable = canReadDepartments && !departments.error;
+
+  const handleScopeChange = (e) => {
+    const next = Number(e.target.value);
+    setScopeType(next);
+    // The list is shared with the managed check, so moving from it to a unit
+    // scope may not flip the load on — and a walk that failed there, where the
+    // error is not shown, would otherwise leave the picker on manual entry.
+    if (next === SCOPE_UNIT && departments.error) departments.reload();
+  };
+
   const assignBody = buildGrantBody({
     userId: resolvedUserId,
     roleId: selectedRole?.value,
@@ -144,20 +169,79 @@ const AssignRoleCard = () => {
     roleId: selectedRole?.value,
   });
 
+  // What the server will make of this role over this scope, said before the
+  // request rather than after it (grantAdvisories in grantScope.js):
+  //   - super_admin over anything but the company is refused by NAME, so the
+  //     button is disabled — a role's name cannot go stale;
+  //   - GAP-15: over a unit a grant confers only the permissions whose scope
+  //     the server enforces. Read from the cached roles list, so a WARNING and
+  //     never a block — another tab may have changed the role, and the server
+  //     answers with its own 422 if the grant would confer nothing at all;
+  //   - GAP-16: the server refuses (422) a role carrying auth.roles.assign
+  //     over anything narrower than the company. Granted over a unit it lets
+  //     its holder hand out any role inside it, themselves included.
+  const selectedRoleRecord = selectedRole
+    ? roles.find((r) => r.id === selectedRole.value) || null
+    : null;
+  const advice = grantAdvisories(selectedRoleRecord, scopeType);
+
   // «الوحدات التي أديرها» resolves through the account's EMPLOYEE — the units
-  // whose manager is that person. An unlinked account manages nothing, and
-  // neither does one linked to a soft-deleted employee (`employee_id` survives,
-  // the embedded `employee` is null — the same third state Users.jsx shows), so
-  // the grant would reach no one. Legal, and occasionally intended (the link
-  // may be fixed later), so it is a warning rather than a refusal.
-  const managedEmployeeGap =
-    scopeType !== SCOPE_MANAGED || selectedUserRecord == null
+  // whose manager is that person. An unlinked account manages nothing, nor
+  // does one linked to a soft-deleted employee (`employee_id` survives, the
+  // embedded `employee` is null — the same third state Users.jsx shows), nor a
+  // live employee who runs no unit today. The grant then reaches no one.
+  //
+  // For a company-wide assigner that is legal, and occasionally intended (the
+  // link or the appointment may come later). For a SCOPED assigner the server
+  // refuses it — granting and revoking alike (403, 2026-09-26): the grant's
+  // reach would be set by whatever unit the person runs next, beyond the
+  // assigner's. Both read cached lists, so a warning either way, never a block.
+  const departmentsKnown =
+    departments.loaded && !departments.incomplete;
+  const managesNothing =
+    selectedUserRecord == null
       ? null
       : !selectedUserRecord.employee_id
       ? "unlinked"
       : selectedUserRecord.employee === null
       ? "deleted"
+      : departmentsKnown &&
+        !managesAnyUnit(selectedUserRecord.employee_id, departments.items)
+      ? "manages-none"
       : null;
+  const managesNothingReason =
+    managesNothing === "deleted"
+      ? "الموظف المرتبط بهذا الحساب لم يعد متاحاً (سجل محذوف)"
+      : managesNothing === "unlinked"
+      ? "هذا الحساب غير مرتبط بموظف"
+      : "الموظف المرتبط بهذا الحساب لا يدير حالياً أي وحدة";
+  const managedEmployeeGap =
+    scopeType === SCOPE_MANAGED ? managesNothing : null;
+  // true / false / null (cannot tell) — see assignReachIsCompany.
+  const callerCompanyWide = managesNothing
+    ? assignReachIsCompany(
+        users.find((u) => u.id === currentUser?.id) || null,
+        roles
+      )
+    : null;
+  // The rule, for the assign alert and the revoke confirmations alike. `false`
+  // comes from the cached roles list too, so it says "likely", not "will".
+  const managedRefusal =
+    callerCompanyWide === true
+      ? null
+      : `لا يمنح نطاق «الوحدات التي أديرها» لمستخدم لا يدير أي وحدة ولا يسحبه منه إلا من يملك صلاحية الإسناد على مستوى «الشركة كاملة»${
+          callerCompanyWide === false
+            ? "، وصلاحيتك — بحسب قائمة الأدوار المحمّلة — ليست كذلك، فالأرجح أن يرفضه الخادم."
+            : "."
+        }`;
+  // Appended to a revoke confirmation that would take away a managed grant
+  // from this user: the server checks each grant a revoke removes.
+  const managedRevokeNote = (grants) =>
+    managesNothing &&
+    managedRefusal &&
+    grants.some((g) => Number(g.scope_type) === SCOPE_MANAGED)
+      ? ` تنبيه: ${managesNothingReason}. ${managedRefusal}`
+      : "";
 
   const afterChange = (response) => {
     // The response carries the updated user and the reducer has already
@@ -199,7 +283,9 @@ const AssignRoleCard = () => {
       isSelf: resolvedUserId === currentUser?.id,
       text: `سيُسحب الدور من كل النطاقات الممنوح عليها${
         affected.length ? ` (${scopes})` : ""
-      }، ويفقد المستخدم كل الصلاحيات التي يمنحها.`,
+      }، ويفقد المستخدم كل الصلاحيات التي يمنحها.${managedRevokeNote(
+        affected
+      )}`,
     });
     if (ok) run("unassign", unassignRole(revokeAllBody));
   };
@@ -211,7 +297,7 @@ const AssignRoleCard = () => {
       isSelf: resolvedUserId === currentUser?.id,
       text: `سيُسحب الدور «${grant.role}» على نطاق «${describeGrantScope(
         grant
-      )}» فقط، وتبقى منحه الأخرى إن وُجدت.`,
+      )}» فقط، وتبقى منحه الأخرى إن وُجدت.${managedRevokeNote([grant])}`,
     });
     if (ok) run(grantKey(grant), unassignRole(body));
   };
@@ -275,7 +361,7 @@ const AssignRoleCard = () => {
             <Form.Select
               id="assign-scope"
               value={scopeType}
-              onChange={(e) => setScopeType(Number(e.target.value))}
+              onChange={handleScopeChange}
             >
               {SCOPE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -333,7 +419,9 @@ const AssignRoleCard = () => {
               <button
                 type="button"
                 className="btn btn-secondary flex-fill"
-                disabled={!assignBody || busy}
+                // Only a refusal that cannot go stale disables this: see
+                // `advice` above.
+                disabled={!assignBody || busy || !!advice.blocked}
                 onClick={handleAssign}
               >
                 {submitting === "assign" ? (
@@ -365,14 +453,59 @@ const AssignRoleCard = () => {
             ويتبع الهيكل التنظيمي تلقائياً عند تغيّر مدير أي وحدة.
           </div>
         )}
-        {managedEmployeeGap && (
+        {advice.blocked && (
+          <Alert variant="danger" className="py-2 px-3 mt-2 mb-0">
+            <i className="ri-forbid-line align-middle me-1"></i>
+            {advice.blocked}
+          </Alert>
+        )}
+        {/* No advice to "grant it company-wide instead": an assigner whose
+            own grant is scoped would get a 403 for trying. The fact, and the
+            one remedy open to every assigner — a different role. */}
+        {advice.inert.length > 0 && (
           <Alert variant="warning" className="py-2 px-3 mt-2 mb-0">
             <i className="ri-error-warning-line align-middle me-1"></i>
-            {managedEmployeeGap === "deleted"
-              ? "الموظف المرتبط بهذا الحساب لم يعد متاحاً (سجل محذوف)"
-              : "هذا الحساب غير مرتبط بموظف"}
-            ، فلن يصل نطاق «الوحدات التي أديرها» إلى أي موظف حتى يُربط بموظف
-            يدير وحدة.
+            {advice.whollyInert
+              ? "لن يمنح هذا الإسناد أي صلاحية على هذا النطاق: كل صلاحيات هذا الدور لا تعمل إلا بإسناد على مستوى «الشركة كاملة»، وسيرفضه الخادم. اختر دوراً آخر لهذا النطاق."
+              : "بعض صلاحيات هذا الدور لا تعمل إلا بإسناد على مستوى «الشركة كاملة»، ولن يمنحها هذا الإسناد:"}
+            {!advice.whollyInert && (
+              <span className="d-block mt-1">
+                {advice.inert
+                  .map((name) => `«${permissionLabel(name)}»`)
+                  .join("، ")}
+              </span>
+            )}
+          </Alert>
+        )}
+        {/* Same rule as above: the remedy offered is a different role, not
+            the company scope, which a scoped assigner cannot grant. */}
+        {/* The server REFUSES this grant (422, AssignRoleRequest) — so the
+            copy says so rather than asking whether it is intended. Still a
+            warning and not a disabled button: it reads the cached roles list,
+            and the server's own 422 is the backstop if that list is stale. */}
+        {advice.grantsAssign && (
+          <Alert variant="danger" className="py-2 px-3 mt-2 mb-0">
+            <i className="ri-shield-keyhole-line align-middle me-1"></i>
+            هذا الدور يتضمن «إسناد الأدوار للمستخدمين»، ولا يُسند إلا على مستوى
+            «الشركة كاملة»: على نطاق أضيق يستطيع حامله منح أي دور لأي مستخدم ضمن
+            نطاقه — ولنفسه أيضاً — ولذلك يرفض الخادم هذا الإسناد. اختر دوراً لا
+            يتضمن هذه الصلاحية.
+          </Alert>
+        )}
+        {managedEmployeeGap && (
+          <Alert
+            variant={callerCompanyWide === false ? "danger" : "warning"}
+            className="py-2 px-3 mt-2 mb-0"
+          >
+            <i className="ri-error-warning-line align-middle me-1"></i>
+            {managesNothingReason}
+            ، فلن يصل نطاق «الوحدات التي أديرها» إلى أي موظف
+            {managedEmployeeGap === "manages-none"
+              ? " حتى يُعيَّن مديراً لوحدة."
+              : " حتى يُربط بموظف يدير وحدة."}
+            {managedRefusal && (
+              <span className="d-block mt-1">{managedRefusal}</span>
+            )}
           </Alert>
         )}
 
@@ -396,14 +529,37 @@ const AssignRoleCard = () => {
                     : roles.some((r) => r.name === grant.role)
                     ? "تعذّر تحديد وحدة هذا الإسناد (قد تكون محذوفة) — لا يمكن سحبه منفرداً، استخدم «سحب» لإزالة الدور من كل نطاقاته."
                     : "الدور غير موجود في قائمة الأدوار — لا يمكن سحب هذا الإسناد منفرداً.";
+                  // GAP-15 left some older scoped grants partly or wholly
+                  // inert. Without a mark here the chip looks fully effective
+                  // while its holder gets 403s. Display only, so the cached
+                  // roles list is good enough.
+                  const inert = grantInertPermissions(grant, roles);
+                  const role = roles.find((r) => r.name === grant.role);
+                  const inertNote =
+                    inert.length === 0
+                      ? null
+                      : inert.length === (role?.permissions?.length ?? -1)
+                      ? "لا يمنح هذا الإسناد أي صلاحية على نطاقه: كل صلاحيات الدور لا تعمل إلا بإسناد على مستوى «الشركة كاملة»."
+                      : `صلاحيات لا تعمل على هذا النطاق: ${inert
+                          .map((name) => `«${permissionLabel(name)}»`)
+                          .join("، ")}`;
                   return (
                     <span
                       key={key}
                       className="badge bg-primary-transparent d-inline-flex align-items-center gap-1 fs-12"
                       // On the chip too: a disabled button's own title is not
                       // shown by every browser.
-                      title={blockedReason || undefined}
+                      title={
+                        [inertNote, blockedReason].filter(Boolean).join("\n") ||
+                        undefined
+                      }
                     >
+                      {inertNote && (
+                        <i
+                          className="ri-error-warning-line text-warning"
+                          aria-label={inertNote}
+                        ></i>
+                      )}
                       {grant.role}
                       <span className="text-muted fw-normal">
                         · {describeGrantScope(grant)}

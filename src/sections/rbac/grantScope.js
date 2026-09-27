@@ -14,9 +14,20 @@
 // `scope_label` is the server's Arabic and wins wherever a grant is shown; the
 // labels below exist only for the PICKER, which has no server list to read.
 
+import {
+  ASSIGN_ROLES_PERMISSION,
+  companyOnlyPermissions,
+} from "../../data/permissionsCatalog.js";
+
 export const SCOPE_COMPANY = 1;
 export const SCOPE_UNIT = 2;
 export const SCOPE_MANAGED = 3;
+
+// The built-in role whose power is the server's bypass. It carries no
+// permission rows, so no rule that reads its permissions can say anything
+// about it — which is exactly how a narrowed super_admin used to slip past the
+// inert check below. The server refuses it by NAME, and so does this.
+export const SUPER_ADMIN_ROLE = "super_admin";
 
 export const SCOPE_OPTIONS = Object.freeze([
   Object.freeze({ value: SCOPE_COMPANY, label: "الشركة كاملة" }),
@@ -113,6 +124,114 @@ export const describeGrantScope = (grant) => {
     `نطاق #${grant.scope_type}`
   );
 };
+
+/**
+ * What the assign card should say about granting `role` over `scopeType`,
+ * before anything is sent. The server decides every case below; this only
+ * tells the administrator in advance, in their words rather than a 422's.
+ *
+ *   blocked       a message when the server REFUSES this grant whatever the
+ *                 data says — super_admin over anything but the company. The
+ *                 only case that disables the button: it depends on the role's
+ *                 name, which cannot go stale the way its permissions can.
+ *   inert         the role's permissions that do NOTHING over this scope
+ *                 (GAP-15). Read from the cached roles list, so a warning and
+ *                 never a block: another tab may have changed the role.
+ *   whollyInert   every one of them is inert — the server 422s this grant.
+ *                 Never for a role with NO permissions: the server exempts it
+ *                 on purpose (it confers nothing at company scope either, so the
+ *                 scope is not what is wrong), and so does this.
+ *   grantsAssign  the role carries auth.roles.assign and the scope is not the
+ *                 company: its holder could hand out any role inside that
+ *                 scope, themselves included (GAP-16) — so the server refuses
+ *                 it with a 422. Cached like `inert`, so a warning, not a block.
+ *
+ * @param role       the roles-list record ({ name, permissions }) or null
+ * @param scopeType  SCOPE_*
+ */
+export const grantAdvisories = (role, scopeType) => {
+  const none = { blocked: null, inert: [], whollyInert: false, grantsAssign: false };
+  if (!role) return none;
+
+  const scoped = (Number(scopeType) || SCOPE_COMPANY) !== SCOPE_COMPANY;
+  if (!scoped) return none;
+
+  if (role.name === SUPER_ADMIN_ROLE) {
+    return {
+      ...none,
+      blocked: "دور مدير النظام لا يُمنح إلا على نطاق «الشركة كاملة».",
+    };
+  }
+
+  const permissions = Array.isArray(role.permissions) ? role.permissions : [];
+  const inert = companyOnlyPermissions(permissions);
+
+  return {
+    blocked: null,
+    inert,
+    whollyInert: inert.length > 0 && inert.length === permissions.length,
+    grantsAssign: permissions.includes(ASSIGN_ROLES_PERMISSION),
+  };
+};
+
+/**
+ * The permissions an EXISTING grant carries on paper and does nothing with —
+ * for a chip, so a holder's 403s have a visible reason. Empty for a company
+ * grant, for a role not in the list, or when every permission works.
+ *
+ * @param grant  a server grant ({ role, scope_type, ... })
+ * @param roles  the roles list ({ name, permissions })
+ */
+export const grantInertPermissions = (grant, roles = []) => {
+  if ((Number(grant?.scope_type) || SCOPE_COMPANY) === SCOPE_COMPANY) return [];
+  const role = roles.find((r) => r.name === grant.role);
+  if (!role || !Array.isArray(role.permissions)) return [];
+  return companyOnlyPermissions(role.permissions);
+};
+
+/**
+ * Whether the caller's own auth.roles.assign reaches the whole company — the
+ * server's `isUnrestricted()` for the assigner. /auth/me carries no grants, so
+ * this reads the caller's row in the users directory.
+ *
+ * @param callerRecord  the caller's users-directory row ({ grants }) or null
+ * @param roles         the roles list ({ name, permissions })
+ * @returns {boolean|null} null when it cannot be told: no directory row, or a
+ *   company grant whose role is not in the list. `false` is only as fresh as
+ *   the cached roles list, so a caller words it as likely, not certain.
+ */
+export const assignReachIsCompany = (callerRecord, roles = []) => {
+  const grants = callerRecord?.grants;
+  if (!Array.isArray(grants)) return null;
+
+  let unknown = false;
+  for (const grant of grants) {
+    if ((Number(grant.scope_type) || SCOPE_COMPANY) !== SCOPE_COMPANY) continue;
+    // Holds no permission rows; its bypass reaches everything.
+    if (grant.role === SUPER_ADMIN_ROLE) return true;
+    const role = roles.find((r) => r.name === grant.role);
+    if (!role || !Array.isArray(role.permissions)) {
+      unknown = true;
+      continue;
+    }
+    if (role.permissions.includes(ASSIGN_ROLES_PERMISSION)) return true;
+  }
+  return unknown ? null : false;
+};
+
+/**
+ * Whether this employee manages a unit TODAY — the server's
+ * `managedUnitIds() !== []`: a unit whose `manager_id` is theirs and whose
+ * manager record is live (`manager` is null once that employee is deleted).
+ *
+ * @param employeeId   the account's `employee_id`
+ * @param departments  the raw /departments rows ({ manager_id, manager })
+ */
+export const managesAnyUnit = (employeeId, departments = []) =>
+  employeeId != null &&
+  departments.some(
+    (d) => Number(d.manager_id) === Number(employeeId) && d.manager != null
+  );
 
 /** A stable React key for a grant, unique per user. */
 export const grantKey = (grant) =>
