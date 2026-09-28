@@ -11,6 +11,7 @@ import {
   grantAdvisories,
   grantInertPermissions,
   managesAnyUnit,
+  permissionsNotHeld,
   revokeGrantBody,
 } from "./grantScope.js";
 
@@ -183,14 +184,67 @@ test("nothing is inert company-wide, and no role means no advice", () => {
     blocked: null,
     inert: [],
     whollyInert: false,
-    grantsAssign: false,
+    notHeld: [],
   });
 });
 
-test("auth.roles.assign over a unit is flagged (GAP-16), and only over a unit", () => {
-  assert.equal(grantAdvisories(roleAdmin, SCOPE_UNIT).grantsAssign, true);
-  assert.equal(grantAdvisories(roleAdmin, SCOPE_COMPANY).grantsAssign, false);
-  assert.equal(grantAdvisories(clerk, SCOPE_UNIT).grantsAssign, false);
+// ── GAP-16: you can only give what you hold (2026-09-28) ────────────────────
+
+const hrAdmin = {
+  roles: ["hr-admin"],
+  permissions: ["auth.roles.assign", "auth.roles.view", "hr.employees.view"],
+};
+const root = { roles: ["super_admin"], permissions: [] };
+
+test("auth.roles.assign over a unit is no longer flagged — the stopgap is gone", () => {
+  const advice = grantAdvisories(roleAdmin, SCOPE_UNIT, hrAdmin);
+  assert.equal(advice.blocked, null);
+  assert.equal("grantsAssign" in advice, false);
+  assert.deepEqual(advice.notHeld, []);
+});
+
+test("what the caller holds nowhere is named, at every scope", () => {
+  const payroll = { name: "payroll", permissions: ["hr.employees.view", "hr.employees.viewSalary"] };
+  for (const scope of [SCOPE_COMPANY, SCOPE_UNIT, SCOPE_MANAGED]) {
+    assert.deepEqual(
+      grantAdvisories(payroll, scope, hrAdmin).notHeld,
+      ["hr.employees.viewSalary"],
+      `scope ${scope}`
+    );
+  }
+});
+
+test("over a unit, what the grant would not confer is not asked of the caller", () => {
+  // departments.update is company-only: inert over a unit, so not conferred.
+  assert.deepEqual(grantAdvisories(clerk, SCOPE_UNIT, hrAdmin).notHeld, []);
+  // Company-wide it IS conferred, and the caller does not hold it.
+  assert.deepEqual(grantAdvisories(clerk, SCOPE_COMPANY, hrAdmin).notHeld, ["departments.update"]);
+});
+
+test("a super admin holds everything; an unknown caller gets no advice", () => {
+  const payroll = { name: "payroll", permissions: ["hr.employees.viewSalary"] };
+  assert.deepEqual(grantAdvisories(payroll, SCOPE_COMPANY, root).notHeld, []);
+  assert.deepEqual(grantAdvisories(payroll, SCOPE_COMPANY).notHeld, []);
+});
+
+test("super_admin company-wide is blocked by name unless the caller is one", () => {
+  assert.equal(
+    grantAdvisories(superAdmin, SCOPE_COMPANY, hrAdmin).blocked,
+    "دور مدير النظام لا يمنحه ولا يسحبه إلا مدير نظام."
+  );
+  assert.equal(grantAdvisories(superAdmin, SCOPE_COMPANY, root).blocked, null);
+  // Narrowed, it is refused to everyone — the super admin included.
+  assert.equal(
+    grantAdvisories(superAdmin, SCOPE_UNIT, root).blocked,
+    "دور مدير النظام لا يُمنح إلا على نطاق «الشركة كاملة»."
+  );
+});
+
+test("permissionsNotHeld is one-sided: only what is absent everywhere", () => {
+  assert.deepEqual(permissionsNotHeld(["hr.employees.view", "auth.users.view"], hrAdmin), ["auth.users.view"]);
+  assert.deepEqual(permissionsNotHeld(["auth.users.view"], root), []);
+  assert.deepEqual(permissionsNotHeld(["auth.users.view"], null), []);
+  assert.deepEqual(permissionsNotHeld(undefined, hrAdmin), []);
 });
 
 // ── Existing grants that do less than their role says ───────────────────────

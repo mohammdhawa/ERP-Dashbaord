@@ -19,6 +19,11 @@ import {
   companyOnlyPermissions,
 } from "../../data/permissionsCatalog.js";
 
+// The server's refusal when anyone but a super admin grants or revokes
+// super_admin (GAP-16, API doc §5.4), word for word.
+export const SUPER_ADMIN_ONLY_MESSAGE =
+  "دور مدير النظام لا يمنحه ولا يسحبه إلا مدير نظام.";
+
 export const SCOPE_COMPANY = 1;
 export const SCOPE_UNIT = 2;
 export const SCOPE_MANAGED = 3;
@@ -126,14 +131,43 @@ export const describeGrantScope = (grant) => {
 };
 
 /**
+ * Whether the signed-in caller is a super admin, from the /auth/me payload
+ * ({ roles }). /auth/me carries no flag of its own; the role name is what the
+ * server's bypass rests on.
+ */
+export const callerIsSuperAdmin = (caller) =>
+  Array.isArray(caller?.roles) && caller.roles.includes(SUPER_ADMIN_ROLE);
+
+/**
+ * Of `permissions`, the ones the caller holds NOWHERE — so the server will
+ * refuse to let them hand these out, take them away, or put them in or out of
+ * a role (GAP-16: you can only give what you hold). Empty for a super admin,
+ * and empty when the caller is unknown.
+ *
+ * ⚠️ One-sided on purpose. /auth/me lists the caller's effective permissions
+ * WITHOUT their scopes, so a permission it lists may still be held too
+ * narrowly for the grant at hand: a non-empty answer is a certain refusal, an
+ * empty one is not a promise. The server's 403 names what is missing either way.
+ *
+ * @param permissions  permission names the action would confer or change
+ * @param caller       { roles, permissions } from /auth/me, or null
+ */
+export const permissionsNotHeld = (permissions, caller) => {
+  if (!caller || callerIsSuperAdmin(caller)) return [];
+  const held = Array.isArray(caller.permissions) ? caller.permissions : [];
+  return (permissions || []).filter((name) => !held.includes(name));
+};
+
+/**
  * What the assign card should say about granting `role` over `scopeType`,
  * before anything is sent. The server decides every case below; this only
- * tells the administrator in advance, in their words rather than a 422's.
+ * tells the administrator in advance, in their words rather than a 4xx's.
  *
  *   blocked       a message when the server REFUSES this grant whatever the
- *                 data says — super_admin over anything but the company. The
- *                 only case that disables the button: it depends on the role's
- *                 name, which cannot go stale the way its permissions can.
+ *                 data says — super_admin over anything but the company, or
+ *                 super_admin at all from a caller who is not one (GAP-16).
+ *                 The only case that disables the button: it depends on role
+ *                 names, which cannot go stale the way permissions can.
  *   inert         the role's permissions that do NOTHING over this scope
  *                 (GAP-15). Read from the cached roles list, so a warning and
  *                 never a block: another tab may have changed the role.
@@ -141,36 +175,46 @@ export const describeGrantScope = (grant) => {
  *                 Never for a role with NO permissions: the server exempts it
  *                 on purpose (it confers nothing at company scope either, so the
  *                 scope is not what is wrong), and so does this.
- *   grantsAssign  the role carries auth.roles.assign and the scope is not the
- *                 company: its holder could hand out any role inside that
- *                 scope, themselves included (GAP-16) — so the server refuses
- *                 it with a 422. Cached like `inert`, so a warning, not a block.
+ *   notHeld       what the grant would CONFER that the caller holds nowhere
+ *                 (GAP-16) — the server 403s granting or revoking it. Inert
+ *                 permissions confer nothing, so they are not asked of the
+ *                 caller. A warning: see permissionsNotHeld().
+ *
+ * (Until 2026-09-28 there was a `grantsAssign` flag here too: the server
+ * refused auth.roles.assign over a unit while GAP-16 was open. It no longer
+ * does — a scoped assigner is bound by `notHeld`'s rule like everyone else.)
  *
  * @param role       the roles-list record ({ name, permissions }) or null
  * @param scopeType  SCOPE_*
+ * @param caller     { roles, permissions } from /auth/me, or null if unknown
  */
-export const grantAdvisories = (role, scopeType) => {
-  const none = { blocked: null, inert: [], whollyInert: false, grantsAssign: false };
+export const grantAdvisories = (role, scopeType, caller = null) => {
+  const none = { blocked: null, inert: [], whollyInert: false, notHeld: [] };
   if (!role) return none;
 
   const scoped = (Number(scopeType) || SCOPE_COMPANY) !== SCOPE_COMPANY;
-  if (!scoped) return none;
 
   if (role.name === SUPER_ADMIN_ROLE) {
-    return {
-      ...none,
-      blocked: "دور مدير النظام لا يُمنح إلا على نطاق «الشركة كاملة».",
-    };
+    if (scoped) {
+      return {
+        ...none,
+        blocked: "دور مدير النظام لا يُمنح إلا على نطاق «الشركة كاملة».",
+      };
+    }
+    return caller && !callerIsSuperAdmin(caller)
+      ? { ...none, blocked: SUPER_ADMIN_ONLY_MESSAGE }
+      : none;
   }
 
   const permissions = Array.isArray(role.permissions) ? role.permissions : [];
-  const inert = companyOnlyPermissions(permissions);
+  const inert = scoped ? companyOnlyPermissions(permissions) : [];
+  const conferred = permissions.filter((name) => !inert.includes(name));
 
   return {
     blocked: null,
     inert,
     whollyInert: inert.length > 0 && inert.length === permissions.length,
-    grantsAssign: permissions.includes(ASSIGN_ROLES_PERMISSION),
+    notHeld: permissionsNotHeld(conferred, caller),
   };
 };
 

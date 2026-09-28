@@ -177,13 +177,15 @@ const AssignRoleCard = () => {
   //     the server enforces. Read from the cached roles list, so a WARNING and
   //     never a block — another tab may have changed the role, and the server
   //     answers with its own 422 if the grant would confer nothing at all;
-  //   - GAP-16: the server refuses (422) a role carrying auth.roles.assign
-  //     over anything narrower than the company. Granted over a unit it lets
-  //     its holder hand out any role inside it, themselves included.
+  //   - GAP-16 (2026-09-28): you can only give — or take away — what you hold,
+  //     and super_admin only if you are one. The caller's own permissions come
+  //     from /auth/me, which carries no scopes, so a permission missing there
+  //     is a certain refusal and one present is not a promise: a warning.
   const selectedRoleRecord = selectedRole
     ? roles.find((r) => r.id === selectedRole.value) || null
     : null;
-  const advice = grantAdvisories(selectedRoleRecord, scopeType);
+  const caller = { roles: currentUser?.roles, permissions };
+  const advice = grantAdvisories(selectedRoleRecord, scopeType, caller);
 
   // «الوحدات التي أديرها» resolves through the account's EMPLOYEE — the units
   // whose manager is that person. An unlinked account manages nothing, nor
@@ -479,17 +481,20 @@ const AssignRoleCard = () => {
         )}
         {/* Same rule as above: the remedy offered is a different role, not
             the company scope, which a scoped assigner cannot grant. */}
-        {/* The server REFUSES this grant (422, AssignRoleRequest) — so the
-            copy says so rather than asking whether it is intended. Still a
-            warning and not a disabled button: it reads the cached roles list,
-            and the server's own 422 is the backstop if that list is stale. */}
-        {advice.grantsAssign && (
+        {/* GAP-16: the server refuses (403) to grant OR revoke a role that
+            confers something the caller does not hold — so both buttons are
+            named. Not a disabled button: it reads the cached roles list, and
+            the server's 403, which names what is missing, is the backstop. */}
+        {advice.notHeld.length > 0 && (
           <Alert variant="danger" className="py-2 px-3 mt-2 mb-0">
             <i className="ri-shield-keyhole-line align-middle me-1"></i>
-            هذا الدور يتضمن «إسناد الأدوار للمستخدمين»، ولا يُسند إلا على مستوى
-            «الشركة كاملة»: على نطاق أضيق يستطيع حامله منح أي دور لأي مستخدم ضمن
-            نطاقه — ولنفسه أيضاً — ولذلك يرفض الخادم هذا الإسناد. اختر دوراً لا
-            يتضمن هذه الصلاحية.
+            لا يُمنح دور ولا يُسحب إلا ممن يملك كل ما يمنحه هذا الدور، وأنت لا
+            تملك — فسيرفض الخادم الإسناد والسحب:
+            <span className="d-block mt-1">
+              {advice.notHeld
+                .map((name) => `«${permissionLabel(name)}»`)
+                .join("، ")}
+            </span>
           </Alert>
         )}
         {managedEmployeeGap && (

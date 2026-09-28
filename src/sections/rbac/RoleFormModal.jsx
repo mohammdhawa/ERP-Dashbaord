@@ -5,8 +5,10 @@ import { createRole, updateRole } from "../../redux/actions/rolesActions";
 import {
   ASSIGN_ROLES_PERMISSION,
   PERMISSIONS_CATALOG,
+  permissionLabel,
 } from "../../data/permissionsCatalog";
 import { confirmDiscardChanges } from "../../utils";
+import { permissionsNotHeld } from "./grantScope";
 
 // One checkbox row — the same flex layout as AssignmentFormModal's CarryOption,
 // for the same reason: `<Form.Check label="…" />` floats the marker into a
@@ -48,6 +50,9 @@ const CheckRow = ({ id, checked, indeterminate = false, disabled, onChange, chil
 const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.roles);
+  const { permissions: callerPermissions, user: currentUser } = useSelector(
+    (state) => state.auth
+  );
   const isEdit = Boolean(role);
 
   const [name, setName] = useState("");
@@ -88,6 +93,24 @@ const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
       setErrors({});
     }
   }, [open, role]);
+
+  // GAP-16 (2026-09-28): editing a role changes what every holder of it may
+  // do, so the server accepts only changes to permissions the editor holds
+  // company-wide (403 otherwise). Only what CHANGED is checked — a permission
+  // left as it was is not the editor's to hold. /auth/me carries no scopes,
+  // so this catches the certain refusals only; see permissionsNotHeld().
+  const original = role?.permissions || [];
+  const changedPermissions =
+    isEdit && !permsDirty
+      ? []
+      : [
+          ...selected.filter((p) => !original.includes(p)),
+          ...original.filter((p) => !selected.includes(p)),
+        ];
+  const notHeld = permissionsNotHeld(changedPermissions, {
+    roles: currentUser?.roles,
+    permissions: callerPermissions,
+  });
 
   const isDirty =
     permsDirty ||
@@ -252,6 +275,16 @@ const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
                 <i className="ri-alert-line align-middle me-1"></i>
                 تحذير: حفظ الدور بدون أي صلاحية محددة سيؤدي إلى{" "}
                 <strong>إزالة جميع الصلاحيات</strong> من هذا الدور.
+              </Alert>
+            )}
+            {notHeld.length > 0 && (
+              <Alert variant="danger" className="py-2 px-3 mb-2">
+                <i className="ri-shield-keyhole-line align-middle me-1"></i>
+                لا تُضاف صلاحية إلى دور ولا تُزال منه ما لم تكن تملكها أنت،
+                فسيرفض الخادم الحفظ. لا تملك:
+                <span className="d-block mt-1">
+                  {notHeld.map((name) => `«${permissionLabel(name)}»`).join("، ")}
+                </span>
               </Alert>
             )}
             {/* The assign card lives on the Roles screen, and both the screen
