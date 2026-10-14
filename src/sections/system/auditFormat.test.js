@@ -131,6 +131,16 @@ test("an unmapped int and an unmapped field get NO invented label", () => {
   assert.equal(enumLabelFor("reason", 2), "نقل داخلي");
 });
 
+test("engineering ranks follow the ladder of 2026-10-14; retired ركن reads as unknown", () => {
+  assert.equal(enumLabelFor("engineering_rank", 5), "مشارك");
+  assert.equal(enumLabelFor("engineering_rank", 10), "مشارك1");
+  assert.equal(enumLabelFor("engineering_rank", 13), "مشارك4");
+  assert.equal(enumLabelFor("engineering_rank", 8), "استشاري");
+  // 9 ركن is retired and never reused: an old audit row holding it shows its
+  // raw number, not a neighbour's name.
+  assert.equal(enumLabelFor("engineering_rank", 9), null);
+});
+
 test("department level and sector are deliberately unmapped", () => {
   // The app reads `level_label` from the server and holds no local map; adding
   // one here is exactly the staleness the standing rule guards against.

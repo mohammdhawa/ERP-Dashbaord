@@ -70,17 +70,24 @@ export const EDUCATION_LEVEL_OPTIONS = [
   { value: 13, label: "دكتوراه" },
 ];
 
-// Also an ordered scale. Only valid when activity_type = 1 (هندسي).
+// The ladder of 2026-10-14 (backend API doc §8.5), in PAY ORDER — which is no
+// longer the order of the values. مشارك1–4 were added as 10–13, between مشارك
+// and ممارس, so every existing rank kept its number; 9 (ركن) was retired and is
+// never reused. List them in this order; never compare them with < or >. Only
+// valid when activity_type = 1 (هندسي).
 export const ENGINEERING_RANK_OPTIONS = [
   { value: 1, label: "لا يوجد" },
   { value: 2, label: "متدرب" },
   { value: 3, label: "مراقب فني" },
   { value: 4, label: "مساعد مهندس" },
   { value: 5, label: "مشارك" },
+  { value: 10, label: "مشارك1" },
+  { value: 11, label: "مشارك2" },
+  { value: 12, label: "مشارك3" },
+  { value: 13, label: "مشارك4" },
   { value: 6, label: "ممارس" },
   { value: 7, label: "رأي" },
   { value: 8, label: "استشاري" },
-  { value: 9, label: "ركن" },
 ];
 
 export const GOVERNORATE_OPTIONS = [
