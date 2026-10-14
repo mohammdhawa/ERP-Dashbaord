@@ -376,7 +376,7 @@ them; they decide whether certain keys appear in a response:
 
 | Permission | Unlocks |
 | --- | --- |
-| `hr.employees.viewSalary` | `salary_mode(_label)`, `agreed_salary`, `sham_cash_account`, and **every classification axis** — `activity_type(_label)`, `organizational_grade`, `experience_level`, `engineering_rank(_label)`, `industrial_experience_years`, `has_hazard_pay`, `has_scarcity_pay`, `has_dual_role_pay`, `distinction_grade` |
+| `hr.employees.viewSalary` | `salary_mode(_label)`, `agreed_salary`, `sham_cash_account`, `payroll_location`, and **every classification axis** — `activity_type(_label)`, `organizational_grade`, `experience_level`, `engineering_rank(_label)`, `industrial_experience_years`, `has_hazard_pay`, `has_scarcity_pay`, `has_dual_role_pay`, `distinction_grade` |
 | `hr.employees.viewIdentity` | `national_id` |
 | `auth.audit.viewValues` | `old_values` and `new_values` on `GET /api/auth/audit-logs/{id}` — see [§9](#9-audit-log--سجل-التدقيق) |
 
@@ -1267,6 +1267,7 @@ which that was a migration rather than a data migration.
   "middle_name": "خالد",
   "last_name": "الحلبي",
   "mother_name": "فاطمة",
+  "nickname": "أبو عبد الرحمن",
   "full_name": "سامر خالد الحلبي",
   "national_id": "1098765432",
 
@@ -1331,6 +1332,7 @@ which that was a migration rather than a data migration.
   "salary_mode_label": "نظام رواتب",
   "agreed_salary": null,
   "sham_cash_account": "1234567890123456",
+  "payroll_location": "مكتب رئيسي - هندسي",
 
   "created_at": "2026-09-13T10:00:00+03:00",
   "updated_at": "2026-09-13T10:00:00+03:00"
@@ -1365,7 +1367,7 @@ gated — a name and a staff number are not sensitive fields.
 | Permission | Gates |
 | --- | --- |
 | `hr.employees.viewIdentity` | `national_id` |
-| `hr.employees.viewSalary` | `salary_mode(_label)`, `agreed_salary`, `sham_cash_account`, **and every classification axis**: `activity_type(_label)`, `organizational_grade`, `experience_level`, `engineering_rank(_label)`, `industrial_experience_years`, `has_hazard_pay`, `has_scarcity_pay`, `has_dual_role_pay`, `distinction_grade` |
+| `hr.employees.viewSalary` | `salary_mode(_label)`, `agreed_salary`, `sham_cash_account`, `payroll_location`, **and every classification axis**: `activity_type(_label)`, `organizational_grade`, `experience_level`, `engineering_rank(_label)`, `industrial_experience_years`, `has_hazard_pay`, `has_scarcity_pay`, `has_dual_role_pay`, `distinction_grade` |
 
 > **Why the axes are gated with the amount:** they are the inputs the salary is
 > computed from. Publishing them while hiding the result would let anyone with
@@ -1434,6 +1436,7 @@ required; required applies on create only.
 | `employee_number` | string | optional, max 50, unique — **auto-generated when omitted**, and a supplied value is kept as-is |
 | `national_id` | string | optional, nullable, max 50, unique |
 | `mother_name` | string | optional, nullable, max 255 |
+| `nickname` | string | optional, nullable, max 100 — اللقب, the kunya (`أبو عبد الرحمن`). Added 2026-10-14; not gated |
 | `birth_date` | date | optional, nullable, must be before today |
 | `birth_place` | string | optional, nullable, max 255 |
 | `origin_governorate` / `residence_governorate` | int | optional, nullable, 1–14 |
@@ -1453,7 +1456,7 @@ required; required applies on create only.
 | `activity_type` | int | optional, nullable, 1–5 |
 | `organizational_grade` | int | optional, nullable, **1–5** |
 | `experience_level` | int | optional, nullable, **1–5** |
-| `engineering_rank` | int | optional, nullable, 1–9 — **only when `activity_type` = 1 (هندسي)** |
+| `engineering_rank` | int | optional, nullable, one of the values in §8.5 (1–8, 10–13) — **only when `activity_type` = 1 (هندسي)** |
 | `industrial_experience_years` | int | optional, nullable, 0–60 — **only when `activity_type` = 2 (صناعي)** |
 | `has_hazard_pay` / `has_scarcity_pay` / `has_dual_role_pay` | bool | optional |
 | `distinction_grade` | int | optional, nullable, 0–255 |
@@ -1464,6 +1467,7 @@ required; required applies on create only.
 | `hire_date` / `termination_date` | date | optional, nullable — termination may not precede hire. **Correcting `hire_date` moves the opening تعيين posting with it** (see below) |
 | `status` | int | optional, 1–3 |
 | `sham_cash_account` | string | optional, nullable, **exactly 16 digits**, unique |
+| `payroll_location` | string | optional, nullable, max 150 — مكان الراتب, the payroll cost centre (`الآليات الثقيلة`, `مكتب رئيسي - هندسي`, a project site). Added 2026-10-14. **Read and write need `hr.employees.viewSalary`** |
 | `salary_mode` | int | optional, `1` نظام رواتب (default) · `2` إتفاق |
 | `agreed_salary` | numeric | **required when `salary_mode` = 2, must be absent/null when = 1** |
 
@@ -1674,14 +1678,21 @@ filter on the int.
 | `salary_mode` | 1 نظام رواتب · 2 إتفاق |
 | `activity_type` | 1 هندسي · 2 صناعي · 3 إداري · 4 مالي · 5 أمني |
 | `education_level` | 1 لا يوجد · 2 ابتدائي · 3 تاسع · 4 بكالوريا · 5 سنة 1 · 6 سنة 2 · 7 معهد · 8 سنة 3 · 9 سنة 4 · 10 سنة 5 · 11 كلية · 12 ماجستير · 13 دكتوراه |
-| `engineering_rank` | 1 لا يوجد · 2 متدرب · 3 مراقب فني · 4 مساعد مهندس · 5 مشارك · 6 ممارس · 7 رأي · 8 استشاري · 9 ركن |
+| `engineering_rank` | **in pay order:** 1 لا يوجد · 2 متدرب · 3 مراقب فني · 4 مساعد مهندس · 5 مشارك · 10 مشارك1 · 11 مشارك2 · 12 مشارك3 · 13 مشارك4 · 6 ممارس · 7 رأي · 8 استشاري |
 | `governorate` | 1 دمشق · 2 ريف دمشق · 3 حلب · 4 حمص · 5 حماة · 6 اللاذقية · 7 طرطوس · 8 إدلب · 9 درعا · 10 السويداء · 11 القنيطرة · 12 دير الزور · 13 الرقة · 14 الحسكة |
 | `reason` (assignments) | 1 تعيين · 2 نقل داخلي · 3 ترقية · 4 تعديل مسمى وظيفي · 5 إعادة هيكلة · 6 إنهاء عمل |
 
-`education_level` and `engineering_rank` are **ordered scales** — the int
-ascends with attainment, so `>=` comparisons are meaningful. ⚠️ The int is an
-ORDER, not an amount: سنة 4، سنة 5 and كلية are three distinct rungs carrying one
-identical pay value. Never compute pay from a case number.
+`education_level` is an **ordered scale** — the int ascends with attainment,
+so `>=` comparisons are meaningful. ⚠️ The int is an ORDER, not an amount: سنة 4،
+سنة 5 and كلية are three distinct rungs carrying one identical pay value. Never
+compute pay from a case number.
+
+⚠️ **`engineering_rank` is NOT ordered by its int since 2026-10-14.** مشارك1–4
+were approved and added as 10–13, between مشارك (5) and ممارس (6); ركن (9) was
+retired. Every other rank kept its number, so the int is an identity only: show
+the ranks in the order listed above (the server's options list is in that
+order), and never compare them with `>` / `<`. 9 is never reused — an old audit
+row holding it reads as unknown.
 
 ---
 
