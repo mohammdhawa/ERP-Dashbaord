@@ -136,6 +136,7 @@ const EmployeeOverview = ({ employee }) => {
         <Field label="اسم الأب" value={employee.middle_name} />
         <Field label="الكنية" value={employee.last_name} />
         <Field label="اسم الأم" value={employee.mother_name} />
+        <Field label="اللقب" value={employee.nickname} />
         <Field
           label="الرقم الوظيفي"
           value={employee.employee_number}
@@ -287,6 +288,7 @@ const EmployeeOverview = ({ employee }) => {
             value={employee.sham_cash_account}
             dir="ltr"
           />
+          <Field label="مكان الراتب" value={employee.payroll_location} />
         </Section>
       )}
     </div>

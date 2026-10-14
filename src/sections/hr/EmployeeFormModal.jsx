@@ -75,6 +75,7 @@ const FIELD_TAB = {
   middle_name: "identity",
   last_name: "identity",
   mother_name: "identity",
+  nickname: "identity",
   national_id: "identity",
   // Lives on الهوية with the other three required create fields, not on
   // البيانات الشخصية where it used to sit.
@@ -125,6 +126,7 @@ const FIELD_TAB = {
   salary_mode: "classification",
   agreed_salary: "classification",
   sham_cash_account: "classification",
+  payroll_location: "classification",
 };
 
 // Tri-state boolean: "" (unset / leave alone), "true", "false". A plain
@@ -628,6 +630,14 @@ const EmployeeFormModal = ({
                   </Col>
                   <Col sm={12} md={4}>
                     <Text field="mother_name" label="اسم الأم" maxLength={255} />
+                  </Col>
+                  <Col sm={12} md={4}>
+                    <Text
+                      field="nickname"
+                      label="اللقب"
+                      maxLength={100}
+                      placeholder="أبو عبد الرحمن"
+                    />
                   </Col>
                   <Col sm={12} md={4}>
                     <Form.Label htmlFor="emp-employee_number">
@@ -1153,6 +1163,17 @@ const EmployeeFormModal = ({
                         dir="ltr"
                         inputMode="numeric"
                         placeholder="16 رقماً"
+                      />
+                    </Col>
+                    <Col sm={12} md={4}>
+                      {/* مكان الراتب — the payroll cost centre. Free text
+                          until Finance has a list of them (backend
+                          2026-10-14); pay-gated like the rest of this tab. */}
+                      <Text
+                        field="payroll_location"
+                        label="مكان الراتب"
+                        maxLength={150}
+                        placeholder="مكتب رئيسي - هندسي"
                       />
                     </Col>
                   </Row>

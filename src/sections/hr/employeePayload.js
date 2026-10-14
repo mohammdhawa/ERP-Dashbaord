@@ -68,6 +68,7 @@ export const emptyEmployeeForm = Object.freeze({
   middle_name: "",
   last_name: "",
   mother_name: "",
+  nickname: "",
   national_id: "",
   // البيانات الشخصية
   gender: "",
@@ -116,6 +117,7 @@ export const emptyEmployeeForm = Object.freeze({
   salary_mode: "",
   agreed_salary: "",
   sham_cash_account: "",
+  payroll_location: "",
 });
 
 // Booleans arrive as true/false/null. Keep null as "" so an untouched tri-state
@@ -142,6 +144,7 @@ export const getEmployeeFormValues = (employee) => {
     middle_name: pick("middle_name"),
     last_name: pick("last_name"),
     mother_name: pick("mother_name"),
+    nickname: pick("nickname"),
     national_id: pick("national_id"),
 
     gender: pick("gender"),
@@ -195,6 +198,7 @@ export const getEmployeeFormValues = (employee) => {
     has_dual_role_pay: boolToForm(employee.has_dual_role_pay),
     distinction_grade: pick("distinction_grade"),
     sham_cash_account: pick("sham_cash_account"),
+    payroll_location: pick("payroll_location"),
     salary_mode: pick("salary_mode"),
     // agreed_salary is a decimal STRING. It is never parsed as a float here or
     // anywhere else: a float round-trip can alter the value the server stores.
@@ -219,6 +223,7 @@ export const SALARY_GATED_FIELDS = Object.freeze([
   "salary_mode",
   "agreed_salary",
   "sham_cash_account",
+  "payroll_location",
 ]);
 export const IDENTITY_GATED_FIELDS = Object.freeze(["national_id"]);
 
@@ -323,6 +328,8 @@ export const buildEmployeePayload = (values, options = {}) => {
   setOmittableStr("middle_name", values.middle_name);
   setOmittableStr("last_name", values.last_name);
   setNullableStr("mother_name", values.mother_name);
+  // اللقب (backend 2026-10-14): identity, not gated.
+  setNullableStr("nickname", values.nickname);
 
   // The ONE staff number since 2026-09-23 — `legacy_number` is gone, and a
   // paper-file M024333 is stored here exactly as typed.
@@ -464,6 +471,10 @@ function salaryBlock(values) {
 
   const sham = str(values.sham_cash_account);
   block.sham_cash_account = sham === "" ? null : sham;
+
+  // مكان الراتب (backend 2026-10-14): the payroll cost centre, pay-gated.
+  const payrollLocation = str(values.payroll_location);
+  block.payroll_location = payrollLocation === "" ? null : payrollLocation;
 
   // salary_mode is optional but NOT nullable: a blank one is omitted.
   const mode = num(values.salary_mode);

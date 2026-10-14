@@ -125,6 +125,28 @@ test("a cross-field clear counts as a change and is sent", () => {
   assert.equal(Object.hasOwn(payload, "agreed_salary"), false);
 });
 
+// ── اللقب and مكان الراتب (backend 2026-10-14) ───────────────────────────────
+
+test("the nickname round-trips and a blank one clears it", () => {
+  const record = { ...fullRecord(), nickname: "أبو عبد الرحمن" };
+  assert.equal(getEmployeeFormValues(record).nickname, "أبو عبد الرحمن");
+  assert.equal(editPayload(record, { nickname: "أبو صهيب" }).nickname, "أبو صهيب");
+  assert.equal(editPayload(record, { nickname: "" }).nickname, null);
+});
+
+test("the payroll location is pay-gated, like the server's list", () => {
+  assert.ok(SALARY_GATED_FIELDS.includes("payroll_location"));
+
+  const record = { ...fullRecord(), payroll_location: "الآليات الثقيلة" };
+  assert.equal(getEmployeeFormValues(record).payroll_location, "الآليات الثقيلة");
+  assert.equal(
+    editPayload(record, { payroll_location: "مكتب رئيسي - هندسي" }).payroll_location,
+    "مكتب رئيسي - هندسي"
+  );
+  // Untouched, it is not resent — like every other pay key.
+  assert.equal(Object.hasOwn(editPayload(record, { phone: "0999" }), "payroll_location"), false);
+});
+
 test("the national id is sent only when changed", () => {
   assert.equal(Object.hasOwn(editPayload(fullRecord(), {}), "national_id"), false);
   assert.equal(editPayload(fullRecord(), { national_id: "999" }).national_id, "999");
