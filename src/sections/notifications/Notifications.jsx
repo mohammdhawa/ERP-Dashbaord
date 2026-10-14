@@ -9,9 +9,11 @@ import { PageHeader } from "../../components";
 import TablePaginationServer from "../../components/TablePaginationServer";
 import {
   fetchNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
 } from "../../redux/actions/notificationsActions";
-import { referenceLink } from "../../data/referenceRoutes";
+import { notificationLink } from "../../data/referenceRoutes";
+import NotificationDetailModal from "../../components/NotificationDetailModal";
 
 const Notifications = () => {
   const dispatch = useDispatch();
@@ -27,14 +29,23 @@ const Notifications = () => {
     dispatch(fetchNotifications(page, itemsPerPage));
   }, [dispatch, page, itemsPerPage]);
 
+  // A notification with nowhere to go opens in full — the same rule as the
+  // header dropdown (NotificationDetailModal).
+  const [openNotification, setOpenNotification] = useState(null);
+
   const handleClick = (notify) => {
     // Idempotent on the server; only fire for unread to save a request. Pass
     // the current page so a failed mark-read re-syncs the page being viewed.
     if (!notify.is_read) {
       dispatch(markNotificationRead(notify.id, page, itemsPerPage));
     }
-    const link = referenceLink(notify.reference);
-    if (link) navigate(link);
+    // Where the recipient acts on it: type first, then reference.
+    const link = notificationLink(notify);
+    if (link) {
+      navigate(link);
+    } else {
+      setOpenNotification(notify);
+    }
   };
 
   return (
@@ -43,9 +54,25 @@ const Notifications = () => {
         <title>الراقي ERP | الإشعارات</title>
       </Helmet>
       <PageHeader homepage="الإشعارات" activepage="الحساب" page="الإشعارات">
-        <span className="badge bg-secondary-transparent fs-13">
-          {unreadCount} غير مقروءة
-        </span>
+        <div className="d-flex align-items-center gap-2">
+          <span className="badge bg-secondary-transparent fs-13">
+            {unreadCount} غير مقروءة
+          </span>
+          {/* The badge count arrives on the header's 60s poll, so it can lag
+              rows already on screen; either one being unread is enough. */}
+          {(unreadCount > 0 || items.some((n) => !n.is_read)) && (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary-light"
+              onClick={() =>
+                dispatch(markAllNotificationsRead(page, itemsPerPage))
+              }
+            >
+              <i className="ri-check-double-line align-middle me-1" aria-hidden="true"></i>
+              تحديد الكل كمقروء
+            </button>
+          )}
+        </div>
       </PageHeader>
 
       <Row>
@@ -94,15 +121,7 @@ const Notifications = () => {
               ) : (
                 <ul className="list-group list-group-flush" aria-label="الإشعارات">
                   {items.map((notify) => {
-                    const link = referenceLink(notify.reference);
-                    // A notification is actionable when clicking it DOES
-                    // something: it marks an unread one read, or it opens a
-                    // referenced record. A read notification with no reference
-                    // is neither — it was still rendered as a <button>, so it
-                    // took a tab stop and announced itself as a control that,
-                    // on activation, did nothing at all.
-                    const actionable = !notify.is_read || Boolean(link);
-                    const RowTag = actionable ? "button" : "div";
+                    const link = notificationLink(notify);
                     return (
                       <li
                         key={notify.id}
@@ -110,17 +129,17 @@ const Notifications = () => {
                           notify.is_read ? "" : "bg-primary-transparent"
                         }`}
                       >
-                        {/* An actionable row is a <button> rather than a
-                            clickable <li>: as a list item it took no focus and
-                            could not be activated by keyboard, so the whole
-                            notifications screen was mouse-only. */}
-                        <RowTag
-                          type={actionable ? "button" : undefined}
+                        {/* Every row is a <button>: it opens where the
+                            recipient acts, or opens the notification in full
+                            — so no row is ever a control that does nothing
+                            (a read row without a reference used to be). A
+                            button rather than a clickable <li>, which took no
+                            focus and left the screen mouse-only. */}
+                        <button
+                          type="button"
                           className="d-flex align-items-start gap-3 py-3 px-3 w-100 text-end border-0 bg-transparent"
-                          style={{ cursor: actionable ? "pointer" : "default" }}
-                          onClick={
-                            actionable ? () => handleClick(notify) : undefined
-                          }
+                          style={{ cursor: "pointer" }}
+                          onClick={() => handleClick(notify)}
                         >
                         <span
                           className={`avatar avatar-rounded ${
@@ -140,9 +159,7 @@ const Notifications = () => {
                         </span>
                         {/* <span>s rather than <p>s: a button's content model
                             is phrasing content only, and browsers repair a
-                            nested <p> by breaking the button out of the flow.
-                            Kept for the <div> case too so the two branches
-                            render identically. */}
+                            nested <p> by breaking the button out of the flow. */}
                         <div className="flex-grow-1">
                           <div className="d-flex align-items-center justify-content-between">
                             <span
@@ -164,9 +181,12 @@ const Notifications = () => {
                             </span>
                           )}
                           <div className="d-flex gap-2 align-items-center">
+                            {/* The server's Arabic `type_label`; the raw key
+                                only for a type it has not catalogued — a
+                                wrong label would be worse than the key. */}
                             {notify.type && (
                               <span className="badge bg-light text-muted">
-                                {notify.type}
+                                {notify.type_label || notify.type}
                               </span>
                             )}
                             {link && (
@@ -183,7 +203,7 @@ const Notifications = () => {
                             )}
                           </div>
                         </div>
-                        </RowTag>
+                        </button>
                       </li>
                     );
                   })}
@@ -209,6 +229,10 @@ const Notifications = () => {
           </Card>
         </Col>
       </Row>
+      <NotificationDetailModal
+        notification={openNotification}
+        onClose={() => setOpenNotification(null)}
+      />
     </Fragment>
   );
 };

@@ -57,6 +57,27 @@ export const fetchUnreadCount = () => async (dispatch) => {
   }
 };
 
+export const markAllReadSuccess = () => ({ type: "MARK_ALL_NOTIFICATIONS_READ" });
+
+// POST /auth/notifications/read-all — every unread notification the caller
+// has, not just the page on screen. On success the loaded items and the badge
+// are cleared locally (the server answers with how many changed, so nothing
+// else needs re-reading); on failure, re-sync from the server like a failed
+// single mark-read does.
+export const markAllNotificationsRead =
+  (refetchPage = 1, perPage = 10) =>
+  async (dispatch) => {
+    try {
+      const response = await api.post("/auth/notifications/read-all");
+      dispatch(markAllReadSuccess());
+      toastNotify(response.data.message, "success");
+    } catch {
+      toastNotify("تعذّر تحديث الإشعارات، يرجى المحاولة مرة أخرى.", "error");
+      dispatch(fetchNotifications(refetchPage, perPage));
+      dispatch(fetchUnreadCount());
+    }
+  };
+
 // Idempotent server-side. On success we sync the item + badge from the
 // returned object. On failure (incl. 404 = missing OR not owned, which are
 // indistinguishable by design) we show a generic safe message and re-sync the

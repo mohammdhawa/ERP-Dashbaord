@@ -1,37 +1,21 @@
-// Maps a notification `reference` ({ type, id }) to a module route for
-// deep-linking.
+// Where a notification opens, as an app path.
 //
-// ONE copy, imported by both the header dropdown and the notifications page.
-// This lived verbatim in each of them — map, helper and this comment — so
-// adding the fifth alias the API already emits, or any Batch-3 module, meant
-// editing two files that nothing links together. Updating only one would have
-// left half the app deep-linking to null, with no test or type to catch it.
+// ONE copy, imported by the header dropdown, the notifications page and the
+// detail modal — this lookup once lived verbatim in two of them, and updating
+// only one left half the app deep-linking to null.
 //
-// `reference.type` is a STABLE ALIAS from the API's enforced morph map —
-// "employee", "department", "user", "role", "permission" — not a PHP class
-// name. It used to be the fully-qualified class ("App\Modules\HR\Models\Employee"),
-// which is why this once matched with substring tests; an exact lookup is
-// correct now and, unlike `.includes()`, cannot mis-fire when one alias
-// contains another.
-//
-// Paths are built from BASE_URL exactly as Routingdata.jsx builds them. The
-// previous hardcoded "/hr/employees" broke under a sub-path deployment — and
-// broke in two places at once, which is the duplication problem restated.
-const path = (segment) => `${import.meta.env.BASE_URL}${segment}`;
-
-const REFERENCE_ROUTES = {
-  employee: () => path("hr/employees"),
-  department: () => path("departments"),
-  user: () => path("users"),
-  role: () => path("roles"),
-};
+// The decision itself — type first, reference second — lives in
+// notificationDestinations.js, which is pure so it can be tested under
+// `node --test`. This file only adds BASE_URL, exactly as Routingdata.jsx
+// builds its paths: a hardcoded "/hr/employees" once broke under a sub-path
+// deployment.
+import { destinationOf } from "./notificationDestinations";
 
 /**
- * @returns {string|null} route for this reference, or null when the type has
- *   no screen to land on — callers render plain text in that case rather than
- *   a link that goes nowhere.
+ * @returns {string|null} the route this notification opens, or null when it
+ *   has nowhere to go — callers show its full text instead.
  */
-export const referenceLink = (reference) => {
-  const build = REFERENCE_ROUTES[String(reference?.type || "").toLowerCase()];
-  return build ? build() : null;
+export const notificationLink = (notification) => {
+  const destination = destinationOf(notification);
+  return destination === null ? null : `${import.meta.env.BASE_URL}${destination}`;
 };

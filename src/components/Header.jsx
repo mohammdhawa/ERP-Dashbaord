@@ -8,10 +8,12 @@ import { logout } from "../redux/actions/authActions";
 import {
   fetchUnreadCount,
   fetchNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
 } from "../redux/actions/notificationsActions";
 import moment from "moment";
-import { referenceLink } from "../data/referenceRoutes";
+import NotificationDetailModal from "./NotificationDetailModal";
+import { notificationLink } from "../data/referenceRoutes";
 
 const Header = () => {
   const dispatch = useDispatch();
@@ -243,19 +245,37 @@ const Header = () => {
     }
   };
 
+  // CONTROLLED, so a row can close the menu. The rows are plain <button>s,
+  // not Dropdown.Items, so React-Bootstrap's autoClose never sees a "select"
+  // from them and the menu stayed open behind the detail modal.
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
   // Refresh the latest page of notifications when the dropdown opens.
   const handleNotificationsToggle = (isOpen) => {
+    setNotificationsOpen(isOpen);
     if (isOpen) {
       dispatch(fetchNotifications(1));
     }
   };
 
+  // A row opens WHERE ITS RECIPIENT ACTS (notificationLink: type first, then
+  // reference). A row with nowhere to go opens in full instead
+  // (NotificationDetailModal) — otherwise a body longer than the preview line
+  // could not be read from the header at all.
+  const [openNotification, setOpenNotification] = useState(null);
+
   const handleNotificationClick = (notify) => {
     if (!notify.is_read) {
       dispatch(markNotificationRead(notify.id));
     }
-    const link = referenceLink(notify.reference);
-    if (link) navigate(link);
+    setNotificationsOpen(false);
+
+    const link = notificationLink(notify);
+    if (link) {
+      navigate(link);
+    } else {
+      setOpenNotification(notify);
+    }
   };
 
   const latestNotifications = notifications.slice(0, 6);
@@ -347,6 +367,7 @@ const Header = () => {
                 survive a click inside it. */}
             <Dropdown
               className="header-element notifications-dropdown"
+              show={notificationsOpen}
               onToggle={handleNotificationsToggle}
             >
               <Dropdown.Toggle
@@ -383,6 +404,15 @@ const Header = () => {
                       {unreadCount} غير مقروءة
                     </span>
                   </div>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0 mt-1 fs-12"
+                      onClick={() => dispatch(markAllNotificationsRead())}
+                    >
+                      تحديد الكل كمقروء
+                    </button>
+                  )}
                 </div>
                 <DropdownDivider />
                 <div className="list-unstyled mb-0">
@@ -555,6 +585,10 @@ const Header = () => {
           </ul>
         </div>
       </header>
+      <NotificationDetailModal
+        notification={openNotification}
+        onClose={() => setOpenNotification(null)}
+      />
     </Fragment>
   );
 };
