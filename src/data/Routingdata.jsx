@@ -27,6 +27,7 @@ const AuditLog = lazy(() => import("../sections/system/AuditLog"));
 const Notifications = lazy(() =>
   import("../sections/notifications/Notifications")
 );
+const Sessions = lazy(() => import("../sections/account/Sessions"));
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held
@@ -87,5 +88,11 @@ export const RouteData = [
     path: `${import.meta.env.BASE_URL}notifications`,
     element: <Notifications />,
     requiredPermissions: [], // owner-scoped, auth only
+  },
+  {
+    id: 10,
+    path: `${import.meta.env.BASE_URL}sessions`,
+    element: <Sessions />,
+    requiredPermissions: [], // self-scoped: the caller's own sessions
   },
 ];

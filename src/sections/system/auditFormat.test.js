@@ -303,3 +303,13 @@ test("a replayed refresh token is louder than danger and carries an explanation"
   assert.equal(securityNote("deleted"), null);
   assert.equal(securityNote("api_request"), null);
 });
+
+test("the session events (backend 2026-10-10) are known auth events with a fallback label", () => {
+  ["session_revoked", "user_logged_out_everywhere"].forEach((event) => {
+    assert.equal(isKnownEvent(event), true, event);
+    assert.equal(eventGroup(event), "auth", event);
+    assert.notEqual(eventVariant(event), "unknown", event);
+    // The server's label wins; without one, ours — never the raw key.
+    assert.notEqual(eventLabel({ event }), event, event);
+  });
+});

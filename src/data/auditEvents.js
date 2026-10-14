@@ -30,6 +30,11 @@ export const EVENT_META = Object.freeze({
   // --- auth group: written by the auth module itself ---
   user_logged_in: M("auth", "info"),
   user_logged_out: M("auth", "muted"),
+  // Sessions (backend 2026-10-10): ending one device, or all of them. Info,
+  // not muted — a person signing everything out may be reacting to a sign-in
+  // they did not make, and that is worth noticing on the trail.
+  user_logged_out_everywhere: M("auth", "info"),
+  session_revoked: M("auth", "info"),
   tokens_refreshed: M("auth", "muted"),
   all_tokens_revoked: M("auth", "danger"),
   refresh_token_replay_detected: M("auth", "alert"),
@@ -67,6 +72,8 @@ export const EVENT_FALLBACK_LABELS = Object.freeze({
   deleted: "حذف",
   user_logged_in: "تسجيل دخول",
   user_logged_out: "تسجيل خروج",
+  user_logged_out_everywhere: "تسجيل خروج من جميع الأجهزة",
+  session_revoked: "إنهاء جلسة",
   tokens_refreshed: "تجديد الجلسة",
   all_tokens_revoked: "إبطال كل الجلسات",
   refresh_token_replay_detected: "إعادة استخدام رمز تجديد",

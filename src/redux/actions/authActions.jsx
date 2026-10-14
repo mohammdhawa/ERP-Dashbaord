@@ -6,6 +6,7 @@ import {
 } from "../../utils/tokenStore";
 import { parseApiError } from "../../utils/apiHelpers";
 import { toastNotify } from "../../utils";
+import { deviceName } from "../../utils/deviceName";
 
 export const loginStart = () => ({ type: "LOGIN_START" });
 export const loginSuccess = (user) => ({
@@ -50,12 +51,18 @@ export const logoutSuccess = () => ({ type: "LOGOUT_SUCCESS" });
 // The field is `login`, not `email` (account model, 2026-09-22): it carries an
 // employee number (e.g. EMP-00042) or an email, and the server decides which.
 // Sending `email` is now a 422 — `login` is required.
+//
+// `device_name` / `platform` (backend 2026-10-10) label this browser's session
+// on /sessions. Both optional server-side; device_name is null for a browser
+// deviceName() cannot recognise, and the server accepts that.
 export const login = (identifier, password) => async (dispatch) => {
   dispatch(loginStart());
   try {
     const response = await api.post("/auth/login", {
       login: identifier,
       password,
+      device_name: deviceName(navigator.userAgent),
+      platform: "web",
     });
     const { user, access_token, refresh_token } = response.data.data;
 
@@ -153,10 +160,26 @@ export const changePassword =
 
 export const logout = () => async (dispatch) => {
   try {
-    // Revokes ALL access + refresh tokens server-side (every device).
+    // Ends THIS browser's session only (backend 2026-10-10) — the account's
+    // phone and other browsers stay signed in. logoutEverywhere() below ends
+    // them all.
     await api.post("/auth/logout");
   } catch {
     /* even if the call fails, wipe the local session */
+  }
+  clearTokens();
+  dispatch(logoutSuccess());
+};
+
+// POST /auth/logout-all — every session on every device, this one included.
+// Unlike logout(), a failure is THROWN, not swallowed: the caller asked to sign
+// other devices out, and wiping only this tab would look like success while
+// the others stayed signed in.
+export const logoutEverywhere = () => async (dispatch) => {
+  try {
+    await api.post("/auth/logout-all");
+  } catch (error) {
+    throw parseApiError(error);
   }
   clearTokens();
   dispatch(logoutSuccess());

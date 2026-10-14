@@ -523,6 +523,17 @@ const Header = () => {
                   ></i>
                   تغيير كلمة المرور
                 </Dropdown.Item>
+                <Dropdown.Item
+                  as={Link}
+                  to="/sessions"
+                  className="d-flex align-items-center"
+                >
+                  <i
+                    className="bi bi-laptop fs-16 me-2 op-7"
+                    aria-hidden="true"
+                  ></i>
+                  الجلسات والأجهزة
+                </Dropdown.Item>
                 {/* `as="button"` instead of href="#": logging out is an action,
                     and the anchor left a stray "#" in the URL on the way out. */}
                 <Dropdown.Item
