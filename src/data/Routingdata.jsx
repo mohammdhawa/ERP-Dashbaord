@@ -36,6 +36,16 @@ const LeaveTypes = lazy(() => import("../sections/leave/LeaveTypes"));
 const LeaveBalances = lazy(() => import("../sections/leave/LeaveBalances"));
 const LeaveRegister = lazy(() => import("../sections/leave/LeaveRegister"));
 const MyLeave = lazy(() => import("../sections/leave/MyLeave"));
+const AttendanceRecords = lazy(() =>
+  import("../sections/attendance/AttendanceRecords")
+);
+const AttendanceDaily = lazy(() =>
+  import("../sections/attendance/AttendanceDaily")
+);
+const AttendanceMonthly = lazy(() =>
+  import("../sections/attendance/AttendanceMonthly")
+);
+const AbsentToday = lazy(() => import("../sections/attendance/AbsentToday"));
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held
@@ -148,5 +158,29 @@ export const RouteData = [
     // Self-scoped. An account with no employee link gets 403 from the reads
     // and the screen says so; the sidebar hides the link for it.
     requiredPermissions: [],
+  },
+  {
+    id: 17,
+    path: `${import.meta.env.BASE_URL}attendance/records`,
+    element: <AttendanceRecords />,
+    requiredPermissions: ["attendance.records.view"],
+  },
+  {
+    id: 18,
+    path: `${import.meta.env.BASE_URL}attendance/daily`,
+    element: <AttendanceDaily />,
+    requiredPermissions: ["attendance.records.view"],
+  },
+  {
+    id: 19,
+    path: `${import.meta.env.BASE_URL}attendance/monthly`,
+    element: <AttendanceMonthly />,
+    requiredPermissions: ["attendance.records.view"],
+  },
+  {
+    id: 20,
+    path: `${import.meta.env.BASE_URL}attendance/absent-today`,
+    element: <AbsentToday />,
+    requiredPermissions: ["attendance.records.view"],
   },
 ];

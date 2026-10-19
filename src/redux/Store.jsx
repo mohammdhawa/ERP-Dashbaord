@@ -15,6 +15,7 @@ import approvalsReducer from "./redurcers/approvalReducer";
 import leaveBalancesReducer from "./redurcers/leaveBalanceReducer";
 import leaveRegisterReducer from "./redurcers/leaveRegisterReducer";
 import myLeaveReducer from "./redurcers/myLeaveReducer";
+import attendanceRecordReducer from "./redurcers/attendanceRecordReducer";
 
 const store = configureStore({
   reducer: {
@@ -33,6 +34,7 @@ const store = configureStore({
     leaveBalances: leaveBalancesReducer,
     leaveRegister: leaveRegisterReducer,
     myLeave: myLeaveReducer,
+    attendanceRecords: attendanceRecordReducer,
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(thunk),
   devTools: false,

@@ -10,7 +10,7 @@ import React, {
 import { Helmet } from "react-helmet-async";
 import { Alert, Card, Col, Nav, Row, Tab } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MutatingDots } from "react-loader-spinner";
 import { PageHeader, ModalFallback } from "../../components";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
@@ -23,6 +23,11 @@ import EmployeeOverview from "./EmployeeOverview";
 import EmployeeAssignments from "./EmployeeAssignments";
 import EmployeeWarnings from "./EmployeeWarnings";
 import AuditTrail from "../system/AuditTrail";
+import EmployeeAttendance from "../attendance/EmployeeAttendance";
+import {
+  initialTabFromQuery,
+  windowFromQuery,
+} from "../attendance/employeeGridFilters";
 
 const EmployeeFormModal = lazy(() => import("./EmployeeFormModal"));
 
@@ -49,8 +54,9 @@ const EmployeeProfile = () => {
   const canViewAssignments = hasPermission(permissions, "hr.assignments.view");
   const canViewWarnings = hasPermission(permissions, "hr.warnings.view");
   const canViewAudit = hasPermission(permissions, "auth.audit.view");
+  const canViewAttendance = hasPermission(permissions, "attendance.records.view");
 
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams] = useSearchParams();
   const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(() => {
@@ -78,6 +84,7 @@ const EmployeeProfile = () => {
           show: canViewAssignments,
         },
         { key: "warnings", title: "الإنذارات", show: canViewWarnings },
+        { key: "attendance", title: "الحضور", show: canViewAttendance },
         {
           // Read-only history of this employee's record. Gated on
           // auth.audit.view like every other tab gates on its own permission:
@@ -87,7 +94,22 @@ const EmployeeProfile = () => {
           show: canViewAudit,
         },
       ].filter((t) => t.show),
-    [canViewAssignments, canViewWarnings, canViewAudit]
+    [canViewAssignments, canViewWarnings, canViewAudit, canViewAttendance]
+  );
+
+  // `?tab=` (the monthly report links here with tab=attendance) picks the first
+  // tab, read once on mount and only if this user has that tab.
+  const [activeTab, setActiveTab] = useState(() =>
+    initialTabFromQuery(
+      searchParams.get("tab"),
+      tabs.map((t) => t.key)
+    )
+  );
+  // The window of that link (`?from` / `?to`), or null when it is not usable.
+  const attendanceWindow = useMemo(
+    () => windowFromQuery(searchParams.get("from"), searchParams.get("to")),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   // If the active tab disappears (permissions reloaded), fall back to overview
@@ -305,6 +327,15 @@ const EmployeeProfile = () => {
                   {canViewWarnings && (
                     <Tab.Pane eventKey="warnings" mountOnEnter>
                       <EmployeeWarnings employee={current} />
+                    </Tab.Pane>
+                  )}
+                  {canViewAttendance && (
+                    <Tab.Pane eventKey="attendance" mountOnEnter>
+                      <EmployeeAttendance
+                        employee={current}
+                        initialFrom={attendanceWindow?.from}
+                        initialTo={attendanceWindow?.to}
+                      />
                     </Tab.Pane>
                   )}
                   {canViewAudit && (

@@ -7,7 +7,9 @@
 // filters top-level links on `requiredPermissions`, so the gating is unchanged.
 //
 // الموارد البشرية and إدارة النظام keep their nesting: each holds two real
-// siblings. When a section here grows a second item, promote it back to `sub`.
+// siblings. الإجازات (three children) and الحضور والانصراف (four) are nested
+// for the same reason. When a flat link here grows a second item, promote it
+// back to `sub`.
 export const MENUITEMS = [
   {
     title: "لوحة التحكم",
@@ -127,6 +129,54 @@ export const MENUITEMS = [
           "leave.types.update",
           "leave.types.delete",
         ],
+      },
+    ],
+  },
+  {
+    title: "الحضور والانصراف",
+    icon: "ri-fingerprint-line",
+    menusub: true,
+    type: "sub",
+    active: false,
+    selected: false,
+    dirchange: false,
+    requiredPermissions: [],
+    children: [
+      {
+        path: `${import.meta.env.BASE_URL}attendance/records`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "السجلات",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/daily`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "التقرير اليومي",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/monthly`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "التقرير الشهري",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/absent-today`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "الغائبون اليوم",
+        requiredPermissions: ["attendance.records.view"],
       },
     ],
   },
