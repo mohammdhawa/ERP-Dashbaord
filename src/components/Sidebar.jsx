@@ -5,6 +5,7 @@ import { MENUITEMS } from "../data/Sidemenudata";
 import store from "../redux/Store";
 import { useDispatch, useSelector } from "react-redux";
 import { hasPermission } from "../data/permissionsCatalog";
+import { showsMyLeave } from "../sections/leave/myLeaveGate";
 
 import Menuloop from "./Menuloop";
 import { OverlayTrigger, Tooltip } from "react-bootstrap";
@@ -24,7 +25,7 @@ const Sidebar = () => {
   // `theme?.…` guard below short-circuited and the hover-to-expand behaviour
   // (the default, since dataverticalstyle starts as "overlay") never ran.
   const theme = useSelector((state) => state.theme);
-  const { permissions } = useSelector((state) => state.auth);
+  const { permissions, user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
 
   // The document listeners below are attached once but read theme/menu state on
@@ -757,7 +758,9 @@ const Sidebar = () => {
                 // closes the same hole for flat entries so a user can never be
                 // shown a menu item that only leads to /no_access.
                 levelone.type === "link"
-                  ? hasPermission(permissions, levelone.requiredPermissions)
+                  ? hasPermission(permissions, levelone.requiredPermissions) &&
+                    // «طلباتي»: an account with no employee has nothing there.
+                    (!levelone.requiresEmployee || showsMyLeave(user))
                   : true
               ).map((levelone) => (
                 // Keyed by identity, not Math.random(): a random key made React

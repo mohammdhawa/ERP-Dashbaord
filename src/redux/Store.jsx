@@ -12,6 +12,9 @@ import jobTitlesReducer from "./redurcers/jobTitleReducer";
 import notificationsReducer from "./redurcers/notificationReducer";
 import auditReducer from "./redurcers/auditReducer";
 import approvalsReducer from "./redurcers/approvalReducer";
+import leaveBalancesReducer from "./redurcers/leaveBalanceReducer";
+import leaveRegisterReducer from "./redurcers/leaveRegisterReducer";
+import myLeaveReducer from "./redurcers/myLeaveReducer";
 
 const store = configureStore({
   reducer: {
@@ -27,6 +30,9 @@ const store = configureStore({
     notifications: notificationsReducer,
     audit: auditReducer,
     approvals: approvalsReducer,
+    leaveBalances: leaveBalancesReducer,
+    leaveRegister: leaveRegisterReducer,
+    myLeave: myLeaveReducer,
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(thunk),
   devTools: false,

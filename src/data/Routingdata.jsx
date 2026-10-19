@@ -32,6 +32,10 @@ const ApprovalsInbox = lazy(() =>
   import("../sections/approvals/ApprovalsInbox")
 );
 const LeaveRequest = lazy(() => import("../sections/leave/LeaveRequest"));
+const LeaveTypes = lazy(() => import("../sections/leave/LeaveTypes"));
+const LeaveBalances = lazy(() => import("../sections/leave/LeaveBalances"));
+const LeaveRegister = lazy(() => import("../sections/leave/LeaveRegister"));
+const MyLeave = lazy(() => import("../sections/leave/MyLeave"));
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held
@@ -111,6 +115,38 @@ export const RouteData = [
     element: <LeaveRequest />,
     // The server decides who may read it (the employee, anyone on its chain,
     // leave.requests.view within reach); a refusal renders in the screen.
+    requiredPermissions: [],
+  },
+  {
+    id: 13,
+    path: `${import.meta.env.BASE_URL}leave/types`,
+    element: <LeaveTypes />,
+    // Reading the catalogue is open to every account (the pickers use it); this
+    // screen is the management view, so it needs one of the write permissions.
+    requiredPermissions: [
+      "leave.types.create",
+      "leave.types.update",
+      "leave.types.delete",
+    ],
+  },
+  {
+    id: 14,
+    path: `${import.meta.env.BASE_URL}leave/balances`,
+    element: <LeaveBalances />,
+    requiredPermissions: ["leave.balances.view"],
+  },
+  {
+    id: 15,
+    path: `${import.meta.env.BASE_URL}leave/register`,
+    element: <LeaveRegister />,
+    requiredPermissions: ["leave.requests.view"],
+  },
+  {
+    id: 16,
+    path: `${import.meta.env.BASE_URL}my-leave`,
+    element: <MyLeave />,
+    // Self-scoped. An account with no employee link gets 403 from the reads
+    // and the screen says so; the sidebar hides the link for it.
     requiredPermissions: [],
   },
 ];
