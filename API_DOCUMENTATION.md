@@ -386,6 +386,12 @@ key exists, or gate your UI on the permission array you already receive from
 login and `/me`. A `null` would be a claim about the employee; an absent key is a
 statement about the reader.
 
+> ⚙️ **2026-10-19 — your own record is the exception, on `/api/me` only.**
+> `GET /api/me/profile` shows the caller **their own** pay block and national
+> id without either permission (§17.1). Nothing is granted: on
+> `/api/hr/employees/*` every row — the caller's own included — is still
+> decided by the permissions above.
+
 They are separate on purpose: payroll needs pay and not identity documents, HR
 administration often needs the reverse. Previously both fields were visible to
 anyone holding plain `hr.employees.view`.
@@ -763,6 +769,13 @@ Partial update — all fields optional.
 
 There is **no `name` field** — the display name always tracks the linked employee.
 
+⚠️ **Two updates sign the account out everywhere** (GAP-20, 2026-10-16):
+setting `is_active` to `false`, and sending a `password` (a reset — it also sets
+`must_change_password`). Every session of that account ends at once, on every
+device: its next request is a 401 and its refresh fails. Re-enabling an account
+does not restore them; the person signs in again. **An administrator resetting
+their own password this way is signed out too** — say so before they confirm.
+
 **200 Response** → `{ data: <user object>, message: "تم تحديث المستخدم." }`
 
 ### 4.4 Delete user
@@ -1014,7 +1027,7 @@ Base path `/api/auth/notifications`. **Protected** (auth only — no permission 
 
 - `reference` is `null` when the notification isn't linked to a record; otherwise a `{ type, id }` pair you can use to deep‑link.
 - `type` / `body` may be `null`.
-- `type_label` (added 2026-10-10) is the Arabic name of `type`, to show verbatim. It is **`null` for a type the server does not catalogue** — show the raw `type` then, never guess. The v1 types are `leave.submitted`, `leave.approved`, `leave.rejected`, `leave.cancelled`, `leave.excuse_filed`, `leave.excuse_cancelled`, `approval.step_pending`, `attendance.checkout_reminder`, `attendance.missing_checkout`, `attendance.record_rejected`, `attendance.record_unrejected`. Route a tap by the prefix (`leave.*` → the leave screen) and open the `reference`.
+- `type_label` (added 2026-10-10) is the Arabic name of `type`, to show verbatim. It is **`null` for a type the server does not catalogue** — show the raw `type` then, never guess. The v1 types are `leave.submitted`, `leave.approved`, `leave.rejected`, `leave.cancelled`, `leave.excuse_filed`, `leave.excuse_cancelled`, `approval.step_pending`, `approval.step_assigned`, `leave.returned_to_work`, `attendance.checkout_reminder`, `attendance.missing_checkout`, `attendance.record_rejected`, `attendance.record_unrejected`. Route a tap by the prefix (`leave.*` → the leave screen) and open the `reference`.
 - **Push.** Every notification is also pushed to each device the recipient registered (§6.5), after the action that caused it commits. The push's data payload carries `type`, `reference_type` and `reference_id` as strings.
 
 **What a tap opens** (decided 2026-10-14). A notification opens **where its recipient acts on it**, chosen by `type` first and `reference` second. The server never sends a URL: each client maps the pair to its own screen. When a type has no destination, the client shows the notification's full text instead.
@@ -1022,10 +1035,18 @@ Base path `/api/auth/notifications`. **Protected** (auth only — no permission 
 | `type` | Sent to | `reference` | Dashboard opens | App opens |
 |---|---|---|---|---|
 | `approval.step_pending` | the approver whose step is now current | the request being approved (a leave request in v1) | the approval screen for that request | the same, under الطلبات |
+| `approval.step_assigned` | someone a **later** step was reassigned to — on the chain, not yet their turn (2026-10-16) | the request being approved | the approval screen for that request | the same |
 | `leave.submitted`, `leave.approved`, `leave.rejected`, `leave.cancelled` | the requester | their leave request | that leave request | that leave request |
-| `leave.excuse_filed`, `leave.excuse_cancelled` | the employee | the excuse | the full text | the employee's leave history |
+| `leave.excuse_filed`, `leave.excuse_cancelled`, `leave.returned_to_work` | the employee | the excuse / the leave | the full text | the employee's leave history |
 | `attendance.checkout_reminder` | the employee | — | the full text | the check-in/out screen |
 | `attendance.missing_checkout`, `attendance.record_rejected`, `attendance.record_unrejected` | the employee | the attendance record | the full text | that day in the attendance history |
+
+⚙️ **Sent today (2026-10-16):** `attendance.checkout_reminder` (at 17:00, to
+everyone still checked in — §12) and `attendance.record_rejected` (§13.4).
+**Catalogued but not sent:** `attendance.missing_checkout` and
+`attendance.record_unrejected` — legacy notifies nobody when the day closes or
+a refusal is undone, and the ERP keeps that until the project owner decides
+otherwise (`ATTENDANCE_BUILD.md` §4). A client should still handle them.
 | any other type | — | any | by `reference` alone (an `employee` opens their profile); otherwise the full text | the same |
 
 - The leave, approval and attendance screens arrive with those modules (work order §4.5–§4.7); until a screen exists, its rows fall back to the full text.
@@ -1571,6 +1592,7 @@ one; the earliest row is their initial posting.
   "reason_label": "ترقية",
   "legacy_workplace": null,
   "legacy_manager_name": null,
+  "legacy_job_title": null,
   "notes": "قرار رقم 41",
   "created_at": "2026-09-13T10:00:00+03:00"
 }
@@ -1953,6 +1975,41 @@ columns and carry no offset at all (§1). Read those as Damascus local.
 | 18| POST        | `/api/auth/notifications/{notification}/read`| bearer   | — (owner‑scoped)       |
 | 18a| POST       | `/api/auth/notifications/read-all`           | bearer   | — (owner‑scoped)       |
 | 18b| POST/DELETE| `/api/me/device-tokens`                      | bearer   | — (self-scoped)        |
+| 18c| GET        | `/api/me/attendance`                         | bearer   | — (self-scoped, §12)   |
+| 18d| POST       | `/api/me/attendance`                         | bearer   | — (self-scoped, §12)   |
+| 18e| POST       | `/api/me/attendance/sync`                    | bearer   | — (self-scoped, §12)   |
+| 18f| GET        | `/api/me/attendance/{record}/selfie`         | bearer   | — (self-scoped, §12.4) |
+| 18g| GET        | `/api/attendance/records`                    | bearer   | `attendance.records.view` (§13) |
+| 18h| GET        | `/api/attendance/records/{record}/selfie`    | bearer   | `attendance.records.view` |
+| 18i| PATCH      | `/api/attendance/records/{record}/checkout`  | bearer   | `attendance.records.correct` |
+| 18j| PATCH/DELETE| `/api/attendance/records/{record}/reject`   | bearer   | `attendance.records.reject` |
+| 18k| GET        | `/api/attendance/report`                     | bearer   | `attendance.records.view` (§14) |
+| 18l| GET        | `/api/attendance/report/monthly`             | bearer   | `attendance.records.view` |
+| 18m| GET        | `/api/attendance/report/employee`            | bearer   | `attendance.records.view` |
+| 18n| GET        | `/api/attendance/absent-today`               | bearer   | `attendance.records.view` |
+| 18o| GET        | `/api/me/approvals`                          | bearer   | — (self-scoped, §15.2) |
+| 18p| GET        | `/api/approvals/{approval}`                  | bearer   | — (on the chain, or `approvals.view`; §15.3) |
+| 18q| POST       | `/api/approvals/{approval}/steps/{step}/approve` | bearer | — (the step's approver; §15.4) |
+| 18r| POST       | `/api/approvals/{approval}/steps/{step}/reject`  | bearer | — (the step's approver; §15.4) |
+| 18s| PATCH      | `/api/approvals/{approval}/steps/{step}/assignee` | bearer | `approvals.reassign` (§15.5) |
+| 18t| POST       | `/api/approvals/{approval}/withdraw`         | bearer   | — (the requester; §15.6) |
+| 18u| GET        | `/api/leave/types`                           | bearer   | — (any account; §16.1) |
+| 18v| POST       | `/api/leave/types`                           | bearer   | `leave.types.create` |
+| 18w| PATCH/DELETE| `/api/leave/types/{type}`                   | bearer   | `leave.types.update` / `.delete` |
+| 18x| GET        | `/api/me/leave-balance`                      | bearer   | — (self-scoped, §16.2) |
+| 18y| GET        | `/api/leave/balances`                        | bearer   | `leave.balances.view` |
+| 18z| PUT        | `/api/leave/balances/{employee}/{year}`      | bearer   | `leave.balances.update` |
+| 18za| GET/POST  | `/api/me/leave-requests`                     | bearer   | — (self-scoped, §16.3) |
+| 18zb| POST      | `/api/me/leave-requests/{id}/cancel`         | bearer   | — (self-scoped, §16.3) |
+| 18zc| GET       | `/api/leave/requests/{leaveRequest}`         | bearer   | — (the employee, the chain) or `leave.requests.view` (§16.4) |
+| 18zd| GET       | `/api/leave/requests/{leaveRequest}/attachments/{attachment}` | bearer | as 18zc |
+| 18ze| POST      | `/api/leave/excuses`                         | bearer   | `leave.excuses.create` (§16.5) |
+| 18zf| DELETE    | `/api/leave/excuses/{leaveRequest}`          | bearer   | `leave.excuses.delete` (§16.6) |
+| 18zg| POST      | `/api/leave/requests/{leaveRequest}/return-to-work` | bearer | `leave.requests.returnToWork` (§16.7) |
+| 18zh| GET       | `/api/leave/requests`                        | bearer   | `leave.requests.view` (§16.8) |
+| 18zi| GET       | `/api/me/profile`                            | bearer   | — (self-scoped, §17.1) |
+| 18zj| POST/GET  | `/api/me/photo`                              | bearer   | — (self-scoped, §17.2) |
+| 18zk| GET       | `/api/me/summary`                            | bearer   | — (self-scoped, §17.3) |
 | 19| GET         | `/api/auth/audit-logs`                       | bearer   | `auth.audit.view`      |
 | 20| GET         | `/api/auth/audit-logs/{auditLog}`            | bearer   | `auth.audit.view`      |
 | 21| GET         | `/api/departments`                           | bearer   | `departments.view`     |
@@ -1977,6 +2034,11 @@ columns and carry no offset at all (§1). Read those as Damascus local.
 | 40| PUT/PATCH   | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.update`   |
 | 41| DELETE      | `/api/hr/warnings/{warning}`                 | bearer   | `hr.warnings.delete`   |
 
+⚙️ **82 routes** in `route:list` (2026-10-18): the 41 above, the sessions and
+device-token routes of work order §4.3 (3a–3c, 18a, 18b — six routes),
+thirteen attendance routes (18c–18n), six approvals routes (18o–18t) and sixteen
+leave routes (18u–18zh). The count below is the one from before them.
+
 **40 endpoints.** Batch 2 added eleven — the job-title catalogue (5), posting
 history (2, read and append only), and warnings (4). سجل التدقيق added the two
 above, both reads: there is no third, because the table is append-only.
@@ -2000,5 +2062,1052 @@ above, both reads: there is no third, because the table is append-only.
 6. **Error handling:** read `success` on **every** response — there are no longer any exceptions. On `false`, show `message` (always Arabic and display-ready) and, if `errors` exists, map field errors to inputs. Still route `401` (→ refresh) and `429` (→ back off via `Retry-After`) by **status code**, because what you do about them depends on the status, not on `success`.
 7. **Permission‑aware UI:** gate actions on the `permissions` array from login/`me` (e.g. `permissions.includes('hr.employees.create')`); hide/disable what the user can't do to avoid `403`s. No extra request needed — it works for non‑admins too.
 8. **Notification badge:** poll `/api/auth/notifications/unread-count` on an interval. It is one of exactly **two** endpoints meant to be polled — the other is the notification list itself, and both are excluded from the audit trail for that reason. **Never poll anything else**, and least of all `/api/auth/audit-logs`, which records every read of itself (§9).
-9. **Lists:** **all nine** list endpoints are paginated and page identically — items in `data`, a sibling `meta` block of exactly six keys. Use `?page=N` and `?per_page=N` (default 15, clamped 1–100), and build the pager from `meta.last_page`. Read `meta.per_page` back rather than assuming your requested size was applied. Roles and users were unpaginated before 2026-09-08 and are not any more.
+9. **Lists:** **all twelve** list endpoints are paginated — the three attendance reports (§14) are computed objects, not lists, and are not and page identically — items in `data`, a sibling `meta` block of exactly six keys. Use `?page=N` and `?per_page=N` (default 15, clamped 1–100), and build the pager from `meta.last_page`. Read `meta.per_page` back rather than assuming your requested size was applied. Roles and users were unpaginated before 2026-09-08 and are not any more.
 10. **Correlation:** send an `X-Request-Id` per user action and log the one that comes back on every response — it is recorded server-side on the matching audit rows, which turns a vague bug report into an exact lookup.
+
+---
+
+## 12. Attendance — الحضور (self-service)
+
+⚙️ **New 2026-10-16** (work order §4.5, slice 1). The employee's own
+attendance, ported from legacy's `/api/attendance/record`, `/sync` and
+`/my-records` with legacy's rules and Arabic messages. Build notes:
+[`ATTENDANCE_BUILD.md`](ATTENDANCE_BUILD.md).
+
+**Who may call them:** any authenticated account **linked to an employee**. No
+permission — the routes are self-scoped and always act on the caller's own
+employee. An account with no employee gets **403**. Recording also needs the
+employee to be **active**: a suspended employee gets **422** on record and
+sync, but can still read their history.
+
+**Differences from legacy a client must know:**
+
+- `type` is an **int**: `1` حضور (check-in), `2` انصراف (check-out) — not the
+  strings `check_in` / `check_out`. Every enum ships as `{field}` +
+  `{field}_label`.
+- Responses use the standard envelope.
+- **There is no selfie URL.** Selfies are private; `has_selfie` says whether one
+  exists. (An authorised endpoint to view one comes with the HR side.)
+- **`client_uuid`** — optional, a UUID the phone generates per record. Send it:
+  a retry of a submission that did save comes back as **success with the saved
+  record** instead of "already checked in". Without it, behaviour is legacy's.
+
+### 12.1 Record a check-in or check-out
+
+```
+POST /api/me/attendance        multipart/form-data
+```
+
+| Field | Rules |
+|---|---|
+| `type` | required, `1` (check-in) or `2` (check-out) |
+| `latitude` | required, number, −90…90 |
+| `longitude` | required, number, −180…180 |
+| `selfie` | required, image, ≤ 10 MB |
+| `recorded_at` | required, date-time — the moment on the phone; an offset is honoured and normalised to Asia/Damascus |
+| `client_uuid` | optional, UUID |
+
+**201** → `{ success, message: "تم تسجيل الحضور بنجاح.", data: <record> }`.
+**200** → `{ success, message: "هذا السجل محفوظ مسبقاً.", data: <the saved record> }`
+when that `client_uuid` was already saved.
+
+**422 — the business rules** (legacy's, unchanged; `message` is display-ready):
+
+| Rule | `message` |
+|---|---|
+| a second check-in the same day — even after checking out | لديك تسجيل حضور قائم بالفعل لهذا اليوم. |
+| check-in on approved leave | لا يمكن تسجيل الحضور أثناء إجازة معتمدة لهذا اليوم. |
+| check-out with no check-in that day, or a second check-out | لا يمكن تسجيل الانصراف بدون تسجيل حضور صالح لنفس اليوم. |
+| check-out at or before the check-in | وقت الانصراف يجب أن يكون بعد وقت الحضور. |
+| check-out within 60 minutes of the check-in | لا يمكن تسجيل الانصراف قبل مرور 60 دقيقة على الحضور. |
+| a non-working day / outside the check-in window — **not reachable as configured**: every day is a working day and the window is open (decisions Q8, Q9) | لا يمكن تسجيل الحضور في يوم عطلة. / … قبل الساعة … / … بعد الساعة … |
+| a suspended employee | لا يمكن تسجيل الحضور لموظف ليس على رأس عمله. |
+
+A refused event stores no selfie.
+
+**The record object:**
+
+```json
+{
+  "id": 41,
+  "employee_id": 7,
+  "type": 2,
+  "type_label": "انصراف",
+  "status": null,
+  "status_label": null,
+  "source": 1,
+  "source_label": "تسجيل مباشر",
+  "recorded_at": "2026-06-21T16:00:00+03:00",
+  "work_hours": 8,
+  "work_hours_formatted": "8h 0m",
+  "latitude": 33.5,
+  "longitude": 36.3,
+  "has_selfie": true,
+  "client_uuid": "7d0f6f2e-3b1a-4c5e-9a8b-1f2e3d4c5b6a",
+  "is_corrected": false,
+  "corrected_at": null,
+  "correction_note": null,
+  "is_rejected": false,
+  "rejected_at": null,
+  "rejection_reason": null,
+  "rejection_reason_label": null,
+  "rejection_note": null,
+  "created_at": "2026-06-21T16:00:02+03:00"
+}
+```
+
+- `work_hours` is on the **check-out** row only; `null` on a check-in.
+- `status` is `1` («انصراف مفقود») on a check-in the day closed on without a
+  check-out, `null` otherwise.
+- `source`: `1` تسجيل مباشر · `2` مزامنة بعد انقطاع · `3` تصحيح من الموارد البشرية.
+- A **rejected** row (`is_rejected: true`) was refused by HR: it no longer
+  counts, and the employee may record that day again.
+
+### 12.2 Sync the offline queue
+
+```
+POST /api/me/attendance/sync   multipart/form-data
+```
+
+`records[]` — each with `type`, `latitude`, `longitude`, `recorded_at` and
+optional `client_uuid`, as above — and `selfies[]`, matched to `records[]` **by
+index**.
+
+Each entry is recorded **on its own**: one refusal does not stop the others.
+
+**200** →
+
+```json
+{
+  "success": true,
+  "message": "تمت مزامنة السجلات.",
+  "data": {
+    "succeeded": [ <record>, ... ],
+    "failed": [ { "index": 1, "entry": { ...as sent... }, "error": "لديك تسجيل حضور قائم بالفعل لهذا اليوم." } ]
+  }
+}
+```
+
+- A missing selfie fails **that entry** with «الصورة الشخصية مطلوبة لكل سجل.».
+- An entry whose `client_uuid` is already saved is in `succeeded`, as the saved
+  record — so a queue re-sent after a dropped connection empties cleanly.
+- `error` is display-ready. An unexpected server failure reads «تعذر حفظ هذا
+  السجل، يرجى المحاولة لاحقاً.» and is logged server-side; nothing about the
+  server leaks into it.
+- A malformed request (a missing field in an entry) is a **422** for the whole
+  request, naming the field as `records.N.field`.
+
+### 12.3 My records
+
+```
+GET /api/me/attendance
+```
+
+Paginated (the standard `meta`). **Without a date filter it lists today**, as
+legacy does.
+
+| Query | |
+|---|---|
+| `date` | one day, `Y-m-d` |
+| `from`, `to` | a range (`to` ≥ `from`) |
+| `month` (+ `year`) | a month; `year` defaults to this year |
+| `year` | a year |
+| `type` | `1` or `2` |
+| `missing_checkout`, `is_corrected`, `rejected` | `0`/`1`/`true`/`false` |
+| `work_hours_min`, `work_hours_max` | an hours range (max ≥ min) |
+| `sort` | `recorded_at`, `date`, `type`, `status`, `work_hours`, `created_at`, `rejected_at`, `id`; `-` prefix for descending. Default newest first. An unknown key is a **422** |
+
+Date filters apply in that order of precedence: `date`, then `from`/`to`, then
+`month`, then `year`.
+
+### 12.4 My selfie
+
+```
+GET /api/me/attendance/{record}/selfie
+```
+
+Streams the image of one of the caller's **own** records (`Cache-Control:
+private, no-store`). A colleague's record id is a **404** — whether it exists
+is not the caller's to learn. **404** «لا توجد صورة لهذا السجل.» when the record
+has no selfie (an HR-corrected check-out) or its file was deleted after three
+months.
+
+---
+
+## 13. Attendance — oversight (HR and managers)
+
+⚙️ **New 2026-10-16** (work order §4.5, slice 2a). Legacy's `/attendance/records`,
+`/records/{record}/checkout`, `/records/{record}/reject`.
+
+**Scope.** Every route is row-scoped through the employee's **current** unit
+(GAP-3, decision D6): a company-wide grant reaches everyone, a unit grant that
+unit and everything under it, a «الوحدات التي أديرها» grant the units its holder
+manages. After a transfer the new unit's reach covers the person's whole
+history and the old unit's none of it. An out-of-reach record is **403**
+`out_of_scope`, before any body is read; an unknown id is **404**.
+
+| Permission | Allows |
+|---|---|
+| `attendance.records.view` | the list and the selfie |
+| `attendance.records.correct` | recording a forgotten check-out |
+| `attendance.records.reject` | refusing a record and undoing a refusal |
+
+Rows are the record object of §12.1, plus:
+
+```json
+"employee": { "id": 7, "full_name": "نور أحمد الشامي", "employee_number": "EMP-00007" },
+"corrected_by": null,
+"rejected_by": { "id": 4, "name": "سامر خالد الحلبي" }
+```
+
+`corrected_by` / `rejected_by` are the **accounts** that acted — `name` is their
+employee's name, or the account's email for an account with no employee.
+
+### 13.1 The records list
+
+```
+GET /api/attendance/records        (attendance.records.view)
+```
+
+Paginated (15 by default, as everywhere in this API — legacy paged by 25).
+**Without a date filter it lists today.** Every filter of §12.3, plus:
+
+| Query | |
+|---|---|
+| `employee_id`, `employee_ids` | one or several employees (`employee_ids=3,7` or an array) |
+| `department_id`, `department_ids` | one or several units — **each with every unit under it**, as legacy's department filter covered its sections |
+| `search` | a name part or the staff number; `%` and `_` match themselves |
+| `rejection_reason` | `1` location · `2` selfie · `3` other |
+| `created_from`, `created_to` | when the server received the record |
+| `sort` | §12.3's keys plus `employee_name`, `employee_number` |
+
+A filter naming a unit outside the caller's reach returns nothing — it never
+widens the reach.
+
+### 13.2 A record's selfie
+
+```
+GET /api/attendance/records/{record}/selfie        (attendance.records.view)
+```
+
+As §12.4, for a record in reach.
+
+### 13.3 Record a forgotten check-out
+
+```
+PATCH /api/attendance/records/{record}/checkout    (attendance.records.correct)
+```
+
+| Field | Rules |
+|---|---|
+| `checked_out_at` | required, date-time |
+| `note` | optional, ≤ 500 |
+
+`{record}` is the day's **check-in**. A check-out row is written — `source: 3`,
+`is_corrected: true`, the corrector, the note, no selfie, the day's hours — and
+the check-in's missing-check-out flag is cleared. The 60-minute guard does not
+apply.
+
+**200** → `{ data: { check_in: <record>, check_out: <record> }, message: "تم تصحيح الانصراف بنجاح." }`
+
+**422:** «يجب اختيار سجل دخول لتصحيح الانصراف.» (not a check-in) · «هذا السجل لا
+يحتاج إلى تصحيح انصراف.» (the day has its check-out, or the check-in was
+refused) · «وقت الانصراف يجب أن يكون بعد وقت الحضور.»
+
+### 13.4 Refuse a record
+
+```
+PATCH /api/attendance/records/{record}/reject      (attendance.records.reject)
+```
+
+| Field | Rules |
+|---|---|
+| `reason` | required: `1` الموقع المسجَّل لا يطابق موقع العمل · `2` الصورة الشخصية غير صحيحة أو غير واضحة · `3` مخالفة تعليمات تسجيل الحضور |
+| `note` | ≤ 500; **required** with reason `3` |
+
+The record is kept as evidence and stops counting everywhere; the employee may
+record the day again. **Refusing a check-in refuses that day's check-out with
+it** — one decision. The employee is notified (`attendance.record_rejected`,
+referencing the record): «لم يتم قبول تسجيل حضورك بتاريخ …: <the reason>.», plus
+the note.
+
+**200** → `{ data: { record: <record>, rejected_records: [<record>, ...] }, message: "تم رفض التسجيل وإشعار الموظف." }`
+— every row the decision took down, so the day can be redrawn.
+
+**422** «تم رفض هذا السجل مسبقاً.»
+
+### 13.5 Undo a refusal
+
+```
+DELETE /api/attendance/records/{record}/reject     (attendance.records.reject)
+```
+
+Brings back **the whole decision, and only it** — from either of its rows.
+No notification is sent (as legacy).
+
+**200** → `{ data: { record: <the decision's first row>, restored_records: [...] }, message: "تم التراجع عن رفض التسجيل." }`
+
+**422:** «هذا السجل غير مرفوض.» · «لا يمكن التراجع عن الرفض: يوجد تسجيل حضور قائم
+لهذا اليوم بالفعل.» · «… يوجد تسجيل انصراف قائم لهذا اليوم بالفعل.» — the day
+was recorded again after the refusal, and restoring it would leave two.
+
+---
+
+## 14. Attendance — reports
+
+⚙️ **New 2026-10-16** (work order §4.5, slice 2b). Legacy's `/attendance/report`,
+`/report/monthly`, `/report/employee` and `/absent-today`. All four need
+**`attendance.records.view`** and see only what the caller's grant reaches
+(§13), through the employee's **current** unit.
+
+**Who a report is about.** The daily board and the employee grid read every
+employee in reach. The monthly report and absent-today read those **expected
+to attend**: active employees with an active account (decision Q7 — legacy's
+`attendance_check` flag is gone). A suspended employee, or one with no
+account, has no monthly row and is never absent.
+
+**The person filters**, on every report: `employee_id` / `employee_ids`,
+`department_id` / `department_ids` (each unit with everything under it),
+`search` (a name part or the staff number) — as §13.1.
+
+**Day states** (`status`, with `status_label`):
+
+| | | |
+|---|---|---|
+| `1` حاضر (لم ينصرف بعد) — checked in, not out | `2` حاضر — in and out | `3` انصراف مفقود |
+| `4` في إجازة | `5` غياب بعذر — an HR excuse | `6` غائب |
+| `7` عطلة — not a working day | `8` تسجيل مرفوض — refused by HR | |
+
+Legacy used two names for a completed day (`checked_out` on the board,
+`present` in the grid); both are `2` here. Every day is a working day today
+(decision Q8), so `7` does not occur as configured, and until the Leave module
+exists nobody is `4` or `5`.
+
+**Not paginated, on purpose.** The three reports are computed objects whose
+totals must cover every row — a page of a monthly report with totals for the
+page would be a different report. They keep legacy's shape. absent-today is a
+list and pages as everywhere (15 by default).
+
+### 14.1 The daily board
+
+```
+GET /api/attendance/report?date=2026-06-21
+```
+
+`date` defaults to today. `sort` (every section): `employee_name`, `department`,
+`status`, `check_in_time`, `check_out_time`, `work_hours`, `-` for descending.
+
+```json
+{
+  "date": "2026-06-21",
+  "working_day": true,
+  "checked_in": [ <row> ], "checked_out": [ <row> ], "present": [ <row> ],
+  "missing_checkout": [ <row> ], "rejected": [ <row> ],
+  "on_leave": [ <leave row> ], "excused": [ <leave row> ],
+  "summary": { "checked_in": 1, "checked_out": 1, "present": 2, "on_leave": 0, "excused": 0, "missing_checkout": 1, "rejected": 0 }
+}
+```
+
+`present` is `checked_in` + `checked_out`. The sections are otherwise disjoint:
+`rejected` lists a refused day only when the employee did not record it again
+and no leave covers it.
+
+**A row** (keyed on the day's check-in):
+
+```json
+{
+  "record_id": 41, "check_out_record_id": 42,
+  "employee": { "id": 7, "full_name": "…", "employee_number": "EMP-00007" },
+  "department": { "id": 3, "name": "قسم أ-1" },
+  "status": 2, "status_label": "حاضر",
+  "check_in_time": "2026-06-21T08:00:00+03:00", "check_out_time": "2026-06-21T16:30:00+03:00",
+  "work_hours": 8.5, "work_hours_formatted": "8h 30m",
+  "check_in_location": { "latitude": 33.5, "longitude": 36.3 }, "check_out_location": { … },
+  "check_in_has_selfie": true, "check_out_has_selfie": true,
+  "correction": null,
+  "rejection": null
+}
+```
+
+`record_id` is what §13.3 (correct) and §13.4 (refuse) take; the selfies are
+§13.2's, by record id. `correction`: `{by, at, note}` on a corrected check-out.
+`rejection`: `{record_id, recorded_at, reason, reason_label, note, rejected_at,
+rejected_by}` on a refused day.
+
+**A leave row:** `leave_request_id`, `employee`, `department`, `status` (`4` or
+`5`), `leave_type`, `leave_type_name`, `is_excuse`, `deducts_balance`, `excuse`
+(the details, on an excuse only), `approved_by` (on a request only),
+`start_date`, `end_date`.
+
+### 14.2 The monthly report
+
+```
+GET /api/attendance/report/monthly?from=2026-06-01&to=2026-06-30
+GET /api/attendance/report/monthly?month=6&year=2026
+```
+
+`from` and `to` are required (or `month`, with `year` defaulting to this year);
+at most **92 days**. `has_absences`, `has_missing_checkouts` narrow the rows —
+and the totals are recomputed over what is left. `sort`: `employee_name`,
+`department`, and every count below.
+
+```json
+{
+  "from": "2026-06-01", "to": "2026-06-30", "working_days": 30,
+  "rows": [ {
+    "employee": { … }, "department": { … },
+    "expected_days": 30, "present_days": 2, "on_leave_days": 2,
+    "excused_days": 0, "excused_deducted_days": 0, "excused_not_deducted_days": 0,
+    "absent_days": 26, "rejected_days": 0, "missing_checkouts": 0,
+    "total_work_hours": 15.5, "total_work_hours_formatted": "15h 30m",
+    "attendance_rate": 6.7
+  } ],
+  "totals": { "employees": 1, "expected_days": 30, "present_days": 2, … }
+}
+```
+
+`expected = present + on_leave + excused + absent`, always. Leave counts working
+days inside the window, and a day the employee worked is never also a leave
+day. `rejected_days` are refusals that became absences — already inside
+`absent_days`.
+
+### 14.3 One employee's days
+
+```
+GET /api/attendance/report/employee?employee_id=7&from=2026-06-01&to=2026-06-30
+```
+
+`employee_id` required; `from`/`to` or `month` + `year`, at most 92 days. An
+employee outside the caller's reach is **403** `out_of_scope`. `status` (a day
+state) and `working_days_only` narrow `days` — not `summary`, which always
+covers the whole range. `sort`: `date`, `status`, `work_hours`.
+
+Each day: `date`, `weekday` (0 Sunday … 6 Saturday), `working_day`, `status`,
+`status_label`, `check_in_id` (for §13.3), `check_in_time`, `check_out_time`,
+`work_hours`, `work_hours_formatted`, `leave_type` (whenever leave covers the
+day), `rejection` (whenever the day had a refused check-in — even when leave or
+a later check-in outranks it), `correction`, `excuse` (on an excused day).
+
+A day's state, by precedence: an accepted check-in (`2` / `1` / `3`), else a
+day off (`7`), else an excuse (`5`), else leave (`4`), else a refusal (`8`),
+else absent (`6`). `summary` carries the monthly report's counts plus
+`off_days`.
+
+### 14.4 Absent today
+
+```
+GET /api/attendance/absent-today?date=2026-06-21
+```
+
+Paginated. Expected employees with no accepted check-in that day — a refused
+check-in is not one — and no approved leave over it (unless the config allows
+attendance during leave). A day off lists nobody. `sort`: `employee_name`,
+`employee_number`; by name by default.
+
+```json
+{ "success": true, "data": [ { "employee": { … }, "department": { "id": 2, "name": "إدارة أ" } } ], "meta": { … } }
+```
+
+---
+
+## 15. Approvals — الاعتمادات
+
+⚙️ **New 2026-10-18** (work order §4.6, `APPROVALS_ENGINE_DESIGN.md` §7). One
+engine approves every kind of request — leave from §4.7, documents in
+November. A request carries its approval (the leave request will embed it);
+these routes are the approver's inbox and the request screen, shared by the
+app and the dashboard.
+
+**Approving is not a permission.** You approve or reject a step because **you
+are its approver** — the step names your employee. Being an administrator does
+not make it your turn (legacy's rule). The two permissions are for people
+**not** on the chain, both scoped through the requester's **current** unit
+(as §13):
+
+| Permission | Allows |
+|---|---|
+| `approvals.view` | reading a chain you are not on (HR seeing where a request is stuck) |
+| `approvals.reassign` | handing a pending step to someone else (§15.5) |
+
+**Who reads an approval:** the requester, anyone holding a step on it
+(decided and skipped steps included), and `approvals.view` within reach.
+Everyone else is **403** on every route below, before any body is read; a
+holder of `approvals.view` whose grant does not reach the requester is **403
+`out_of_scope`** «طلب الاعتماد هذا لموظف خارج نطاق صلاحياتك.». An unknown
+approval, or a step that belongs to another approval, is **404**.
+
+### 15.1 The approval object — the live state
+
+Every route except the inbox answers with it, read fresh **after** the action:
+redraw the screen from it, never from a cached copy.
+
+```json
+{
+  "id": 17,
+  "status": 1, "status_label": "قيد الاعتماد",
+  "rejection_policy": 1,
+  "subject": { "type": "leave_request", "id": 9, "title": "إجازة سنوية", "summary": "3 أيام · 2026-10-20 → 2026-10-22" },
+  "requested_by": 5,
+  "requester": { "id": 5, "full_name": "نور أحمد الشامي", "employee_number": "EMP-00005" },
+  "submitted_at": "2026-10-18T09:12:00+03:00",
+  "decided_at": null,
+  "current_order": 1,
+  "current_step_id": 41,
+  "can_act": true,
+  "can_withdraw": false,
+  "can_reassign": false,
+  "steps": [
+    {
+      "id": 41, "step_order": 1,
+      "resolver": 1, "resolver_label": "المدير المباشر", "resolver_ref": null,
+      "approver_id": 12, "approver": { "id": 12, "full_name": "…", "employee_number": "…" },
+      "decisive": false,
+      "status": 1, "status_label": "بانتظار القرار", "is_current": true,
+      "skip_reason": null, "skip_reason_label": null,
+      "acted_by": null, "acted_at": null, "note": null
+    }
+  ],
+  "reassignments": [
+    { "id": 3, "step_id": 41, "step_order": 1, "from": { … }, "to": { … },
+      "performed_by": { "id": 4, "name": "…" }, "reason": "المدير في إجازة",
+      "created_at": "…" }
+  ]
+}
+```
+
+| Field | |
+|---|---|
+| `status` | `1` قيد الاعتماد · `2` موافق عليه · `3` مرفوض · `4` مسحوب |
+| `rejection_policy` | `1` any rejection ends it (leave) · `2` a rejection is recorded and the approval goes on; only the `decisive` step's decision ends it (documents) |
+| `subject` | what is being approved: `type` + `id` open it (the same pair a notification's `reference` carries); `title` / `summary` are its own words, `null` if it no longer exists |
+| `current_order` | the stage whose steps may act now; `null` once decided. Steps sharing a `step_order` are parallel |
+| `can_act`, `current_step_id` | **the caller's** step that is theirs to decide now — show approve / reject only when `can_act` |
+| `can_withdraw` | the caller is the requester and nobody has decided yet |
+| `can_reassign` | the caller's `approvals.reassign` reaches this request, and it is pending |
+| `steps[].resolver` | how the approver was found: `1` المدير المباشر · `2` مدير وحدة محددة (`resolver_ref` is its code) · `3` موظف محدد |
+| `steps[].status` | `1` بانتظار القرار · `2` موافقة · `3` رفض · `4` لم تُطلب |
+| `steps[].skip_reason` | with status `4`: `1` the same approver as the step before · `2` the approver is the requester · `3` closed by a rejection · `4` closed by a withdrawal |
+| `steps[].acted_by` | the **account** that decided — `name` is its employee's name, or its email |
+
+### 15.2 My inbox
+
+```
+GET /api/me/approvals                    — what waits on me now
+GET /api/me/approvals?status=decided     — what I decided, most recent first
+```
+
+Self-scoped: your steps, found from your account's employee. Paginated (15 by
+default). Only steps you can decide **now** are listed — a later step of a
+chain arrives when its turn comes (with an `approval.step_pending`
+notification). An account with no employee gets an empty list. Any other
+`status` is **422**.
+
+```json
+{
+  "step_id": 41, "approval_id": 17, "step_order": 1,
+  "status": 1, "status_label": "بانتظار القرار",
+  "acted_at": null, "note": null,
+  "approval_status": 1, "approval_status_label": "قيد الاعتماد",
+  "subject": { "type": "leave_request", "id": 9, "title": "إجازة سنوية", "summary": "3 أيام · 2026-10-20 → 2026-10-22" },
+  "requester": { "id": 5, "full_name": "…", "employee_number": "…" },
+  "submitted_at": "2026-10-18T09:12:00+03:00"
+}
+```
+
+A row opens the request screen: `GET /api/approvals/{approval_id}`.
+
+### 15.3 The request screen
+
+```
+GET /api/approvals/{approval}
+```
+
+**200** → the approval object (§15.1).
+
+### 15.4 Approve, reject
+
+```
+POST /api/approvals/{approval}/steps/{step}/approve
+POST /api/approvals/{approval}/steps/{step}/reject
+```
+
+| Field | Rules |
+|---|---|
+| `note` | optional on both, ≤ 500 |
+
+`{step}` is `current_step_id`. Approving the last pending step approves the
+request; under policy `1` a rejection ends it at once and closes the steps
+behind it. The next approver(s) are notified (`approval.step_pending`); the
+requester's outcome notification is the request's own (`leave.approved`, …).
+
+**200** → `{ data: <approval>, message: "تمت الموافقة." }` / `"تم الرفض."`
+
+**422:** «ليس دورك في اعتماد هذا الطلب.» (not your step, or not its turn yet —
+also for an HR reader) · «يمكن اتخاذ القرار في الطلبات قيد الاعتماد فقط.» · the
+request's own refusal of its final approval, in its words (leave: the balance
+re-check).
+
+### 15.5 Reassign a step
+
+```
+PATCH /api/approvals/{approval}/steps/{step}/assignee      (approvals.reassign)
+```
+
+| Field | Rules |
+|---|---|
+| `employee_id` | required — an employee who has not left |
+| `reason` | required, 3–500 |
+
+For an approver who can no longer act. It moves the step and never decides.
+The new approver must be an **active employee with an active account**, not the
+requester and not already on the chain. Every hop is logged in
+`reassignments`; the new approver is notified — `approval.step_pending` if the
+step is current, `approval.step_assigned` («أصبحت ضمن مسار اعتماد») if it is a
+later one.
+
+**200** → `{ data: <approval>, message: "تمت إعادة إسناد الخطوة." }`
+
+**403:** without the permission, the plain refusal; with it but out of reach,
+`out_of_scope`. **422:** «يمكن إعادة إسناد خطوة بانتظار القرار فقط.» · «هذه
+الخطوة مسندة إلى هذا الموظف أصلاً.» · «لا يمكن إسناد الاعتماد إلى مُقدِّم الطلب
+نفسه.» · «هذا الموظف يحمل خطوة أخرى في مسار اعتماد هذا الطلب.» · «لا يمكن الإسناد
+إلا إلى موظف نشط لديه حساب فعّال.» · «يمكن إعادة إسناد الطلبات قيد الاعتماد فقط.»
+
+The employee picker reads `GET /api/hr/employees`, which needs
+`hr.employees.view` — grant it beside `approvals.reassign`.
+
+### 15.6 Withdraw a request
+
+```
+POST /api/approvals/{approval}/withdraw
+```
+
+The **requester**, while no step has been decided. The request becomes
+`4` مسحوب and its pending steps close. Show it only when `can_withdraw`. (The
+leave request will offer the same as its own cancel.)
+
+**200** → `{ data: <approval>, message: "تم سحب الطلب." }`
+
+**403** «لا يمكن سحب طلب لم تقدّمه.» (on the chain, but not the requester) ·
+**422** «لا يمكن سحب الطلب بعد أن اتُّخذ فيه قرار.» · «لا يمكن سحب طلب ليس قيد
+الاعتماد.»
+
+---
+
+## 16. Leave — الإجازات
+
+⚙️ **New 2026-10-18** (work order §4.7, `LEAVE_BUILD.md`). Legacy's leave
+module on ERP employees: **types and balances (16.1–16.2), requests on the
+approvals engine (16.3–16.4), HR's excuses, return to work and the register
+(16.5–16.8)**.
+
+Every HR route is row-scoped through the employee's **current** unit, as
+attendance (§13): out of reach is **403 `out_of_scope`** «هذا الموظف خارج نطاق
+صلاحياتك.».
+
+| Permission | Allows | Reach |
+|---|---|---|
+| `leave.types.create`, `.update`, `.delete` | the type catalogue | company-wide only |
+| `leave.balances.view` | HR's balances list | row-scoped |
+| `leave.balances.update` | setting an employee's allocation and adjustment | row-scoped |
+| `leave.requests.view` | reading other people's leave (§16.4) and the register (§16.8) | row-scoped |
+| `leave.excuses.create`, `.delete` | filing and undoing an HR excuse (§16.5–16.6) | row-scoped |
+| `leave.requests.returnToWork` | cutting an approved leave short (§16.7) | row-scoped |
+
+### 16.1 Leave types
+
+```
+GET    /api/leave/types                 any authenticated caller
+POST   /api/leave/types                 leave.types.create
+PATCH  /api/leave/types/{type}          leave.types.update
+DELETE /api/leave/types/{type}          leave.types.delete
+```
+
+The nine the system ships with, in this order (the order is the id — new
+types land last):
+
+| `code` | `name_ar` | Deducts | Requests | Excuses | Reason | Attachment |
+|---|---|---|---|---|---|---|
+| `annual` | إجازة سنوية | ✓ | ✓ | ✓ | | |
+| `emergency` | إجازة طارئة | ✓ | ✓ | ✓ | | |
+| `sick` | إجازة مرضية | | ✓ | ✓ | ✓ | ✓ |
+| `unpaid` | إجازة بدون راتب | | ✓ | ✓ | ✓ | |
+| `official_mission` | مأمورية رسمية | | | ✓ | ✓ | |
+| `bereavement` | إجازة وفاة | | | ✓ | ✓ | |
+| `attendance_excused` | حضور مبرر | | | ✓ | ✓ | |
+| `external_task` | مهمة خارجية | | | ✓ | ✓ | |
+| `study_leave` | إجازة دراسة | | | ✓ | | |
+
+**List** — active types, not paginated. `?for=requests` (the employee's form)
+or `?for=excuses` (HR's), `?deducts_balance=1|0`. `?active=0` lists the
+**retired** ones and needs `leave.types.update`.
+
+```json
+{ "id": 1, "code": "annual", "name_ar": "إجازة سنوية", "name_en": "Annual leave",
+  "deducts_balance": true, "for_requests": true, "for_excuses": true,
+  "requires_reason": false, "requires_attachment": false, "is_active": true,
+  "created_at": "…", "updated_at": "…" }
+```
+
+**Create** — `code` (required, `a-z`, `0-9`, `_`, ≤ 50, unique), `name_ar`
+(required, ≤ 100, unique), `name_en` (≤ 100, unique), `deducts_balance`
+(required), `for_requests`, `for_excuses`, `requires_reason`,
+`requires_attachment`, `is_active` (booleans). **201** «تم إنشاء نوع الإجازة.»
+
+**Update** — any of those; a type keeps its own code and names. Changing
+`deducts_balance` never changes leave already filed: each leave keeps the
+policy it was filed under. **200** «تم تعديل نوع الإجازة.»
+
+**Delete** — **200** «تم حذف نوع الإجازة.»; a type any leave was filed under
+is **deactivated** instead: **200** «نوع الإجازة مستخدم، فتم إيقافه بدلاً من
+حذفه.» with the type (`is_active: false`).
+
+### 16.2 Balances
+
+A balance is **computed, never stored**: the allocation for the year (HR's,
+or **15** by default) plus HR's adjustment, minus the **approved,
+balance-deducting** days of leave that **start** in that year — a leave from 30
+December to 2 January counts wholly in the first year. Pending requests reserve
+nothing: the balance is checked when a request is filed and again at its final
+approval.
+
+```json
+{ "year": 2026, "allocated_days": 22, "adjustment_days": 2, "used_days": 4,
+  "remaining_days": 18, "over_balance_days": 0, "non_deducting_days": 2,
+  "is_custom": true, "note": "رصيد افتتاحي" }
+```
+
+| Field | |
+|---|---|
+| `allocated_days` | allocation + adjustment (never below 0) |
+| `remaining_days` | never below 0; `over_balance_days` is non-zero only after HR forced an excuse past the balance |
+| `non_deducting_days` | approved days under a type that costs nothing (sick, a mission) — shown, never subtracted |
+| `is_custom` | `false`: no allocation set, the default applies |
+
+```
+GET /api/me/leave-balance?year=2026                         self
+GET /api/leave/balances?year=2026                           leave.balances.view
+PUT /api/leave/balances/{employee}/{year}                   leave.balances.update
+```
+
+**Mine** — the caller's own (this year by default). An account with no
+employee: **403** «لا يوجد موظف مرتبط بهذا الحساب.»
+
+**HR's list** — paginated, every employee in reach, each row
+`{ employee, department: {id, name}, …the figures above }`, and beside `meta`:
+`year` and `default_days`. Filters as attendance's lists: `employee_id(s)`,
+`department_id(s)` (each with every unit under it), `search` (a name part or
+the staff number). `sort`: `employee_name` (default), `employee_number`, with
+`-` for descending.
+
+**Set** — `allocated_days` (required, 0–365), `adjustment_days` (−365…365, 0
+when omitted), `note` (≤ 255). One row per person and year, updated in place.
+This is where HR enters each person's **opening balance** at their switch
+date. **200** «تم تحديث رصيد الإجازات.» with the row. **422** «لا يمكن أن يقل
+الرصيد عن الأيام المعتمدة لهذه السنة (N يوم).»
+
+### 16.3 Leave requests — filing, my list, withdrawing
+
+⚙️ **Slice 2, 2026-10-18.** An employee's request goes through the approvals
+engine (§15) on a **resolved** chain: their direct manager, then مدير الموارد
+(the manager of the unit coded `HR`). **Approvers are never sent** —
+`approver_ids` / `manager_id` are ignored. A step that resolves to the
+requester, or repeats the step before it, is skipped (§15.1 `skip_reason`).
+
+```
+POST /api/me/leave-requests                       self (multipart/form-data)
+GET  /api/me/leave-requests                       self
+POST /api/me/leave-requests/{id}/cancel           self
+```
+
+**File** — `leave_type_id` (required: an active type `for_requests`),
+`start_date`, `end_date` (≥ start), `reason` (≤ 2000; required where the
+type says), `attachments[]` (up to **5** files, PDF / JPG / PNG, ≤ 10 MB each;
+**at least one where the type requires it — sick leave**). Then, in order:
+
+| Refusal (422) | When |
+|---|---|
+| «نوع الإجازة (…) غير متاح لطلبات الموظفين.» (on `leave_type_id`) | an HR-only type (a mission) or a retired one |
+| «نوع الإجازة (…) يتطلب ذكر السبب.» (on `reason`) | |
+| «نوع الإجازة (…) يتطلب إرفاق مستند.» (on `attachments`) | sick leave with no file |
+| «الفترة المحددة لا تتضمن أيام عمل.» | |
+| «طلب الإجازة يتجاوز رصيد الإجازات المتبقي (المتبقي N يوم).» | a deducting type over the balance — sick and unpaid are never blocked |
+| «توجد إجازة قيد الاعتماد أو معتمدة تتداخل مع هذه الفترة.» | a pending or approved leave over any of the days |
+| «لا يمكن تقديم الطلب: منصب مدير «…» شاغر.» and the engine's other chain refusals (§15) | the chain cannot resolve — **nothing is saved, no file kept** |
+
+`requested_days` is the **working** days in the span (every day today). The
+first approver is notified («طلب إجازة جديد»); **the requester gets no
+receipt** — the request is in their list at once.
+
+**201** «تم تقديم طلب الإجازة.» → `{ leave_request, balance }` (§16.2's
+figures for the start year; a pending request reserves nothing).
+
+**The leave request object:**
+
+```json
+{
+  "id": 9, "employee_id": 5, "employee": { "id": 5, "full_name": "…", "employee_number": "…" },
+  "leave_type_id": 3, "leave_type": { "id": 3, "code": "sick", "name_ar": "إجازة مرضية", "deducts_balance": false },
+  "origin": 1, "origin_label": "طلب موظف", "is_excuse": false,
+  "deducts_balance": false, "reason": "زكام",
+  "start_date": "2026-06-21", "end_date": "2026-06-22", "requested_days": 2,
+  "status": 1, "status_label": "قيد الاعتماد", "decided_at": null,
+  "created_by": null,
+  "cancelled_at": null, "cancelled_by": null, "cancellation_reason": null,
+  "returned_to_work_on": null, "original_end_date": null,
+  "shortened_at": null, "shortened_by": null, "shortening_reason": null,
+  "attachments": [ { "id": 4, "name": "تقرير.pdf", "mime_type": "application/pdf", "size": 102400, "created_at": "…" } ],
+  "approval": { …§15.1, the live state… },
+  "created_at": "…"
+}
+```
+
+`status`: `1` قيد الاعتماد · `2` معتمدة · `3` مرفوضة · `4` ملغاة. `origin`: `1`
+the employee's request · `2` an HR excuse (`approval: null`). `deducts_balance`
+is the type's policy **when the leave was filed** — editing the type later
+does not change it.
+
+**My list** — paginated, newest first; HR's excuses for the caller included.
+Filters (legacy's): `status` or `statuses` (CSV or array), `leave_type_id(s)`,
+`year` (the start year), `month` (with `year`, or this year), `date_from` /
+`date_to` (leave **overlapping** the window), `is_excuse`. `sort`:
+`created_at`, `start_date`, `end_date`, `requested_days`, `status`,
+`decided_at`, `id`, with `-` for descending.
+
+**Cancel** — the engine's withdrawal (§15.6), while **no step has been
+decided**: the request and its approval become cancelled, and the days are free
+to file again. **200** «تم سحب طلب الإجازة.» with the request. **422**
+«لا يمكن سحب الطلب بعد أن اتُّخذ فيه قرار.» · «لا يمكن سحب عذر سجّلته الموارد
+البشرية.» A colleague's id is **404**.
+
+The outcome reaches the employee as `leave.approved` («تمت الموافقة على طلب
+إجازتك من … إلى …») or `leave.rejected`, referencing the request.
+
+### 16.4 One leave, and its files
+
+```
+GET /api/leave/requests/{leaveRequest}
+GET /api/leave/requests/{leaveRequest}/attachments/{attachment}
+```
+
+Readable by the **employee**, **anyone holding a step on its chain**, and
+`leave.requests.view` within reach of the employee's current unit — what an
+approver opens from the inbox (§15.2: `subject.type` `leave_request`,
+`subject.id`). Anyone else: **403**; a holder of `leave.requests.view` for
+other units: **403 `out_of_scope`** «طلب الإجازة هذا لموظف خارج نطاق صلاحياتك.».
+
+A file is **streamed** (`Cache-Control: private, no-store`, under its original
+name) to exactly those readers — never a URL. A file of another request under
+this one's path is **404**.
+
+**Attendance now sees leave**: an approved leave refuses a check-in that day
+(§12.1), and the daily board, the monthly report and the day grid (§14) count
+it, with who approved it (the last approver) or, for an excuse, who recorded
+it.
+
+### 16.5 HR excuses — file one
+
+⚙️ **Slice 3, 2026-10-18.** An excuse records an **absence that already
+happened**: it is **approved at once**, with no chain, and reclassifies those
+days across every attendance report (§14).
+
+```
+POST /api/leave/excuses              leave.excuses.create  (multipart/form-data)
+```
+
+`employee_id` (required, in reach), `leave_type_id` (an active type
+`for_excuses`), `start_date`, `end_date`, `reason` (required where the type
+says), `force` (boolean), `attachments[]` (**optional** for HR — even on sick
+leave — up to 5, PDF / JPG / PNG, ≤ 10 MB).
+
+| Refusal (422) | When |
+|---|---|
+| «نوع الإجازة (…) غير متاح للأعذار.» (on `leave_type_id`) | |
+| «نوع الإجازة (…) يتطلب ذكر السبب.» (on `reason`) | |
+| «الفترة المحددة لا تتضمن أيام عمل.» | |
+| «توجد إجازة قيد الاعتماد أو معتمدة تتداخل مع هذه الفترة.» | |
+| «للموظف حضور مسجّل في بعض هذه الأيام، فلا يوجد غياب لتبريره: 2026-06-22.» | an **accepted** check-in on any of the days — a refused one does not count; `force` never overrides this |
+| «العذر يتجاوز رصيد الإجازات المتبقي للموظف (المتبقي N يوم). أرسل force لتسجيله رغم ذلك.» | a deducting type past the balance; `force: true` records it and the balance shows `over_balance_days` |
+
+**201** «تم تسجيل العذر.» → `{ leave_request, balance }`; the request has
+`origin: 2`, `status: 2`, `approval: null`, `created_by` the filer. The
+employee is told (`leave.excuse_filed`): «سجّلت إدارة الموارد البشرية (…) من … إلى
+…، وقد تم خصمها من رصيد إجازاتك.» — or «… ولا تُخصم من رصيد إجازاتك.».
+
+### 16.6 HR excuses — undo one
+
+```
+DELETE /api/leave/excuses/{leaveRequest}     leave.excuses.delete
+```
+
+For an excuse filed in error. `reason` (optional, ≤ 2000). Everything unwinds
+from the one status change: the days are absences again, a deducted day comes
+back, the period can be excused again at once. The row is **kept**,
+`status: 4`, with `cancelled_by`, `cancelled_at`, `cancellation_reason`.
+
+**200** «تم التراجع عن العذر.» → `{ leave_request, balance }`. The employee is
+told (`leave.excuse_cancelled`): «تم التراجع عن (…) المسجّلة من … إلى …، وعاد
+الغياب كما كان.» (+ «وقد أُعيد يوم الرصيد المخصوم.» when it deducted, + «السبب: …»).
+
+**422** «يمكن التراجع هنا عن الأعذار التي سجّلتها الموارد البشرية فقط؛ طلب الموظف
+يُقرَّر عبر مسار اعتماده.» · «تم التراجع عن هذا العذر مسبقاً.» · «يمكن التراجع عن عذر
+قائم فقط.»
+
+### 16.7 Return to work
+
+```
+POST /api/leave/requests/{leaveRequest}/return-to-work     leave.requests.returnToWork
+```
+
+The employee came back **before their approved leave was over**.
+`returned_on` (a date inside the leave; **today** by default), `reason`
+(optional). The leave is cut back to end the day before; the days after it are
+free for a check-in and their balance days return. **Back on the first day**,
+the leave is cancelled instead. **The approval is untouched** — the decision
+stands for the days it covered. `original_end_date` keeps the span that was
+granted, however many times it is shortened.
+
+**200** → `{ leave_request, cancelled, days_returned, balance }`, message
+«تم تقصير الإجازة إلى الأيام المأخوذة فعلاً.» or «أُلغيت الإجازة لعودة الموظف في
+يومها الأول.». `days_returned` is 0 for a non-deducting type. The employee is
+told (`leave.returned_to_work`): «تم إنهاء (…) المعتمدة بتاريخ … بدلاً من … لعودتك
+إلى العمل بتاريخ ….» / «تم إلغاء (…) …» (+ «وأُعيد إلى رصيدك N يوم.», + «السبب: …»).
+
+**422** «يمكن إنهاء الإجازة المعتمدة فقط بالعودة إلى العمل.» · «هذا عذر غياب
+سجّلته الموارد البشرية، وليس إجازة جارية. تراجع عنه بدلاً من ذلك.» · «يجب أن يقع
+تاريخ العودة ضمن فترة الإجازة.»
+
+### 16.8 The register
+
+```
+GET /api/leave/requests          leave.requests.view
+```
+
+Every leave in reach that **overlaps a window**: `from` / `to` (written in
+full, `YYYY-MM-DD`), or `month` + `year` for that month, or `year` alone for
+that whole year, or **the current month** by default; at most **366
+days**, never inverted (422 on `to`). **Approved rows by default** — excuses
+are approved, so they are in; `status` / `statuses` widen it. Also: §16.3's
+`leave_type_id(s)` and `is_excuse`, and the employee filters
+(`employee_id(s)`, `department_id(s)` with their subtree, `search`). `sort`:
+`start_date` (default), `end_date`, `requested_days`, `created_at`,
+`employee_name`, `id`, with `-` for descending.
+
+Each row is the leave request object plus **`days_in_range`** (working days
+inside the window) and **`calendar_days_in_range`** — a leave from 28 May to 3
+June counts 3 days in June's register. Beside `meta`: `from`, `to`, and a
+**`summary` over the whole filtered set**, not the page:
+
+```json
+"summary": {
+  "employees": 2, "requests": 3, "days": 5, "calendar_days": 5,
+  "deducted_days": 3, "excuses": 1,
+  "by_type": [ { "leave_type_id": 1, "name": "إجازة سنوية", "deducts_balance": true,
+                 "requests": 2, "employees": 2, "days": 3 } ],
+  "by_status": { "2": 3 }
+}
+```
+
+`by_type` is ordered by days, most first.
+
+---
+
+## 17. Me — profile, photo and the home screen
+
+⚙️ **New 2026-10-19** (work order §4.8; requirements §6). The rest of the
+employee app's self-service surface: who I am, my photo, and the home screen.
+
+**Who may call them:** any authenticated account **linked to an employee**. No
+permission — the routes are self-scoped and always act on the caller's own
+employee; no id is read from the request. An account with no employee gets
+**403** «لا يوجد موظف مرتبط بهذا الحساب.»
+
+### 17.1 My profile
+
+```
+GET /api/me/profile
+```
+
+The employee object of §8.1 — `department`, `job_title` and the resolved
+`manager` embedded — **with the caller's own pay block and national id**
+(decision 17; D10 = B, 2026-10-19): every key `hr.employees.viewSalary` and
+`hr.employees.viewIdentity` unlock in §2, present for the owner without either
+permission. Plus:
+
+| Key | |
+|---|---|
+| `photo` | `{ "uploaded_at": "…" }`, or `null` when there is none — never omitted. The image is §17.2's `GET`, never a URL |
+
+No documents list in v1 (documents move onto the engine in November).
+
+### 17.2 My photo
+
+```
+POST /api/me/photo     multipart/form-data
+GET  /api/me/photo
+```
+
+**Upload** — `photo`: **JPG or PNG, at most 5 MB**. Kept on the private disk.
+**A new upload replaces the old one** (the old one is kept in the trail, its
+file removed); nobody approves it. **201**:
+
+```json
+{ "success": true, "message": "تم حفظ الصورة الشخصية.", "data": { "uploaded_at": "2026-10-19T09:00:00+03:00" } }
+```
+
+**422** «الصورة مطلوبة.» · «الصورة يجب أن تكون JPG أو PNG.» · «حجم الصورة يجب ألا
+يتجاوز 5 ميغابايت.»
+
+**Read** — streams the image (`Cache-Control: private, no-store`). **404**
+«لا توجد صورة شخصية.» when there is none: show initials.
+
+### 17.3 The home screen
+
+```
+GET /api/me/summary
+```
+
+One object of **cards, each `null` until its module can answer** (requirements
+§6.2). Today only `salary` is null — there is no payroll before Stage 4.
+
+```json
+{
+  "employee": {
+    "id": 12, "full_name": "…", "employee_number": "EMP-00012",
+    "job_title": { "id": 3, "name": "محاسب" },
+    "department": { "id": 4, "name": "قسم أ-1" },
+    "workplace": "…",
+    "manager": { "id": 7, "full_name": "…", "employee_number": "EMP-00007" },
+    "has_photo": true
+  },
+  "attendance_today": {
+    "date": "2026-10-19", "status": 1, "status_label": "حاضر (لم ينصرف بعد)",
+    "check_in_time": "2026-10-19T08:02:00+03:00", "check_out_time": null,
+    "work_hours": null, "work_hours_formatted": null, "leave_type": null
+  },
+  "attendance_month": {
+    "from": "2026-10-01", "to": "2026-10-19",
+    "expected_days": 19, "present_days": 15, "on_leave_days": 2, "excused_days": 0,
+    "absent_days": 2, "total_work_hours": 118.5, "total_work_hours_formatted": "118:30"
+  },
+  "leave_balance": { "year": 2026, "allocated_days": 15, "remaining_days": 11, "…": "§16.2" },
+  "notifications": { "unread_count": 3 },
+  "approvals": { "pending_count": 1 },
+  "leave_requests": { "pending_count": 1 },
+  "salary": null
+}
+```
+
+- `employee` — `job_title`, `department` and `manager` are `null` when there
+  is none. No pay key here: the pay block is §17.1's.
+- `attendance_today` — today's day from the day grid (§14.3's states).
+  ⚠️ **Before anything is recorded today, `status` is `null`** with
+  «لم يُسجَّل بعد», not غائب: the day is not over and check-in is open all day
+  (the owner's answer of 2026-10-19).
+- `attendance_month` — the 1st of this month to today, the grid's figures. A
+  today with nothing recorded yet is left out of `expected_days` and
+  `absent_days` alike, so the two cards agree.
+- `leave_balance` — this year's, exactly `GET /api/me/leave-balance` (§16.2).
+- `approvals.pending_count` — the steps waiting on me now (`GET
+  /api/me/approvals`, §15.2).
+- `leave_requests.pending_count` — my own leave still in the chain.
