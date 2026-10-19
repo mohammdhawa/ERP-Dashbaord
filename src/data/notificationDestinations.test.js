@@ -44,3 +44,37 @@ test("a type whose screen cannot be built for this row falls back to its referen
 test("reference types match case-insensitively, as the old lookup did", () => {
   assert.equal(destinationOf(n(null, { type: "Employee", id: 2 })), "hr/employees/2");
 });
+
+const leave = { type: "leave_request", id: 9 };
+
+test("an approval step on a leave request opens that request", () => {
+  assert.equal(destinationOf(n("approval.step_pending", leave)), "leave/requests/9");
+  assert.equal(destinationOf(n("approval.step_assigned", leave)), "leave/requests/9");
+});
+
+test("an approval step on any other request has no screen yet, so the full text", () => {
+  const document = { type: "document", id: 3 };
+
+  assert.equal(destinationOf(n("approval.step_pending", document)), null);
+  assert.equal(destinationOf(n("approval.step_assigned", document)), null);
+});
+
+test("the requester's leave notifications open their own request", () => {
+  assert.equal(destinationOf(n("leave.submitted", leave)), "leave/requests/9");
+  assert.equal(destinationOf(n("leave.approved", leave)), "leave/requests/9");
+  assert.equal(destinationOf(n("leave.rejected", leave)), "leave/requests/9");
+  assert.equal(destinationOf(n("leave.cancelled", leave)), "leave/requests/9");
+});
+
+test("excuse, return-to-work and attendance types keep the full text", () => {
+  assert.equal(destinationOf(n("leave.excuse_filed", leave)), null);
+  assert.equal(destinationOf(n("leave.excuse_cancelled", leave)), null);
+  assert.equal(destinationOf(n("leave.returned_to_work", leave)), null);
+  assert.equal(destinationOf(n("attendance.record_rejected", { type: "attendance_record", id: 4 })), null);
+  assert.equal(destinationOf(n("attendance.checkout_reminder")), null);
+});
+
+test("a leave type without a leave reference has nowhere to go", () => {
+  assert.equal(destinationOf(n("leave.approved")), null);
+  assert.equal(destinationOf(n("leave.approved", { type: "leave_request", id: null })), null);
+});

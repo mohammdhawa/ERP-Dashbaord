@@ -21,6 +21,18 @@ export const MENUITEMS = [
     requiredPermissions: [],
   },
   {
+    title: "الاعتمادات",
+    icon: "ri-checkbox-multiple-line",
+    menusub: false,
+    type: "link",
+    active: false,
+    selected: false,
+    dirchange: false,
+    path: `${import.meta.env.BASE_URL}approvals`,
+    // Self-scoped: an account with nothing to decide just sees an empty list.
+    requiredPermissions: [],
+  },
+  {
     title: "الوحدات التنظيمية",
     icon: "ri-community-line",
     menusub: false,

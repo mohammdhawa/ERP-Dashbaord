@@ -1,11 +1,13 @@
 // Where a notification opens — WHERE ITS RECIPIENT ACTS ON IT (project owner,
 // 2026-10-14; backend API doc §6 "What a tap opens").
 //
-// Chosen by the notification's `type` FIRST and its `reference` SECOND. The
-// same leave request is two different screens for two different people: the
-// approver's `approval.step_pending` opens the approval screen, the
-// requester's `leave.approved` opens their own request. A lookup by reference
-// alone cannot tell them apart, which is what this replaced.
+// Chosen by the notification's `type` FIRST and its `reference` SECOND — a
+// lookup by reference alone cannot tell a request's notifications apart from
+// those about an employee, which is what this replaced. For a leave request the
+// approver's `approval.step_pending` and the requester's `leave.approved` both
+// open the one leave request screen (project owner's decision): it shows the
+// request's current state and carries the approve / reject buttons, gated per
+// viewer.
 //
 // The server sends `type` + `reference`, never a URL — the Flutter app maps
 // the same pair to its own screens.
@@ -18,10 +20,25 @@
 // PURE, like auditEvents.js: paths are BASE_URL-relative, and
 // referenceRoutes.js adds the base. That keeps this testable under `node --test`.
 
-// type -> ({ reference }) => path | null. Empty until the screens land:
-//   "approval.step_pending" -> the approval screen   (work order §4.6)
-//   "leave.*"               -> the leave request      (work order §4.7)
-const BY_TYPE = Object.freeze({});
+// Approval steps and the requester's leave notices all open the leave request
+// screen (leave/requests/:id). Only a leave_request reference qualifies: a step
+// on any other request has no screen yet, so it falls through to null.
+//
+// Left out on purpose, so they keep the full text: leave.excuse_* and
+// leave.returned_to_work, and attendance.* — the contract's "Dashboard opens"
+// column says "the full text" for all of them (their screens are the app's).
+const toLeaveRequest = ({ reference }) =>
+  reference?.type === "leave_request" && reference.id ? `leave/requests/${reference.id}` : null;
+
+// type -> ({ reference }) => path | null. See API_DOCUMENTATION.md §6 "What a tap opens".
+const BY_TYPE = Object.freeze({
+  "approval.step_pending": toLeaveRequest,
+  "approval.step_assigned": toLeaveRequest,
+  "leave.submitted": toLeaveRequest,
+  "leave.approved": toLeaveRequest,
+  "leave.rejected": toLeaveRequest,
+  "leave.cancelled": toLeaveRequest,
+});
 
 // reference.type (the server's morph alias) -> (id) => path.
 const BY_REFERENCE = Object.freeze({

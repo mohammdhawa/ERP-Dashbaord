@@ -1,4 +1,4 @@
-// Permission catalogue (API doc §2) — 31 rows: 28 route-level + 3 field-level.
+// Permission catalogue (API doc §2) — 45 rows: 42 route-level + 3 field-level.
 // Format: {module}.{resource}.{action}
 //
 // Arabic labels come from the backend seeder. No endpoint serves permission
@@ -78,6 +78,42 @@ export const PERMISSIONS_CATALOG = [
       { name: "hr.warnings.create", label: "إصدار إنذار" },
       { name: "hr.warnings.update", label: "تعديل إنذار" },
       { name: "hr.warnings.delete", label: "حذف إنذار" },
+    ],
+  },
+  {
+    module: "الحضور والانصراف",
+    key: "attendance.records",
+    permissions: [
+      { name: "attendance.records.view", label: "عرض سجلات الحضور" },
+      { name: "attendance.records.correct", label: "تصحيح انصراف منسي" },
+      { name: "attendance.records.reject", label: "رفض سجل حضور" },
+    ],
+  },
+  {
+    // The approve and reject buttons need no permission: the step's owner acts
+    // on their own step in the approval chain. These two are for seeing chains
+    // and moving a step to someone else.
+    module: "الاعتمادات",
+    key: "approvals",
+    note: "الموافقة والرفض لا يحتاجان صلاحية: يقرّر صاحب الخطوة في مسار الاعتماد.",
+    permissions: [
+      { name: "approvals.view", label: "عرض مسارات الاعتماد" },
+      { name: "approvals.reassign", label: "إعادة إسناد خطوة اعتماد" },
+    ],
+  },
+  {
+    module: "الإجازات",
+    key: "leave",
+    permissions: [
+      { name: "leave.types.create", label: "إضافة نوع إجازة" },
+      { name: "leave.types.update", label: "تعديل نوع إجازة" },
+      { name: "leave.types.delete", label: "حذف نوع إجازة" },
+      { name: "leave.balances.view", label: "عرض أرصدة الإجازات" },
+      { name: "leave.balances.update", label: "تعديل أرصدة الإجازات" },
+      { name: "leave.requests.view", label: "عرض طلبات الإجازات" },
+      { name: "leave.excuses.create", label: "تسجيل عذر غياب" },
+      { name: "leave.excuses.delete", label: "التراجع عن عذر غياب" },
+      { name: "leave.requests.returnToWork", label: "تسجيل العودة إلى العمل" },
     ],
   },
   {
@@ -176,6 +212,19 @@ export const HONOURED_FROM_SCOPED_GRANT = Object.freeze([
   "hr.warnings.update",
   "hr.warnings.delete",
   "auth.roles.assign",
+  // Row-scoped too (PermissionReach::ROW_SCOPED): the server filters and refuses
+  // rows by the grant's scope. leave.types.* is not row-scoped, so it is absent.
+  "attendance.records.view",
+  "attendance.records.correct",
+  "attendance.records.reject",
+  "approvals.view",
+  "approvals.reassign",
+  "leave.balances.view",
+  "leave.balances.update",
+  "leave.requests.view",
+  "leave.excuses.create",
+  "leave.excuses.delete",
+  "leave.requests.returnToWork",
   // Company catalogues, readable from any grant so a scoped user's pickers work.
   "departments.view",
   "hr.job_titles.view",

@@ -12,7 +12,32 @@ test("auth.roles.assign is in the catalogue with the server's label", () => {
   // role matrix could not grant it, and the assign card would be unreachable.
   assert.ok(ALL_PERMISSION_NAMES.includes("auth.roles.assign"));
   assert.equal(permissionLabel("auth.roles.assign"), "إسناد الأدوار للمستخدمين");
-  assert.equal(ALL_PERMISSION_NAMES.length, 31);
+  assert.equal(ALL_PERMISSION_NAMES.length, 45);
+});
+
+test("the attendance, approvals and leave permissions are in the catalogue with their labels", () => {
+  // Labels are the backend seeder's (PermissionSeeder lines 160-173). The role
+  // matrix shows them verbatim, so a drifted label is a visible wrong word.
+  const expected = {
+    "attendance.records.view": "عرض سجلات الحضور",
+    "attendance.records.correct": "تصحيح انصراف منسي",
+    "attendance.records.reject": "رفض سجل حضور",
+    "approvals.view": "عرض مسارات الاعتماد",
+    "approvals.reassign": "إعادة إسناد خطوة اعتماد",
+    "leave.types.create": "إضافة نوع إجازة",
+    "leave.types.update": "تعديل نوع إجازة",
+    "leave.types.delete": "حذف نوع إجازة",
+    "leave.balances.view": "عرض أرصدة الإجازات",
+    "leave.balances.update": "تعديل أرصدة الإجازات",
+    "leave.requests.view": "عرض طلبات الإجازات",
+    "leave.excuses.create": "تسجيل عذر غياب",
+    "leave.excuses.delete": "التراجع عن عذر غياب",
+    "leave.requests.returnToWork": "تسجيل العودة إلى العمل",
+  };
+  for (const [name, label] of Object.entries(expected)) {
+    assert.ok(ALL_PERMISSION_NAMES.includes(name), `${name} is missing`);
+    assert.equal(permissionLabel(name), label, name);
+  }
 });
 
 test("every permission a scoped grant confers is a real permission", () => {
@@ -44,6 +69,9 @@ test("the company-only set matches the server's, written out in full", () => {
     "hr.job_titles.create",
     "hr.job_titles.delete",
     "hr.job_titles.update",
+    "leave.types.create",
+    "leave.types.delete",
+    "leave.types.update",
   ]);
 });
 

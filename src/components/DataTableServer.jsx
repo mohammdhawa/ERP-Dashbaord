@@ -3,6 +3,7 @@ import { OverlayTrigger, Tooltip } from "react-bootstrap";
 import ProtectedElement from "../pages/layout/ProtectedElement";
 import { MutatingDots } from "react-loader-spinner";
 import TablePaginationServer from "./TablePaginationServer";
+import SortableTh from "./SortableTh";
 
 // Server-paginated table (Format A lists: configurable page size + `meta`).
 // - updatePermission / deletePermission: full permission strings from the
@@ -19,6 +20,8 @@ import TablePaginationServer from "./TablePaginationServer";
 // - onRowClick makes rows navigate; it is skipped when the click originated
 //   inside the actions cell, inside any other interactive control, or when the
 //   gesture actually selected text (see handleRowClick).
+// - isRowClickable(item) (optional) narrows onRowClick to the rows that have
+//   somewhere to go: the rest get no pointer cursor and ignore the click.
 // - functions.rowLabel(item): the row's human name, appended to the edit and
 //   delete buttons' accessible names. Without it a screen reader reads a page
 //   of identical "تعديل"/"حذف" buttons with nothing saying which record each
@@ -27,26 +30,6 @@ import TablePaginationServer from "./TablePaginationServer";
 // - SORTING: a column opts in with `sortKey` — the exact key the SERVER accepts
 //   for that column. The caller passes the current `sort` value and an
 //   `onSortChange` handler; the table itself sorts nothing. See SORT below.
-
-// Three-state cycle on the column you clicked: unsorted → ascending →
-// descending → unsorted. The third state matters — without it there is no way
-// back to the server's own default ordering once you have touched a header,
-// and for these lists the default is itself meaningful (newest first).
-//
-// Clicking a DIFFERENT column always starts that column at ascending rather
-// than inheriting the previous column's direction, which would silently apply a
-// direction the user chose for something else.
-const nextSortValue = (sortKey, currentSort) => {
-  if (currentSort === sortKey) return `-${sortKey}`;
-  if (currentSort === `-${sortKey}`) return "";
-  return sortKey;
-};
-
-const sortDirection = (sortKey, currentSort) => {
-  if (currentSort === sortKey) return "asc";
-  if (currentSort === `-${sortKey}`) return "desc";
-  return null;
-};
 
 const DataTableServer = ({
   columns,
@@ -65,6 +48,7 @@ const DataTableServer = ({
   deletePermission,
   showActions = true,
   onRowClick,
+  isRowClickable,
   error,
   onRetry,
   emptyMessage = "لا توجد بيانات لعرضها",
@@ -113,70 +97,16 @@ const DataTableServer = ({
         <table className="table text-nowrap table-wrap-sm table-hover table-striped">
           <thead>
             <tr>
-              {columns?.map((column, index) => {
-                // A column is sortable only when it names a key the SERVER can
-                // order by AND the screen wired up a handler. A header that
-                // looks clickable but produces a 422 is worse than a plain one.
-                const sortable = Boolean(column.sortKey && onSortChange);
-                const direction = sortable
-                  ? sortDirection(column.sortKey, sort)
-                  : null;
-
-                return (
-                  <th
-                    scope="col"
-                    key={index}
-                    className={column.center ? "text-center" : ""}
-                    // aria-sort belongs on the header CELL, not the button, and
-                    // "none" on every other sortable column is what tells a
-                    // screen-reader user the rest are sortable but inactive.
-                    aria-sort={
-                      !sortable
-                        ? undefined
-                        : direction === "asc"
-                        ? "ascending"
-                        : direction === "desc"
-                        ? "descending"
-                        : "none"
-                    }
-                  >
-                    {sortable ? (
-                      <button
-                        type="button"
-                        className={`table-sort-button${
-                          direction ? " is-sorted" : ""
-                        }`}
-                        onClick={() =>
-                          onSortChange(nextSortValue(column.sortKey, sort))
-                        }
-                        // The visible label already names the column, so the
-                        // accessible name only has to add what the click does.
-                        aria-label={`${column.label} — ${
-                          direction === "asc"
-                            ? "مرتّب تصاعدياً، اضغط للترتيب تنازلياً"
-                            : direction === "desc"
-                            ? "مرتّب تنازلياً، اضغط لإلغاء الترتيب"
-                            : "اضغط للترتيب تصاعدياً"
-                        }`}
-                      >
-                        <span>{column.label}</span>
-                        <i
-                          className={
-                            direction === "asc"
-                              ? "ri-arrow-up-line"
-                              : direction === "desc"
-                              ? "ri-arrow-down-line"
-                              : "ri-arrow-up-down-line"
-                          }
-                          aria-hidden="true"
-                        ></i>
-                      </button>
-                    ) : (
-                      column.label
-                    )}
-                  </th>
-                );
-              })}
+              {columns?.map((column, index) => (
+                <SortableTh
+                  key={index}
+                  label={column.label}
+                  sortKey={column.sortKey}
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  className={column.center ? "text-center" : ""}
+                />
+              ))}
               {showActions && <th className="text-center">الاجراءات</th>}
             </tr>
           </thead>
@@ -223,6 +153,9 @@ const DataTableServer = ({
                     // Used for the two icon-only action buttons below, which
                     // otherwise announce as a page of identical "تعديل"/"حذف".
                     const label = functions?.rowLabel?.(item);
+                    const clickable =
+                      Boolean(onRowClick) &&
+                      (!isRowClickable || isRowClickable(item));
                     return (
                     <tr
                       key={item.id}
@@ -233,8 +166,8 @@ const DataTableServer = ({
                       // which is invalid. Keyboard access to the record comes
                       // from a real focusable control instead — callers that set
                       // onRowClick should also pass functions.handleDetail.
-                      onClick={onRowClick ? handleRowClick(item) : undefined}
-                      style={onRowClick ? { cursor: "pointer" } : undefined}
+                      onClick={clickable ? handleRowClick(item) : undefined}
+                      style={clickable ? { cursor: "pointer" } : undefined}
                     >
                       {columns.map((column, idx) => (
                         <td

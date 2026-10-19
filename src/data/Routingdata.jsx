@@ -28,6 +28,10 @@ const Notifications = lazy(() =>
   import("../sections/notifications/Notifications")
 );
 const Sessions = lazy(() => import("../sections/account/Sessions"));
+const ApprovalsInbox = lazy(() =>
+  import("../sections/approvals/ApprovalsInbox")
+);
+const LeaveRequest = lazy(() => import("../sections/leave/LeaveRequest"));
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held
@@ -94,5 +98,19 @@ export const RouteData = [
     path: `${import.meta.env.BASE_URL}sessions`,
     element: <Sessions />,
     requiredPermissions: [], // self-scoped: the caller's own sessions
+  },
+  {
+    id: 11,
+    path: `${import.meta.env.BASE_URL}approvals`,
+    element: <ApprovalsInbox />,
+    requiredPermissions: [], // self-scoped: the caller's own approval steps
+  },
+  {
+    id: 12,
+    path: `${import.meta.env.BASE_URL}leave/requests/:id`,
+    element: <LeaveRequest />,
+    // The server decides who may read it (the employee, anyone on its chain,
+    // leave.requests.view within reach); a refusal renders in the screen.
+    requiredPermissions: [],
   },
 ];
