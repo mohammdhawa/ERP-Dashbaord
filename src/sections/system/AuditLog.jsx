@@ -402,55 +402,62 @@ const AuditLog = () => {
                 onChange={handleFilterChange}
                 onReset={handleFilterReset}
                 hasAnyFilter={hasAnyFilter}
+                // ALWAYS VISIBLE, in both positions. The default hides roughly
+                // 99% of the rows; saying so on screen is the difference
+                // between a default and a lie of omission. Rendered in the
+                // filter panel's action bar, but decided here.
+                barStart={
+                  <div className="d-flex flex-wrap align-items-center gap-2">
+                    <span
+                      className={`badge ${
+                        includeRequests
+                          ? "bg-primary-transparent"
+                          : "bg-warning-transparent"
+                      }`}
+                    >
+                      <i
+                        className={`align-middle me-1 ${
+                          includeRequests ? "ri-eye-line" : "ri-eye-off-line"
+                        }`}
+                        aria-hidden="true"
+                      ></i>
+                      {includeRequests
+                        ? "معروض: طلبات الواجهة البرمجية"
+                        : "مخفي: طلبات الواجهة البرمجية"}
+                    </span>
+                    <Form.Check
+                      type="switch"
+                      id="audit-include-requests"
+                      className="mb-0"
+                      label="تضمين طلبات الواجهة البرمجية (api_request)"
+                      checked={includeRequests}
+                      // Locked in the two cases where the group is not this
+                      // switch's to decide, because a switch that cannot
+                      // change anything should not look like it can:
+                      //   · a drill-down, which includes the request row by
+                      //     definition;
+                      //   · a request-group event picked in الحدث, where
+                      //     turning the group off would ask the server for an
+                      //     event it has just been told to exclude — an empty
+                      //     table, always.
+                      // Clearing that event in الحدث unlocks it again.
+                      disabled={
+                        filters.request_id !== "" || requestEventSelected
+                      }
+                      title={
+                        requestEventSelected && filters.request_id === ""
+                          ? "مطلوب لعرض الأحداث المحددة في فلتر «الحدث»"
+                          : undefined
+                      }
+                      onChange={(e) =>
+                        handleFilterChange({
+                          includeApiRequests: e.target.checked,
+                        })
+                      }
+                    />
+                  </div>
+                }
               />
-
-              {/* ALWAYS VISIBLE, in both positions. The default hides roughly
-                  99% of the rows; saying so on screen is the difference between
-                  a default and a lie of omission. */}
-              <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-                <span
-                  className={`badge ${
-                    includeRequests
-                      ? "bg-primary-transparent"
-                      : "bg-warning-transparent"
-                  }`}
-                >
-                  <i
-                    className={`align-middle me-1 ${
-                      includeRequests ? "ri-eye-line" : "ri-eye-off-line"
-                    }`}
-                    aria-hidden="true"
-                  ></i>
-                  {includeRequests
-                    ? "معروض: طلبات الواجهة البرمجية"
-                    : "مخفي: طلبات الواجهة البرمجية"}
-                </span>
-                <Form.Check
-                  type="switch"
-                  id="audit-include-requests"
-                  className="mb-0"
-                  label="تضمين طلبات الواجهة البرمجية (api_request)"
-                  checked={includeRequests}
-                  // Locked in the two cases where the group is not this
-                  // switch's to decide, because a switch that cannot change
-                  // anything should not look like it can:
-                  //   · a drill-down, which includes the request row by
-                  //     definition;
-                  //   · a request-group event picked in الحدث, where turning
-                  //     the group off would ask the server for an event it has
-                  //     just been told to exclude — an empty table, always.
-                  // Clearing that event in الحدث unlocks it again.
-                  disabled={filters.request_id !== "" || requestEventSelected}
-                  title={
-                    requestEventSelected && filters.request_id === ""
-                      ? "مطلوب لعرض الأحداث المحددة في فلتر «الحدث»"
-                      : undefined
-                  }
-                  onChange={(e) =>
-                    handleFilterChange({ includeApiRequests: e.target.checked })
-                  }
-                />
-              </div>
 
               <DataTableServer
                 columns={columns}

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Col, Collapse, Form, Row } from "react-bootstrap";
-import Select from "react-select";
+import Select, { components } from "react-select";
 import { useSelector } from "react-redux";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { useResourceOptions } from "../departments/useResourceOptions";
@@ -13,6 +13,13 @@ import {
   AUDITABLE_TYPES,
   eventGroup,
 } from "../../data/auditEvents";
+import {
+  ACTOR_ANY_USER,
+  ACTOR_SYSTEM,
+  actorPatch,
+  actorSelection,
+  resolveActorOption,
+} from "./auditActor";
 
 // SERVER-SIDE filter toolbar for سجل التدقيق. Every control maps to a
 // documented query parameter and nothing is filtered in the browser — filtering
@@ -22,16 +29,22 @@ import {
 // The `event_group` value is NOT edited directly here. It is owned by the
 // api_request switch on the parent screen (see AuditLog.jsx): one source of
 // truth for "are routine requests included", stated on screen rather than
-// hidden in code.
+// hidden in code. The parent renders that switch into this panel's action bar
+// through `barStart`, so it sits with the other filter controls while its
+// state and locking rules stay where they are decided.
 //
-// PRIMARY vs ADVANCED. Ten controls do not fit the house toolbar idiom, which
-// budgets twelve grid columns for one row (see EmployeeFilters). Forcing all ten
-// through it cost two full rows of chrome above the table on every visit,
-// including the overwhelmingly common one: "show me what just happened".
+// PRIMARY vs ADVANCED. The four questions asked on nearly every visit — a
+// description, who, what, when — stay on screen; the four that answer a
+// specific investigation (which record, which address, which correlated
+// operation, which direction) fold away.
 //
-// So the four that answer the usual questions — a description, who, what, when —
-// stay on screen, and the five that answer a specific investigation (which
-// record, which address, which correlated operation, which direction) fold away.
+// THE GRID. Both sections are the same four equal columns (lg 3·3·3·3, md 6·6,
+// sm 12), so the advanced fields line up under the primary ones. Every cell is
+// exactly one label and one control high: a question asked with two boxes
+// (المنفّذ without a user directory, السجل, النطاق الزمني) puts them side by
+// side in an `.audit-pair`, never stacked. Cells are TOP-aligned, so a hint
+// under one control (يشمل اليوم بأكمله, an incomplete user list) extends only
+// its own cell instead of pushing its neighbours' labels out of line.
 //
 // ⚠️ THE FOLD MUST NEVER HIDE AN ACTIVE FILTER. Same principle as the
 // api_request chip on the parent: a narrowed table that LOOKS unnarrowed turns
@@ -56,6 +69,9 @@ const EVENT_OPTIONS = Object.keys(EVENT_META).map((key) => ({
   // local label is correct here — same reason the hrEnums lists exist. The raw
   // key rides along because that is what lands in the URL.
   label: `${EVENT_FALLBACK_LABELS[key] || key} — ${key}`,
+  // What a selected chip shows. The menu is where an event is identified;
+  // the chip only has to say which one was picked, in the width it has.
+  short: EVENT_FALLBACK_LABELS[key] || key,
   group: EVENT_META[key].group,
 }));
 
@@ -64,22 +80,65 @@ const GROUPED_EVENT_OPTIONS = EVENT_GROUPS.map((group) => ({
   options: EVENT_OPTIONS.filter((o) => o.group === group),
 }));
 
+// الحدث STAYS ONE CONTROL HIGH. A multi-select grows a line per few chips, so
+// picking events made its cell taller than its neighbours and knocked the grid
+// out of line. The chips now never wrap: the first MAX_EVENT_CHIPS show, and the
+// rest collapse into a "+N" badge whose tooltip names them. Nothing selected is
+// hidden — the badge counts it, and the menu keeps selected events listed
+// (hideSelectedOptions off) so they can be seen and unticked there.
+const MAX_EVENT_CHIPS = 2;
+
+const EventMultiValue = (props) => {
+  const { index, selectProps } = props;
+  if (index < MAX_EVENT_CHIPS) return <components.MultiValue {...props} />;
+  if (index > MAX_EVENT_CHIPS) return null;
+  const hidden = (selectProps.value || []).slice(MAX_EVENT_CHIPS);
+  return (
+    // dir="ltr": in an RTL run the neutral "+" would otherwise land after the
+    // digit and read "3+".
+    <span
+      dir="ltr"
+      className="badge bg-primary-transparent audit-chip-more"
+      title={hidden.map((o) => o.label).join("\n")}
+    >
+      +{hidden.length}
+    </span>
+  );
+};
+
+const EVENT_SELECT_COMPONENTS = { MultiValue: EventMultiValue };
+
+const EVENT_SELECT_STYLES = {
+  valueContainer: (base) => ({
+    ...base,
+    flexWrap: "nowrap",
+    overflow: "hidden",
+  }),
+  multiValue: (base) => ({ ...base, minWidth: 0, flexShrink: 1 }),
+};
+
+const formatEventLabel = (option, { context }) =>
+  context === "value" ? option.short : option.label;
+
 const AUDITABLE_OPTIONS = AUDITABLE_TYPES.map((key) => ({
   value: key,
   label: `${AUDITABLE_META[key].label} — ${key}`,
 }));
 
-// المنفّذ, the actor-type filter. The payload has always published three
-// distinct actor cases and auditColumns renders all three, but `user_id`
-// matches an id and no value of it expresses "nobody was authenticated" — so
-// "what happened outside any user session", the case where nobody is
-// accountable, was the one question this screen could not ask.
-//
-// `الكل` is the cleared state (the placeholder) rather than an option, the
-// same idiom as الترتيب below.
+// المنفّذ with a user directory: one select, whose fixed choices come first.
+// The mapping onto actor_type/user_id lives in auditActor.js. `الكل` is the
+// cleared state (the placeholder) rather than an option, the same idiom as
+// الترتيب below.
+const ACTOR_FIXED_OPTIONS = [
+  { value: ACTOR_ANY_USER, label: "أي مستخدم" },
+  { value: ACTOR_SYSTEM, label: "النظام (مهمة أو أمر مجدول)" },
+];
+
+// المنفّذ WITHOUT a user directory: the plain actor-type select, paired with a
+// numeric id box.
 const ACTOR_TYPE_OPTIONS = [
   { value: "user", label: "مستخدم" },
-  { value: "system", label: "النظام (مهمة أو أمر مجدول)" },
+  { value: "system", label: "النظام" },
 ];
 
 const SORT_OPTIONS = [
@@ -94,7 +153,21 @@ const userToOption = (u) => ({
   label: [u.name, u.email].filter(Boolean).join(" — ") || `مستخدم #${u.id}`,
 });
 
-const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
+// One column of the four-column grid. Every filter cell goes through this, so
+// the breakpoints cannot drift apart between the two sections.
+const FilterCell = ({ children }) => (
+  <Col xs={12} md={6} lg={3}>
+    {children}
+  </Col>
+);
+
+const AuditLogFilters = ({
+  filters,
+  onChange,
+  onReset,
+  hasAnyFilter,
+  barStart,
+}) => {
   const { permissions } = useSelector((state) => state.auth);
 
   // The user picker reads /auth/users, which needs auth.users.view. A caller
@@ -103,6 +176,7 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
   // server has decided may not read one.
   const canReadUsers = hasPermission(permissions, "auth.users.view");
   const users = useResourceOptions("/auth/users", userToOption, canReadUsers);
+  const hasUserDirectory = canReadUsers && !users.error;
 
   // `search` matches the row description and is debounced; every other control
   // commits immediately.
@@ -127,11 +201,19 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
     [filters.event]
   );
 
+  const actorOptions = useMemo(
+    () => [
+      { label: "نوع المنفّذ", options: ACTOR_FIXED_OPTIONS },
+      { label: "المستخدمون", options: users.options },
+    ],
+    [users.options]
+  );
+
   const typeChosen = (filters.auditable_type || "") !== "";
 
-  // A system row has no user to name, so the user box is suppressed rather
-  // than left looking usable. AuditLog clears `user_id` at the same moment the
-  // type is set, so the suppressed box is also genuinely empty.
+  // A system row has no user to name, so the id box is suppressed rather than
+  // left looking usable. AuditLog clears `user_id` at the same moment the type
+  // is set, so the suppressed box is also genuinely empty.
   const systemOnly = filters.actor_type === "system";
 
   const advancedCount = countAdvanced(filters);
@@ -162,14 +244,10 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
   };
 
   return (
-    <div className="mb-3">
-      {/* PRIMARY — exactly twelve columns at lg, so it is one row and stays one
-          row. Anything added here has to take width from a sibling. */}
-      <Row className="g-2 align-items-end">
-        <Col sm={12} md={6} lg={3}>
-          <Form.Label htmlFor="audit-search" className="fs-12 mb-1">
-            بحث في الوصف
-          </Form.Label>
+    <div className="audit-filters mb-3">
+      <Row className="g-3 align-items-start">
+        <FilterCell>
+          <Form.Label htmlFor="audit-search">بحث في الوصف</Form.Label>
           <Form.Control
             id="audit-search"
             type="search"
@@ -177,99 +255,93 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
             value={searchDraft}
             onChange={(e) => setSearchDraft(e.target.value)}
           />
-        </Col>
+        </FilterCell>
 
-        {/* المنفّذ IS ONE CONTROL IN TWO BOXES, grouped for the same reason
-            النطاق الزمني below is: "who did this" is one question, asked
-            either as a kind of actor or as a specific account. Splitting them
-            into sibling Cols would also have cost the primary row its twelve
-            columns, which is what keeps it one row.
-            The group heading is a plain <span> — a <label> may name only one
-            control — and each box carries its own accessible name. */}
-        <Col sm={12} md={6} lg={3}>
-          <span className="fs-12 mb-1 d-block">المنفّذ</span>
-          <Select
-            inputId="audit-f-actor"
-            aria-label="نوع المنفّذ"
-            classNamePrefix="Select2"
-            options={ACTOR_TYPE_OPTIONS}
-            value={
-              ACTOR_TYPE_OPTIONS.find((o) => o.value === filters.actor_type) ||
-              null
-            }
-            onChange={(opt) =>
-              // Picking النظام CLEARS the user, because the two compose rather
-              // than override: a system row has user_id null, so sending both
-              // asks for a row that cannot exist and returns a confidently
-              // empty page. Same class of contradiction as an event whose
-              // group is excluded, and refused the same way.
-              opt?.value === "system"
-                ? { actor_type: "system", user_id: "" }
-                : { actor_type: opt ? opt.value : "" }
-            }
-            isClearable
-            placeholder="الكل"
-            menuPosition="fixed"
-          />
-          <div className="mt-1">
-            {canReadUsers && !users.error ? (
-              <>
+        <FilterCell>
+          {hasUserDirectory ? (
+            <>
+              <Form.Label htmlFor="audit-f-actor">المنفّذ</Form.Label>
+              <Select
+                inputId="audit-f-actor"
+                classNamePrefix="Select2"
+                options={actorOptions}
+                value={resolveActorOption(
+                  actorSelection(filters),
+                  ACTOR_FIXED_OPTIONS,
+                  users.options
+                )}
+                onChange={(opt) => onChange(actorPatch(opt ? opt.value : null))}
+                isClearable
+                isLoading={users.loading}
+                placeholder="الكل"
+                noOptionsMessage={() => "لا يوجد مستخدمون"}
+                menuPosition="fixed"
+              />
+              {/* The directory is walked page by page, and a page that fails
+                  leaves it short. Said out loud for the same reason the
+                  api_request chip is: a picker that is quietly missing the
+                  person being looked for turns "they are not in the list"
+                  into a false statement. */}
+              {users.incomplete && (
+                <div className="form-text text-warning">
+                  تعذّر تحميل كل المستخدمين، القائمة غير مكتملة.
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Two boxes, one question. The heading is a plain <span> — a
+                  <label> may name only one control — and each box carries
+                  its own accessible name. */}
+              <span className="form-label">المنفّذ</span>
+              <div className="audit-pair">
                 <Select
-                  inputId="audit-f-user"
-                  aria-label="المستخدم"
-                  // Disabled rather than hidden while النظام is selected, so
-                  // it stays visible that the filter exists and what is
-                  // suppressing it.
-                  isDisabled={systemOnly}
-                  placeholder={systemOnly ? "لا ينطبق على النظام" : "الكل"}
+                  inputId="audit-f-actor"
+                  aria-label="نوع المنفّذ"
+                  className="audit-pair__main"
                   classNamePrefix="Select2"
-                  options={users.options}
+                  options={ACTOR_TYPE_OPTIONS}
                   value={
-                    users.options.find(
-                      (o) => String(o.value) === String(filters.user_id)
+                    ACTOR_TYPE_OPTIONS.find(
+                      (o) => o.value === filters.actor_type
                     ) || null
                   }
                   onChange={(opt) =>
-                    onChange({ user_id: opt ? opt.value : "" })
+                    // Picking النظام CLEARS the user, because the two compose
+                    // rather than override: a system row has user_id null, so
+                    // sending both asks for a row that cannot exist.
+                    onChange(
+                      opt?.value === "system"
+                        ? { actor_type: "system", user_id: "" }
+                        : { actor_type: opt ? opt.value : "" }
+                    )
                   }
                   isClearable
-                  isLoading={users.loading}
-                  noOptionsMessage={() => "لا يوجد مستخدمون"}
+                  placeholder="الكل"
                   menuPosition="fixed"
                 />
-                {/* The directory is walked page by page, and a page that fails
-                    leaves it short. Said out loud for the same reason the
-                    api_request chip is: a picker that is quietly missing the
-                    person being looked for turns "they are not in the list"
-                    into a false statement. */}
-                {users.incomplete && (
-                  <div className="text-warning small mt-1">
-                    تعذّر تحميل كل المستخدمين، القائمة غير مكتملة.
-                  </div>
-                )}
-              </>
-            ) : (
-              <Form.Control
-                id="audit-f-user"
-                type="number"
-                min={1}
-                aria-label="معرّف المستخدم"
-                disabled={systemOnly}
-                title={systemOnly ? "لا ينطبق عند اختيار النظام" : undefined}
-                placeholder={
-                  systemOnly ? "لا ينطبق على النظام" : "معرّف المستخدم"
-                }
-                value={filters.user_id}
-                onChange={(e) => onChange({ user_id: e.target.value })}
-              />
-            )}
-          </div>
-        </Col>
+                <Form.Control
+                  id="audit-f-user"
+                  type="number"
+                  min={1}
+                  className="audit-pair__id"
+                  aria-label="معرّف المستخدم"
+                  // Disabled rather than hidden while النظام is selected, so
+                  // it stays visible that the filter exists and what is
+                  // suppressing it.
+                  disabled={systemOnly}
+                  title={systemOnly ? "لا ينطبق عند اختيار النظام" : undefined}
+                  placeholder="#"
+                  value={filters.user_id}
+                  onChange={(e) => onChange({ user_id: e.target.value })}
+                />
+              </div>
+            </>
+          )}
+        </FilterCell>
 
-        <Col sm={12} md={6} lg={3}>
-          <Form.Label htmlFor="audit-f-event" className="fs-12 mb-1">
-            الحدث
-          </Form.Label>
+        <FilterCell>
+          <Form.Label htmlFor="audit-f-event">الحدث</Form.Label>
           <Select
             inputId="audit-f-event"
             classNamePrefix="Select2"
@@ -278,193 +350,201 @@ const AuditLogFilters = ({ filters, onChange, onReset, hasAnyFilter }) => {
             onChange={handleEventsChange}
             isMulti
             isClearable
+            hideSelectedOptions={false}
+            closeMenuOnSelect={false}
             placeholder="كل الأحداث"
             noOptionsMessage={() => "لا توجد أحداث"}
+            formatOptionLabel={formatEventLabel}
+            components={EVENT_SELECT_COMPONENTS}
+            styles={EVENT_SELECT_STYLES}
             menuPosition="fixed"
           />
-        </Col>
+        </FilterCell>
 
-        {/* THE DATE RANGE IS ONE CONTROL, NOT TWO.
-            As two sibling Cols these read as unrelated fields, and the "يشمل
-            اليوم بأكمله" note under the second one made the row taller on that
-            side only — with align-items-end that pushed إلى تاريخ visibly above
-            من تاريخ, so the pair never shared a baseline. Grouped, the note
-            belongs to the range it qualifies and both inputs sit level.
-            The group heading is a plain <span>: a <label> may name one control,
-            and each input carries its own accessible name instead. */}
-        <Col sm={12} md={6} lg={3}>
-          <span className="fs-12 mb-1 d-block">النطاق الزمني</span>
-          <div className="d-flex align-items-center gap-1 flex-nowrap audit-date-range">
+        <FilterCell>
+          <span className="form-label">النطاق الزمني</span>
+          <div className="audit-pair">
             <Form.Control
               id="audit-f-from"
               type="date"
               aria-label="من تاريخ"
-              className="flex-grow-1 w-100"
               value={filters.date_from}
               onChange={(e) => onChange({ date_from: e.target.value })}
             />
-            <span className="text-muted" aria-hidden="true">
+            <span className="audit-pair__sep" aria-hidden="true">
               —
             </span>
             <Form.Control
               id="audit-f-to"
               type="date"
               aria-label="إلى تاريخ"
-              className="flex-grow-1 w-100"
               value={filters.date_to}
               onChange={(e) => onChange({ date_to: e.target.value })}
             />
           </div>
-          <span className="text-muted fs-11">
-            يشمل اليوم بأكمله في الطرفين
-          </span>
-        </Col>
+          <div className="form-text">يشمل اليوم بأكمله في الطرفين</div>
+        </FilterCell>
       </Row>
-
-      {/* CONTROL ROW — the disclosure and the reset, together, on one line. */}
-      <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-        <button
-          type="button"
-          className="btn btn-sm btn-light btn-wave"
-          onClick={() => setShowAdvanced((open) => !open)}
-          aria-expanded={showAdvanced}
-          aria-controls="audit-advanced-filters"
-        >
-          <i
-            className={`align-middle me-1 ${
-              showAdvanced ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"
-            }`}
-            aria-hidden="true"
-          ></i>
-          فلاتر متقدمة
-          {/* The count is what keeps the fold honest — a collapsed section that
-              is narrowing the table says so, and says by how many. */}
-          {advancedCount > 0 && (
-            <span className="badge bg-primary-transparent ms-1">
-              {advancedCount}
-            </span>
-          )}
-        </button>
-
-        {hasAnyFilter && (
-          <button
-            type="button"
-            className="btn btn-sm btn-light btn-wave"
-            onClick={onReset}
-          >
-            <i className="ri-filter-off-line align-middle me-1"></i>
-            مسح الفلاتر
-          </button>
-        )}
-      </div>
 
       <Collapse in={showAdvanced}>
         <div id="audit-advanced-filters">
-          <Row className="g-2 align-items-end pt-2">
-            <Col sm={6} md={3} lg={3}>
-              <Form.Label htmlFor="audit-f-type" className="fs-12 mb-1">
-                نوع السجل
-              </Form.Label>
-              <Select
-                inputId="audit-f-type"
-                classNamePrefix="Select2"
-                options={AUDITABLE_OPTIONS}
-                value={
-                  AUDITABLE_OPTIONS.find(
-                    (o) => o.value === filters.auditable_type
-                  ) || null
-                }
-                onChange={(opt) =>
-                  // Clearing the type clears the id with it: the server rejects an id
-                  // without a type, and leaving a stale id in the URL would make the
-                  // next type selection silently narrow to a record nobody asked for.
-                  onChange(
-                    opt
-                      ? { auditable_type: opt.value }
-                      : { auditable_type: "", auditable_id: "" }
-                  )
-                }
-                isClearable
-                placeholder="الكل"
-                menuPosition="fixed"
-              />
-            </Col>
+          {/* The spacing lives on this inner wrapper, not on the collapsing
+              element: padding on the element being animated makes the height
+              transition jump at both ends. */}
+          <div className="pt-3">
+            <Row className="g-3 align-items-start">
+              <FilterCell>
+                <span className="form-label">السجل</span>
+                <div className="audit-pair">
+                  <Select
+                    inputId="audit-f-type"
+                    aria-label="نوع السجل"
+                    className="audit-pair__main"
+                    classNamePrefix="Select2"
+                    options={AUDITABLE_OPTIONS}
+                    value={
+                      AUDITABLE_OPTIONS.find(
+                        (o) => o.value === filters.auditable_type
+                      ) || null
+                    }
+                    onChange={(opt) =>
+                      // Clearing the type clears the id with it: the server
+                      // rejects an id without a type, and leaving a stale id in
+                      // the URL would make the next type selection silently
+                      // narrow to a record nobody asked for.
+                      onChange(
+                        opt
+                          ? { auditable_type: opt.value }
+                          : { auditable_type: "", auditable_id: "" }
+                      )
+                    }
+                    isClearable
+                    placeholder="كل الأنواع"
+                    menuPosition="fixed"
+                  />
+                  <Form.Control
+                    id="audit-f-type-id"
+                    type="number"
+                    min={1}
+                    className="audit-pair__id"
+                    aria-label="معرّف السجل"
+                    // Disabled rather than hidden, so it is visible that the
+                    // id filter exists and what unlocks it.
+                    disabled={!typeChosen}
+                    title={typeChosen ? undefined : "اختر نوع السجل أولاً"}
+                    placeholder="#"
+                    value={filters.auditable_id}
+                    onChange={(e) =>
+                      onChange({ auditable_id: e.target.value })
+                    }
+                  />
+                </div>
+              </FilterCell>
 
-            <Col sm={6} md={3} lg={2}>
-              <Form.Label htmlFor="audit-f-type-id" className="fs-12 mb-1">
-                معرّف السجل
-              </Form.Label>
-              <Form.Control
-                id="audit-f-type-id"
-                type="number"
-                min={1}
-                // Disabled rather than hidden, so it is visible that the id filter
-                // exists and what unlocks it.
-                disabled={!typeChosen}
-                title={typeChosen ? undefined : "اختر نوع السجل أولاً"}
-                placeholder="#"
-                value={filters.auditable_id}
-                onChange={(e) => onChange({ auditable_id: e.target.value })}
-              />
-            </Col>
+              <FilterCell>
+                <Form.Label htmlFor="audit-f-ip">عنوان IP</Form.Label>
+                <Form.Control
+                  id="audit-f-ip"
+                  type="text"
+                  dir="ltr"
+                  inputMode="numeric"
+                  className="audit-ltr-input"
+                  placeholder="192.168.1.10"
+                  value={filters.ip_address}
+                  onChange={(e) => onChange({ ip_address: e.target.value })}
+                />
+              </FilterCell>
 
-            <Col sm={6} md={3} lg={2}>
-              <Form.Label htmlFor="audit-f-ip" className="fs-12 mb-1">
-                عنوان IP
-              </Form.Label>
-              <Form.Control
-                id="audit-f-ip"
-                type="text"
-                dir="ltr"
-                inputMode="numeric"
-                placeholder="192.168.1.10"
-                value={filters.ip_address}
-                onChange={(e) => onChange({ ip_address: e.target.value })}
-              />
-            </Col>
+              <FilterCell>
+                <Form.Label htmlFor="audit-f-request">معرّف الطلب</Form.Label>
+                {/* The same correlation the detail panel drills into, reachable
+                    by hand: every response carries X-Request-Id and the API doc
+                    tells clients to log it, so "the id from this bug report" is
+                    a first-class way into this screen. Setting it switches the
+                    list into drill-down mode — the chip above the table names
+                    it and clears it. */}
+                <Form.Control
+                  id="audit-f-request"
+                  type="text"
+                  dir="ltr"
+                  className="audit-ltr-input"
+                  placeholder="X-Request-Id"
+                  value={filters.request_id}
+                  onChange={(e) =>
+                    onChange({ request_id: e.target.value.trim() })
+                  }
+                />
+              </FilterCell>
 
-            <Col sm={12} md={6} lg={3}>
-              <Form.Label htmlFor="audit-f-request" className="fs-12 mb-1">
-                معرّف الطلب
-              </Form.Label>
-              {/* The same correlation the detail panel drills into, reachable by
-                  hand: every response carries X-Request-Id and the API doc tells
-                  clients to log it, so "the id from this bug report" is a first-class
-                  way into this screen. Setting it switches the list into drill-down
-                  mode — the chip above the table names it and clears it. */}
-              <Form.Control
-                id="audit-f-request"
-                type="text"
-                dir="ltr"
-                placeholder="من رأس X-Request-Id"
-                value={filters.request_id}
-                onChange={(e) => onChange({ request_id: e.target.value.trim() })}
-              />
-            </Col>
-
-            <Col sm={6} md={3} lg={2}>
-              <Form.Label htmlFor="audit-f-sort" className="fs-12 mb-1">
-                الترتيب
-              </Form.Label>
-              {/* Only created_at is indexed on this table, so these two values are
-                  the entire sort vocabulary the endpoint accepts. There is
-                  deliberately no sortable column header anywhere on this screen for
-                  anything else — a header that 422s is worse than a plain one. */}
-              <Select
-                inputId="audit-f-sort"
-                classNamePrefix="Select2"
-                options={SORT_OPTIONS}
-                value={SORT_OPTIONS.find((o) => o.value === filters.sort) || null}
-                onChange={(opt) => onChange({ sort: opt ? opt.value : "" })}
-                isClearable
-                placeholder="الأحدث أولاً (افتراضي)"
-                menuPosition="fixed"
-              />
-            </Col>
-
-          </Row>
+              <FilterCell>
+                <Form.Label htmlFor="audit-f-sort">الترتيب</Form.Label>
+                {/* Only created_at is indexed on this table, so these two values
+                    are the entire sort vocabulary the endpoint accepts. There
+                    is deliberately no sortable column header anywhere on this
+                    screen for anything else — a header that 422s is worse than
+                    a plain one. */}
+                <Select
+                  inputId="audit-f-sort"
+                  classNamePrefix="Select2"
+                  options={SORT_OPTIONS}
+                  value={
+                    SORT_OPTIONS.find((o) => o.value === filters.sort) || null
+                  }
+                  onChange={(opt) => onChange({ sort: opt ? opt.value : "" })}
+                  isClearable
+                  placeholder="الأحدث أولاً (افتراضي)"
+                  menuPosition="fixed"
+                />
+              </FilterCell>
+            </Row>
+          </div>
         </div>
       </Collapse>
+
+      {/* THE ACTION BAR — everything that is not itself a filter value, on one
+          line under the fields it acts on. The parent's api_request switch
+          takes the start side; the disclosure and the reset take the end. */}
+      <div className="audit-filters__bar">
+        {barStart}
+        <div className="audit-filters__actions">
+          <button
+            type="button"
+            className="btn btn-sm btn-light btn-wave"
+            onClick={() => setShowAdvanced((open) => !open)}
+            aria-expanded={showAdvanced}
+            aria-controls="audit-advanced-filters"
+          >
+            <i
+              className={`align-middle me-1 ${
+                showAdvanced ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"
+              }`}
+              aria-hidden="true"
+            ></i>
+            فلاتر متقدمة
+            {/* The count is what keeps the fold honest — a collapsed section
+                that is narrowing the table says so, and says by how many. */}
+            {advancedCount > 0 && (
+              <span className="badge bg-primary-transparent ms-1">
+                {advancedCount}
+              </span>
+            )}
+          </button>
+
+          {hasAnyFilter && (
+            <button
+              type="button"
+              className="btn btn-sm btn-light btn-wave"
+              onClick={onReset}
+            >
+              <i
+                className="ri-filter-off-line align-middle me-1"
+                aria-hidden="true"
+              ></i>
+              مسح الفلاتر
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
