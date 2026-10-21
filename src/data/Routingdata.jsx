@@ -31,6 +31,7 @@ const Sessions = lazy(() => import("../sections/account/Sessions"));
 const ApprovalsInbox = lazy(() =>
   import("../sections/approvals/ApprovalsInbox")
 );
+const ApprovalsList = lazy(() => import("../sections/approvals/ApprovalsList"));
 const LeaveRequest = lazy(() => import("../sections/leave/LeaveRequest"));
 const LeaveTypes = lazy(() => import("../sections/leave/LeaveTypes"));
 const LeaveBalances = lazy(() => import("../sections/leave/LeaveBalances"));
@@ -182,5 +183,11 @@ export const RouteData = [
     path: `${import.meta.env.BASE_URL}attendance/absent-today`,
     element: <AbsentToday />,
     requiredPermissions: ["attendance.records.view"],
+  },
+  {
+    id: 21,
+    path: `${import.meta.env.BASE_URL}approvals/all`,
+    element: <ApprovalsList />,
+    requiredPermissions: ["approvals.view"],
   },
 ];

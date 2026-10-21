@@ -35,6 +35,20 @@ export const MENUITEMS = [
     requiredPermissions: [],
   },
   {
+    // HR's view of every request in reach (§15.7). A flat sibling, not a child
+    // of الاعتمادات: every approver keeps their inbox one click away, and an
+    // account without approvals.view would otherwise get a group of one.
+    title: "كل الطلبات",
+    icon: "ri-list-check-3",
+    menusub: false,
+    type: "link",
+    active: false,
+    selected: false,
+    dirchange: false,
+    path: `${import.meta.env.BASE_URL}approvals/all`,
+    requiredPermissions: ["approvals.view"],
+  },
+  {
     title: "طلباتي",
     icon: "ri-file-list-3-line",
     menusub: false,

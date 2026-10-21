@@ -13,5 +13,16 @@ export const MAX_SEARCH = 100;
 // digit strings are all a 422 server-side.
 export const isPositiveId = (s) => /^[1-9]\d{0,8}$/.test(String(s ?? ""));
 
+/**
+ * A real calendar day as `YYYY-MM-DD`. 2026-02-31 and 2026-13-45 pass a shape
+ * check but are a 422 server-side (`date_format:Y-m-d`).
+ */
+export const isRealDate = (s) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(s ?? ""))) return false;
+  const [y, m, d] = String(s).split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+};
+
 /** A search text as the server accepts it: trimmed, at most MAX_SEARCH long. */
 export const capSearch = (value) => String(value ?? "").trim().slice(0, MAX_SEARCH);

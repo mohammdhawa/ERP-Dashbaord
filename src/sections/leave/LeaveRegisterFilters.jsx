@@ -1,16 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Col, Form, Row } from "react-bootstrap";
 import Select from "react-select";
 import { useSelector } from "react-redux";
 import EmployeePicker from "../../components/EmployeePicker";
-import api from "../../redux/api";
 import { REGISTER_SORT_KEYS } from "../../redux/actions/leaveParams";
 import { hasPermission } from "../../data/permissionsCatalog";
 import {
   EXCUSE_FILTER_OPTIONS,
   LEAVE_STATUS_OPTIONS,
 } from "../../data/leaveEnums";
-import { parseApiError } from "../../utils/apiHelpers";
 import { MAX_SEARCH, isPositiveId } from "../../utils/filterValues";
 import {
   departmentToOption,
@@ -22,6 +20,7 @@ import {
   MONTH_OPTIONS,
   WINDOW_MODES,
 } from "./registerFilters";
+import useLeaveTypeOptions from "./useLeaveTypeOptions";
 
 // فلاتر سجل الإجازات (API doc §16.8). Controlled by the screen, which owns the
 // filter object, the URL and the fetch; this only edits it.
@@ -70,29 +69,8 @@ const LeaveRegisterFilters = ({
     canReadDepartments
   );
 
-  // GET /leave/types is open to every account and not paginated; with no `for`
-  // it returns every active type, requests and excuses alike — the register
-  // holds both. A failed read is shown with a retry, never as an empty list.
-  const [types, setTypes] = useState({ options: [], loading: true, error: null });
-  const loadTypes = useCallback(async () => {
-    setTypes((t) => ({ ...t, loading: true, error: null }));
-    try {
-      const response = await api.get("/leave/types");
-      setTypes({
-        options: (response.data.data || []).map((t) => ({
-          value: String(t.id),
-          label: t.name_ar || `نوع #${t.id}`,
-        })),
-        loading: false,
-        error: null,
-      });
-    } catch (err) {
-      setTypes({ options: [], loading: false, error: parseApiError(err).message });
-    }
-  }, []);
-  useEffect(() => {
-    loadTypes();
-  }, [loadTypes]);
+  // Requests and excuses alike — the register holds both.
+  const types = useLeaveTypeOptions();
 
   // `search` is debounced and `year` committed only once it is a valid year
   // (a half-typed "20" would be a 422); every other control commits at once.
@@ -294,7 +272,7 @@ const LeaveRegisterFilters = ({
               <button
                 type="button"
                 className="btn btn-link btn-sm p-0 align-baseline"
-                onClick={loadTypes}
+                onClick={types.reload}
               >
                 إعادة المحاولة
               </button>

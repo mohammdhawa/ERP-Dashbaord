@@ -4,7 +4,7 @@ const initialState = {
   fetchLoading: false,
   error: null,
   listRequestId: 0,
-  // The view ("tab:page") whose response the rows/meta/error above belong to.
+  // The view (the request params) whose response the rows/meta/error above belong to.
   // Set only by the latest request's response, so a screen comparing it with its
   // own view knows whether the store holds ITS data or a previous view's.
   loadedKey: null,
