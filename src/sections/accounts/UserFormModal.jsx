@@ -289,7 +289,7 @@ const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
                     not reach the only way to check what they had typed. */}
                 <button
                   type="button"
-                  className="btn btn-link show-password-button text-muted p-0"
+                  className="btn btn-link show-password-button text-muted"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={
                     showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"

@@ -11499,11 +11499,18 @@ caption {
 }
 
 /* End:: coming soon */
+/* Spans the input's full height and centres the icon in it, so the eye sits
+   on the text's midline at any control size. The wrapper must contain only
+   the input — keep validation feedback outside it, or the button stretches. */
 .show-password-button {
   position: absolute;
-  padding: 0.75rem;
-  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.875rem;
+  inset-block: 0;
   inset-inline-end: 0;
+  line-height: 1;
 }
 
 .authentication-background {
@@ -14976,7 +14983,21 @@ fieldset:disabled .btn {
 }
 
 .authentication-input .form-control {
-  padding-inline-end: 2.25rem !important;
+  padding-inline-end: 2.75rem !important;
+}
+
+/* The invalid-field icon is placed by `html[dir="rtl"] … { left }`, keyed on
+   the PAGE, so inside an LTR field on this RTL app it landed on the text's
+   starting edge. Put it back on the field's own end. */
+html[dir="rtl"] .form-control[dir="ltr"].is-invalid,
+html[dir="rtl"] [dir="ltr"] > .form-control.is-invalid {
+  background-position: right calc(0.375em + 0.1875rem) center;
+}
+
+/* A field with a reveal button has no room for the icon too — the end is the
+   button's. The red border and the message below still flag the error. */
+.authentication-input .form-control.is-invalid {
+  background-image: none;
 }
 
 .create-nft-item .filepond--root {
@@ -28056,6 +28077,51 @@ h6 {
   height: auto !important;
   max-height: 4.5rem;
   object-fit: contain;
+}
+
+/* Theme toggle on the pre-auth pages: pinned to the viewport's top inline-end
+   corner, a round 2.5rem target, coloured from the theme's text tokens so it
+   reads in both modes. */
+.signin-theme-toggle {
+  position: fixed;
+  inset-block-start: 1rem;
+  inset-inline-end: 1rem;
+  z-index: 10;
+}
+.signin-theme-toggle .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.125rem;
+  line-height: 1;
+  color: var(--default-text-color);
+  background-color: var(--custom-white);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.signin-theme-toggle .btn:hover {
+  color: var(--primary-color);
+}
+[data-theme-mode="dark"] .signin-theme-toggle .btn {
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+/* Browser autofill paints its own pale-blue background (and dark text) over
+   the field, and it cannot be unset with `background` — so one autofilled field
+   looked nothing like its untouched neighbour, glaringly so in dark mode. An
+   inset shadow covers the autofill tint with the theme's own field colour. */
+.form-control:-webkit-autofill,
+.form-control:-webkit-autofill:hover,
+.form-control:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--default-text-color);
+  caret-color: var(--default-text-color);
+  -webkit-box-shadow: 0 0 0 1000px var(--form-control-bg) inset;
+  box-shadow: 0 0 0 1000px var(--form-control-bg) inset;
+  transition: background-color 9999s ease-out 0s;
 }
 
 /* End::Heading tags */

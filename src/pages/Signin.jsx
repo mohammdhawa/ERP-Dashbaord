@@ -118,22 +118,13 @@ const Signin = () => {
         <title>الراقي ERP | تسجيل الدخول</title>
       </Helmet>
       <Container>
-        <Row
-          style={{
-            position: "absolute",
-            top: "0",
-            right: "0",
-            height: "5rem",
-            padding: "1% 4%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "start",
-            width: "100%",
-          }}
-        >
+        {/* Its own class, not `header-link-icon`: the theme only colours that
+            inside `.main-header-container`, so out here the icon fell back to
+            the button's dark default and all but vanished in dark mode. */}
+        <div className="signin-theme-toggle">
           <button
             type="button"
-            className="header-link layout-setting btn border-0 bg-transparent"
+            className="layout-setting btn border-0"
             onClick={() => ToggleDark()}
             aria-label={
               theme.datathememode === "dark"
@@ -143,16 +134,13 @@ const Signin = () => {
             aria-pressed={theme.datathememode === "dark"}
           >
             <span className="light-layout">
-              <i className="bi bi-moon header-link-icon" aria-hidden="true"></i>
+              <i className="bi bi-moon" aria-hidden="true"></i>
             </span>
             <span className="dark-layout">
-              <i
-                className="bi bi-brightness-high header-link-icon"
-                aria-hidden="true"
-              ></i>
+              <i className="bi bi-brightness-high" aria-hidden="true"></i>
             </span>
           </button>
-        </Row>
+        </div>
         {/* minHeight, not maxHeight: capping the row at the viewport clipped
             the card on short screens (and on mobile once the keyboard opens)
             with no way to scroll to the submit button. */}
@@ -252,13 +240,22 @@ const Signin = () => {
                         <Form.Label className="text-default d-block">
                           كلمة المرور
                         </Form.Label>
-                        <div className="position-relative authentication-input">
+                        {/* dir="ltr" like the identifier above: passwords are
+                            Latin, and typed RTL the characters ran from the
+                            wrong edge. On the WRAPPER, not the input, so the
+                            eye button flips with it — the input's end padding
+                            and the button must agree on which side "end" is.
+                            No placeholder: it only repeated the label, and an
+                            Arabic one would sit on the left in an LTR field. */}
+                        <div
+                          className="position-relative authentication-input"
+                          dir="ltr"
+                        >
                           <Form.Control
                             type={showPassword ? "text" : "password"}
                             size="lg"
                             name="password"
                             autoComplete="current-password"
-                            placeholder="كلمة المرور"
                             value={password}
                             onChange={(e) => {
                               setPassword(e.target.value);
@@ -268,18 +265,13 @@ const Signin = () => {
                               !!errors.password || !!serverFieldError("password")
                             }
                           />
-                          {(errors.password || serverFieldError("password")) && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.password || serverFieldError("password")}
-                            </Form.Control.Feedback>
-                          )}
                           {/* A <button>, not a <Link to="#">: the anchor
                               navigated (leaving a "#" on the sign-in URL) and
                               announced as a link. aria-pressed reports the
                               current state to a screen reader. */}
                           <button
                             type="button"
-                            className="show-password-button text-muted btn border-0 bg-transparent p-0"
+                            className="show-password-button text-muted btn border-0 bg-transparent"
                             onClick={() => setShowPassword(!showPassword)}
                             aria-label={
                               showPassword
@@ -301,6 +293,15 @@ const Signin = () => {
                             )}
                           </button>
                         </div>
+                        {/* Outside the wrapper so the eye button (full wrapper
+                            height) stays the input's height when this shows.
+                            d-block because it is no longer the input's
+                            sibling, which is what Bootstrap keys display on. */}
+                        {(errors.password || serverFieldError("password")) && (
+                          <Form.Control.Feedback type="invalid" className="d-block">
+                            {errors.password || serverFieldError("password")}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
                   </Row>

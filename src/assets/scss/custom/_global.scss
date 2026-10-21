@@ -612,8 +612,20 @@ select {
 }
 .authentication-input {
   .form-control {
-    padding-inline-end: 2.25rem !important;
+    padding-inline-end: 2.75rem !important;
   }
+  /* A field with a reveal button has no room for the invalid icon too — the
+     end is the button's. The red border and the message still flag it. */
+  .form-control.is-invalid {
+    background-image: none;
+  }
+}
+/* The invalid-field icon is placed by `html[dir="rtl"] … { left }`, keyed on
+   the PAGE, so inside an LTR field on this RTL app it landed on the text's
+   starting edge. Put it back on the field's own end. */
+html[dir="rtl"] .form-control[dir="ltr"].is-invalid,
+html[dir="rtl"] [dir="ltr"] > .form-control.is-invalid {
+  background-position: right calc(0.375em + 0.1875rem) center;
 }
 .create-nft-item {
   .filepond--root {

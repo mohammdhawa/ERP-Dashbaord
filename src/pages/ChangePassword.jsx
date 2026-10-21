@@ -186,13 +186,23 @@ const ChangePassword = () => {
                   />
                 </Col>
                 <Col xl={12}>
-                  <Form.Check
-                    type="checkbox"
-                    id="cp-show"
-                    label="إظهار كلمات المرور"
-                    checked={showPasswords}
-                    onChange={(e) => setShowPasswords(e.target.checked)}
-                  />
+                  {/* A flex row, not `<Form.Check label="…" />`: Bootstrap's
+                      float layout pulls the box into the row's padding with a
+                      negative margin, and on this RTL page it landed on top of
+                      the first letter. `gap` is the clearance and mirrors by
+                      itself — same fix as CarryOption in AssignmentFormModal. */}
+                  <Form.Check className="d-flex align-items-center gap-2 ps-0 mb-0">
+                    <Form.Check.Input
+                      type="checkbox"
+                      id="cp-show"
+                      className="m-0 flex-shrink-0"
+                      checked={showPasswords}
+                      onChange={(e) => setShowPasswords(e.target.checked)}
+                    />
+                    <Form.Check.Label htmlFor="cp-show">
+                      إظهار كلمات المرور
+                    </Form.Check.Label>
+                  </Form.Check>
                 </Col>
               </Row>
 

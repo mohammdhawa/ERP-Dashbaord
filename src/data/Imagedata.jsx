@@ -21,6 +21,10 @@
 // SVG — assets/images/logo/Solo_Purple.svg is 1.7 KB) is the single largest
 // remaining win on this page, but it is a brand-asset change, not a code one.
 import logo01 from "../assets/images/logo/logo01.png";
+// logo01 with the navy wordmark recoloured off-white (gold emblem untouched),
+// for dark surfaces. Derived from logo01, not a designer asset — replace it if
+// brand ever supplies an official reversed logo. 19 KB at 1000px.
+import logo01Dark from "../assets/images/logo/logo01-dark.png";
 import logo02 from "../assets/images/logo/logo02.png";
 import NotFoundPage from "../assets/images/NotFoundPage.svg";
 import NoAccess from "../assets/images/NoAccess.svg";
@@ -30,7 +34,7 @@ import SessionExpired from "../assets/images/SessionExpired.svg";
 function ALLImages(img) {
   const i = {
     hBlackLogo: logo01,
-    hWhiteLogo: logo01,
+    hWhiteLogo: logo01Dark,
     sBlackLogo: logo02,
     sWhiteLogo: logo02,
     sYellowLogo: logo02,
