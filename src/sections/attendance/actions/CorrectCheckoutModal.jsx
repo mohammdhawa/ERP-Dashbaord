@@ -4,13 +4,20 @@ import api from "../../../redux/api";
 import { parseApiError } from "../../../utils/apiHelpers";
 import { confirmDiscardChanges, toastNotify } from "../../../utils";
 import { formatAbsolute, parseServerTimestamp } from "../../system/auditFormat";
-import { buildCheckoutCorrection } from "../../../redux/actions/attendanceParams";
+import {
+  buildCheckoutCorrection,
+  checkoutCorrectionProblem,
+} from "../../../redux/actions/attendanceParams";
 
 // تصحيح الانصراف — PATCH /attendance/records/{id}/checkout (API doc §13.3).
 // `{id}` is the day's CHECK-IN; the server writes a check-out row for it
 // (marked as corrected, with the note) and clears the missing-check-out flag.
 // The server's 422s (not a check-in, already has a check-out, check-out before
-// check-in) are shown as the form's general error.
+// check-in, the employee not on duty) are shown as the form's general error.
+//
+// Since 2026-10-20 (parity audit S-3) the moment must be on the check-in's own
+// day and not in the future, so the date is the check-in's, shown but not
+// editable, and a future time is caught before sending.
 
 const MAX_NOTE = 500;
 
@@ -55,6 +62,14 @@ const CorrectCheckoutModal = ({ show, checkIn, onHide, onDone }) => {
     const e = {};
     if (!date) e.date = ["تاريخ الانصراف مطلوب."];
     if (!time) e.time = ["وقت الانصراف مطلوب."];
+    else {
+      const problem = checkoutCorrectionProblem({
+        checkInDay: initialDate,
+        date,
+        time,
+      });
+      if (problem) e.time = [problem];
+    }
     if (note.trim().length > MAX_NOTE)
       e.note = [`الملاحظة يجب ألا تتجاوز ${MAX_NOTE} حرف.`];
     return e;
@@ -134,10 +149,8 @@ const CorrectCheckoutModal = ({ show, checkIn, onHide, onDone }) => {
                 id="checkout-date"
                 type="date"
                 value={date}
-                onChange={(e) => {
-                  setDate(e.target.value);
-                  setErrors((prev) => ({ ...prev, date: null, time: null, _general: null }));
-                }}
+                // The check-in's own day — the only one the server accepts.
+                readOnly
                 isInvalid={!!fieldError("date")}
                 disabled={saving}
               />

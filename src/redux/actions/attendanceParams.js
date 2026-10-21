@@ -247,6 +247,25 @@ export const validateReject = ({ reason, note } = {}) => {
 };
 
 /**
+ * Why a corrected check-out would be refused, as Arabic text — or null. The
+ * server's rules of 2026-10-20 (§13.3, parity audit S-3): the moment must be on
+ * the check-in's own day and not in the future. Both are read in Damascus
+ * (+03:00), as buildCheckoutCorrection writes them. `now` exists so tests are
+ * deterministic.
+ */
+export const checkoutCorrectionProblem = (
+  { checkInDay, date, time } = {},
+  now = new Date()
+) => {
+  if (textParam(date) !== textParam(checkInDay))
+    return "وقت الانصراف يجب أن يكون في يوم الحضور نفسه.";
+  const moment = Date.parse(`${textParam(date)}T${textParam(time)}:00+03:00`);
+  if (!Number.isNaN(moment) && moment > now.getTime())
+    return "وقت الانصراف لا يمكن أن يكون في المستقبل.";
+  return null;
+};
+
+/**
  * Body of PATCH /attendance/records/{id}/checkout (§13.3). Every stored time is
  * Damascus (API doc §1, +03:00), so the HR user's wall-clock entry is written
  * with that offset — never the browser's. `note` only when there is one.

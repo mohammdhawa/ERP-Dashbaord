@@ -14,6 +14,7 @@ import {
   validateAttachments,
   buildExcuseForm,
   isForceableExcuseRefusal,
+  excuseEndProblem,
 } from "./leaveParams.js";
 import {
   LEAVE_STATUS_OPTIONS,
@@ -444,4 +445,14 @@ test("on leave: nothing the server would refuse is sent", () => {
     }),
     { page: 1, per_page: 15, is_excuse: "0" }
   );
+});
+
+test("an excuse may end today, never later", () => {
+  assert.equal(excuseEndProblem("2026-10-20", "2026-10-20"), null);
+  assert.equal(excuseEndProblem("2026-10-19", "2026-10-20"), null);
+  assert.equal(
+    excuseEndProblem("2026-10-21", "2026-10-20"),
+    "لا يمكن تسجيل عذر لأيام لم تأتِ بعد."
+  );
+  assert.equal(excuseEndProblem("", "2026-10-20"), null);
 });

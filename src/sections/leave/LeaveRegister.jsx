@@ -19,7 +19,7 @@ import {
   registerViewKey,
 } from "../../redux/actions/leaveRegisterActions";
 import { formatAbsolute } from "../system/auditFormat";
-import { leaveActions } from "../approvals/approvalView";
+import { leaveActions, leaveStatusText } from "../approvals/approvalView";
 import LeaveRegisterFilters from "./LeaveRegisterFilters";
 import RegisterSummary from "./RegisterSummary";
 import {
@@ -121,7 +121,8 @@ const columns = [
     label: "الحالة",
     render: (label, row) => (
       <span className={`badge ${STATUS_BADGE[row.status] || "bg-light text-muted"}`}>
-        {label}
+        {/* «مسحوب» for a withdrawal, «ملغاة» for HR's cancellation. */}
+        {leaveStatusText(row) ?? label}
       </span>
     ),
   },

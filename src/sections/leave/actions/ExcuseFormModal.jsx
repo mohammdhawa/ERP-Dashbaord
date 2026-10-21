@@ -6,14 +6,18 @@ import { hasPermission } from "../../../data/permissionsCatalog";
 import { useSelector } from "react-redux";
 import {
   buildExcuseForm,
+  excuseEndProblem,
   isForceableExcuseRefusal,
   validateAttachments,
 } from "../../../redux/actions/leaveParams";
+import { todayInDamascus } from "../../attendance/recordFilters";
 import { parseApiError } from "../../../utils/apiHelpers";
 import { confirmDiscardChanges, toastNotify } from "../../../utils";
 
 // تسجيل عذر — POST /leave/excuses (API doc §16.5). HR records an absence that
-// already happened; it is approved at once, with no chain.
+// already happened; it is approved at once, with no chain. Since 2026-10-20 the
+// server refuses an end date after today, so the date inputs stop at today
+// and the form says so before sending.
 //
 // THE FORCE FLOW. A deducting type past the employee's balance is refused with
 // a 422 that HR may override. That one refusal (isForceableExcuseRefusal) is
@@ -133,6 +137,8 @@ const ExcuseFormModal = ({ show, onHide, onSaved, initial }) => {
     if (!form.end_date) e.end_date = ["تاريخ النهاية مطلوب."];
     else if (form.start_date && form.end_date < form.start_date)
       e.end_date = ["تاريخ النهاية يجب ألا يسبق تاريخ البداية."];
+    else if (excuseEndProblem(form.end_date, todayInDamascus()))
+      e.end_date = [excuseEndProblem(form.end_date, todayInDamascus())];
     const reason = form.reason.trim();
     if (reasonRequired && !reason) e.reason = ["نوع العذر المختار يتطلب ذكر السبب."];
     else if (reason.length > MAX_REASON)
@@ -281,6 +287,8 @@ const ExcuseFormModal = ({ show, onHide, onSaved, initial }) => {
               <Form.Control
                 id="exc-start"
                 type="date"
+                // An excuse covers days that already happened (§16.5).
+                max={todayInDamascus()}
                 value={form.start_date}
                 onChange={(e) => setField("start_date", e.target.value)}
                 isInvalid={!!fieldError("start_date")}
@@ -298,6 +306,7 @@ const ExcuseFormModal = ({ show, onHide, onSaved, initial }) => {
                 id="exc-end"
                 type="date"
                 min={form.start_date || undefined}
+                max={todayInDamascus()}
                 value={form.end_date}
                 onChange={(e) => setField("end_date", e.target.value)}
                 isInvalid={!!fieldError("end_date")}

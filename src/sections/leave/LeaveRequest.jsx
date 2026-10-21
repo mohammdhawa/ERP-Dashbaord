@@ -16,6 +16,7 @@ import ReassignModal from "../approvals/ReassignModal";
 import ReturnToWorkModal from "./actions/ReturnToWorkModal";
 import UndoExcuseModal from "./actions/UndoExcuseModal";
 import {
+  cancellationView,
   leaveActions,
   reassignableSteps,
   refreshAfterRefusal,
@@ -155,6 +156,8 @@ const LeaveRequest = () => {
   };
 
   const actions = leaveActions(leave, permissions);
+  // A withdrawal reads «مسحوب» with who withdrew it and when (§16.3, C-5).
+  const cancellation = cancellationView(leave);
   const approval = leave?.approval ?? null;
   const reassignable = reassignableSteps(approval);
 
@@ -290,7 +293,7 @@ const LeaveRequest = () => {
                           STATUS_BADGE[leave.status] || "bg-light text-muted"
                         }`}
                       >
-                        {leave.status_label}
+                        {cancellation?.badge ?? leave.status_label}
                       </span>
                       <span className="badge bg-light text-default">
                         {leave.origin_label}
@@ -419,12 +422,12 @@ const LeaveRequest = () => {
                       )}
 
                       {leave.cancelled_at && (
-                        <Field label="أُلغيت في">
+                        <Field label={cancellation?.atLabel ?? "أُلغيت في"}>
                           {ltrTime(leave.cancelled_at)}
                         </Field>
                       )}
                       {leave.cancelled_by && (
-                        <Field label="أُلغيت بواسطة">
+                        <Field label={cancellation?.byLabel ?? "أُلغيت بواسطة"}>
                           {leave.cancelled_by.name}
                         </Field>
                       )}

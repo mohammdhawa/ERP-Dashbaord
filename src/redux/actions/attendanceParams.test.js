@@ -14,6 +14,7 @@ import {
   rangeTooLong,
   validateReject,
   buildCheckoutCorrection,
+  checkoutCorrectionProblem,
   gridDayActions,
 } from "./attendanceParams.js";
 import {
@@ -329,4 +330,27 @@ test("gridDayActions: a not-yet day is excusable only when it is today", () => {
 test("the grid's status filter accepts the not-yet state", () => {
   assert.equal(buildEmployeeGridParams(7, { status: "9" }, NOW).status, 9);
   assert.equal(buildEmployeeGridParams(7, { status: "10" }, NOW).status, undefined);
+});
+
+test("a corrected check-out stays on its day and not in the future", () => {
+  const now = new Date("2026-10-20T09:00:00Z"); // 12:00 in Damascus
+  const base = { checkInDay: "2026-10-20", date: "2026-10-20" };
+  assert.equal(checkoutCorrectionProblem({ ...base, time: "11:59" }, now), null);
+  assert.equal(checkoutCorrectionProblem({ ...base, time: "12:00" }, now), null);
+  assert.equal(
+    checkoutCorrectionProblem({ ...base, time: "12:01" }, now),
+    "وقت الانصراف لا يمكن أن يكون في المستقبل."
+  );
+  assert.equal(
+    checkoutCorrectionProblem({ ...base, date: "2026-10-19", time: "17:00" }, now),
+    "وقت الانصراف يجب أن يكون في يوم الحضور نفسه."
+  );
+  // A past day's late evening is fine.
+  assert.equal(
+    checkoutCorrectionProblem(
+      { checkInDay: "2026-10-18", date: "2026-10-18", time: "23:30" },
+      now
+    ),
+    null
+  );
 });

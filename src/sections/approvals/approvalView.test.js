@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  cancellationView,
   leaveActions,
+  leaveStatusText,
+  skipNote,
   reassignableSteps,
   refreshAfterRefusal,
   stagesOf,
@@ -104,4 +107,55 @@ test("refreshAfterRefusal: 403/404/422 re-read, anything else does not", () => {
   assert.equal(refreshAfterRefusal(404), true);
   assert.equal(refreshAfterRefusal(0), false);
   assert.equal(refreshAfterRefusal(500), false);
+});
+
+test("skipNote explains only the top-of-tree skip", () => {
+  assert.match(skipNote({ skip_reason: 5 }), /رأس الهيكل/);
+  for (const reason of [1, 2, 3, 4, null]) {
+    assert.equal(skipNote({ skip_reason: reason }), null);
+  }
+  assert.equal(skipNote(null), null);
+});
+
+test("cancellationView: a withdrawal reads «مسحوب», HR's cancellation does not", () => {
+  const withdrawn = cancellationView({
+    status: 4,
+    status_label: "ملغاة",
+    approval: { status: 4, status_label: "مسحوب" },
+  });
+  assert.deepEqual(withdrawn, {
+    withdrawn: true,
+    badge: "مسحوب",
+    atLabel: "سُحب في",
+    byLabel: "سحبه",
+  });
+  // An excuse undone (no approval) or a leave cancelled by a return to work
+  // (its approval approved) is HR's act.
+  for (const approval of [null, { status: 2, status_label: "موافق عليه" }]) {
+    const view = cancellationView({ status: 4, status_label: "ملغاة", approval });
+    assert.equal(view.withdrawn, false);
+    assert.equal(view.badge, "ملغاة");
+    assert.equal(view.byLabel, "أُلغيت بواسطة");
+  }
+  assert.equal(cancellationView({ status: 2, approval: null }), null);
+  assert.equal(cancellationView(null), null);
+});
+
+test("leaveStatusText: the lists name a withdrawal «مسحوب»", () => {
+  assert.equal(
+    leaveStatusText({
+      status: 4,
+      status_label: "ملغاة",
+      approval: { status: 4, status_label: "مسحوب" },
+    }),
+    "مسحوب"
+  );
+  assert.equal(
+    leaveStatusText({ status: 4, status_label: "ملغاة", approval: null }),
+    "ملغاة"
+  );
+  assert.equal(
+    leaveStatusText({ status: 2, status_label: "معتمدة", approval: null }),
+    "معتمدة"
+  );
 });

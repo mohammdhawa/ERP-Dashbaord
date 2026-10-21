@@ -6,6 +6,10 @@ import { hasPermission } from "../../data/permissionsCatalog.js";
 // Server enum values (API_DOCUMENTATION §15.1 / §16.3).
 const STEP_PENDING = 1;
 const LEAVE_APPROVED = 2;
+const LEAVE_CANCELLED = 4;
+const APPROVAL_CANCELLED = 4;
+// SkipReason::TopOfTree (2026-10-20, parity audit C-1).
+const SKIP_TOP_OF_TREE = 5;
 const ORIGIN_REQUEST = 1;
 const ORIGIN_EXCUSE = 2;
 
@@ -61,3 +65,42 @@ export const leaveActions = (leave, permissions) => {
 // offering what no longer works.
 export const refreshAfterRefusal = (status) =>
   status === 403 || status === 404 || status === 422;
+
+// A step skipped because the requester heads the tree (المدير العام's own
+// request): nobody stands above them, so the direct-manager step is skipped
+// and the rest of the route decides (§15.7). The server's label says why; this
+// says what follows, which the label alone does not.
+export const skipNote = (step) =>
+  step?.skip_reason === SKIP_TOP_OF_TREE
+    ? "مقدّم الطلب على رأس الهيكل التنظيمي، فتقرّر المراحل التالية وحدها."
+    : null;
+
+// How a cancelled leave's cancellation reads (§16.3, 2026-10-20, parity audit
+// C-5). The requester's own withdrawal is a cancelled APPROVAL — status 4,
+// «مسحوب» — and now carries cancelled_at / cancelled_by like HR's
+// cancellations (an excuse undone, a leave cancelled by a return to work on its
+// first day), which have no approval or an approved one. `badge` is the
+// header's status text: the approval's own label for a withdrawal.
+export const cancellationView = (leave) => {
+  if (leave?.status !== LEAVE_CANCELLED) return null;
+  const withdrawn = leave.approval?.status === APPROVAL_CANCELLED;
+  return withdrawn
+    ? {
+        withdrawn: true,
+        badge: leave.approval.status_label || leave.status_label,
+        atLabel: "سُحب في",
+        byLabel: "سحبه",
+      }
+    : {
+        withdrawn: false,
+        badge: leave.status_label,
+        atLabel: "أُلغيت في",
+        byLabel: "أُلغيت بواسطة",
+      };
+};
+
+// A leave's status as the lists show it: «مسحوب» for the requester's
+// withdrawal, the leave's own label otherwise (owner, 2026-10-21: the lists
+// tell a withdrawal from HR's cancellation, as the request screen does).
+export const leaveStatusText = (leave) =>
+  cancellationView(leave)?.badge ?? leave?.status_label;

@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { login, clearRateLimit } from "../redux/actions/authActions";
 import ALLImages from "../data/Imagedata";
 import { ThemeChanger } from "../redux/actions/themeActions";
+import { loginRefusalView } from "../utils/loginRefusal";
 
 const Signin = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -175,19 +176,27 @@ const Signin = () => {
               </Link>
             </div>
 
-            {/* 403 on login = disabled account. Deliberately a separate view:
-                it is NOT a credentials problem and must not look like one. */}
+            {/* 403 on login = disabled account, or (2026-10-20) a suspended
+                employee. Deliberately a separate view: it is NOT a
+                credentials problem and must not look like one. */}
             {disabled ? (
               <Card className="custom-card border border-danger">
                 <Card.Body className="text-center p-5">
                   <span className="avatar avatar-xl avatar-rounded bg-danger-transparent mb-3">
                     <i className="ri-user-forbid-line fs-2"></i>
                   </span>
-                  <h5 className="fw-medium mb-2">تم تعطيل هذا الحساب</h5>
+                  <h5 className="fw-medium mb-2">
+                    {loginRefusalView(error).title}
+                  </h5>
                   <p className="text-muted mb-4">
                     {error ||
                       "حسابك معطل حالياً. يرجى التواصل مع مسؤول النظام لإعادة تفعيله."}
                   </p>
+                  {loginRefusalView(error).hint && (
+                    <p className="text-muted fs-13 mt-n2 mb-4">
+                      {loginRefusalView(error).hint}
+                    </p>
+                  )}
                   <button
                     className="btn btn-light"
                     onClick={() => window.location.reload()}

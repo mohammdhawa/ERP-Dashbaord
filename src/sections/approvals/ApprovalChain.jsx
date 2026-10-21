@@ -1,5 +1,5 @@
 import React from "react";
-import { stagesOf } from "./approvalView";
+import { skipNote, stagesOf } from "./approvalView";
 import { formatAbsolute } from "../system/auditFormat";
 
 // The approval chain of one request (API doc §15.1), drawn from the approval
@@ -42,6 +42,9 @@ const Step = ({ step }) => (
     </div>
     {step.skip_reason_label && (
       <div className="fs-13 text-muted mt-1">{step.skip_reason_label}</div>
+    )}
+    {skipNote(step) && (
+      <div className="fs-12 text-muted mt-1">{skipNote(step)}</div>
     )}
     {step.acted_by && (
       <div className="fs-13 mt-1">

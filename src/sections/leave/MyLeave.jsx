@@ -27,6 +27,7 @@ import {
 } from "../../data/leaveEnums";
 import { parseApiError } from "../../utils/apiHelpers";
 import { formatAbsolute } from "../system/auditFormat";
+import { leaveStatusText } from "../approvals/approvalView";
 
 const LeaveRequestFormModal = lazy(() => import("./LeaveRequestFormModal"));
 
@@ -101,7 +102,8 @@ const columns = [
     sortKey: "status",
     render: (label, row) => (
       <span className={`badge ${STATUS_BADGE[row.status] || "bg-light text-muted"}`}>
-        {label}
+        {/* «مسحوب» for a withdrawal, «ملغاة» for HR's cancellation. */}
+        {leaveStatusText(row) ?? label}
       </span>
     ),
   },

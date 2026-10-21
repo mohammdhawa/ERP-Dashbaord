@@ -217,6 +217,20 @@ export const buildExcuseForm = (values = {}, { force = false } = {}) => {
 };
 
 /**
+ * The server's refusal of an excuse that ends after today (§16.5, 2026-10-20,
+ * parity audit S-5): an excuse justifies an absence that happened; today is
+ * allowed. `today` is the Damascus day (todayInDamascus). Null when fine, or
+ * when `endDate` is not a date yet (the required rule speaks for that).
+ */
+export const EXCUSE_IN_FUTURE = "لا يمكن تسجيل عذر لأيام لم تأتِ بعد.";
+export const excuseEndProblem = (endDate, today) =>
+  isRealDate(textParam(endDate)) &&
+  isRealDate(textParam(today)) &&
+  textParam(endDate) > textParam(today)
+    ? EXCUSE_IN_FUTURE
+    : null;
+
+/**
  * True for the one 422 the user may override: a deducting excuse past the
  * balance. `parsed` is what parseApiError returns ({ status, message, errors }).
  *
