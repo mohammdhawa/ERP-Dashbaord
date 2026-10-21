@@ -8,6 +8,7 @@ import {
   monthlyFiltersFromSearch,
   monthlyProblem,
   toMonthlyQuery,
+  countedSpan,
 } from "./monthlyFilters.js";
 import { buildMonthlyParams } from "../../redux/actions/attendanceParams.js";
 
@@ -105,4 +106,13 @@ test("the profile link carries the server's window", () => {
     employeeAttendanceLink("/", 7, "2026-06-01", "2026-06-30"),
     "/hr/employees/7?tab=attendance&from=2026-06-01&to=2026-06-30"
   );
+});
+
+test("countedSpan: whole, partial or nothing yet", () => {
+  const w = { from: "2026-10-01", to: "2026-10-31" };
+  assert.equal(countedSpan({ ...w, counted_to: "2026-10-31" }), "whole");
+  assert.equal(countedSpan({ ...w, counted_to: "2026-10-20" }), "partial");
+  assert.equal(countedSpan({ ...w, counted_to: null }), "none");
+  // An older server without the field: the window as it says.
+  assert.equal(countedSpan(w), "whole");
 });

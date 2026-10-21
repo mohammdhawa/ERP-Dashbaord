@@ -11,7 +11,7 @@ import {
 } from "../departments/useResourceOptions";
 import { MAX_SEARCH, isPositiveId } from "../../utils/filterValues";
 
-// فلاتر التقرير اليومي (API doc §14.1, and §14.4 for absent-today): the day, the person filters and the
+// فلاتر التقرير اليومي (API doc §14.1, §14.4 for absent-today, §16.9 for on-leave): the day, the person filters and the
 // sort. Controlled by the screen, which owns the filter object and the URL.
 
 const SORT_LABELS = {
@@ -22,6 +22,8 @@ const SORT_LABELS = {
   check_in_time: "وقت الحضور",
   check_out_time: "وقت الانصراف",
   work_hours: "ساعات العمل",
+  start_date: "تاريخ البداية",
+  end_date: "تاريخ النهاية",
 };
 // Both directions of every key, as the other attendance lists offer them.
 const sortOptionsFor = (keys) =>
@@ -32,7 +34,9 @@ const sortOptionsFor = (keys) =>
 const DAILY_SORT_OPTIONS = sortOptionsFor(DAILY_SORT_KEYS);
 
 // `sortKeys` is the server's sort vocabulary of the list the bar sits over —
-// the daily board's by default, absent-today passes its own.
+// the daily board's by default, absent-today and on-leave pass their own.
+// `children` are the list's own extra controls (on-leave's type and source),
+// placed before the sort.
 const DailyFilterBar = ({
   filters,
   defaults,
@@ -40,6 +44,7 @@ const DailyFilterBar = ({
   onChange,
   onReset,
   sortKeys,
+  children,
 }) => {
   const sortOptions = useMemo(
     () => (sortKeys ? sortOptionsFor(sortKeys) : DAILY_SORT_OPTIONS),
@@ -149,6 +154,8 @@ const DailyFilterBar = ({
             onChange={(e) => setSearchDraft(e.target.value)}
           />
         </Col>
+
+        {children}
 
         <Col sm={6} md={4} lg={3}>
           <Form.Label htmlFor="daily-f-sort" className="fs-12 mb-1">

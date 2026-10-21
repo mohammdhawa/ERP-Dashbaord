@@ -7,7 +7,7 @@
 // filters top-level links on `requiredPermissions`, so the gating is unchanged.
 //
 // الموارد البشرية and إدارة النظام keep their nesting: each holds two real
-// siblings. الإجازات (three children) and الحضور والانصراف (four) are nested
+// siblings. الإجازات (three children) and الحضور والانصراف (five) are nested
 // for the same reason. When a flat link here grows a second item, promote it
 // back to `sub`.
 export const MENUITEMS = [
@@ -190,6 +190,15 @@ export const MENUITEMS = [
         selected: false,
         dirchange: false,
         title: "الغائبون اليوم",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/on-leave`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "في إجازة اليوم",
         requiredPermissions: ["attendance.records.view"],
       },
     ],

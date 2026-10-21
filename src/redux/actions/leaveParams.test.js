@@ -4,10 +4,12 @@ import {
   REGISTER_SORT_KEYS,
   MY_LEAVE_SORT_KEYS,
   BALANCE_SORT_KEYS,
+  ON_LEAVE_SORT_KEYS,
   MAX_ATTACHMENTS,
   buildRegisterParams,
   buildMyLeaveParams,
   buildBalancesParams,
+  buildOnLeaveParams,
   buildLeaveRequestForm,
   validateAttachments,
   buildExcuseForm,
@@ -402,4 +404,44 @@ test("only the over-balance refusal is forceable", () => {
   );
   assert.equal(isForceableExcuseRefusal(null), false);
   assert.equal(isForceableExcuseRefusal({ status: 422 }), false);
+});
+
+test("on leave: the day, the type, the source, the person and the sort", () => {
+  assert.deepEqual([...ON_LEAVE_SORT_KEYS], ["start_date", "end_date", "employee_name"]);
+  assert.deepEqual(
+    buildOnLeaveParams(1, 15, {
+      date: "2026-06-21",
+      leave_type_ids: "2,5",
+      is_excuse: "1",
+      employee_id: "7",
+      department_id: "3",
+      search: " سامي ",
+      sort: "-employee_name",
+    }),
+    {
+      page: 1,
+      per_page: 15,
+      date: "2026-06-21",
+      leave_type_ids: "2,5",
+      is_excuse: "1",
+      employee_id: "7",
+      department_id: "3",
+      search: "سامي",
+      sort: "-employee_name",
+    }
+  );
+});
+
+test("on leave: nothing the server would refuse is sent", () => {
+  // No date is the server's today; requests only is is_excuse=0, not nothing.
+  assert.deepEqual(buildOnLeaveParams(2, 15, {}), { page: 2, per_page: 15 });
+  assert.deepEqual(
+    buildOnLeaveParams(1, 15, {
+      date: "2026-02-31",
+      is_excuse: "0",
+      department_id: "0",
+      sort: "requested_days",
+    }),
+    { page: 1, per_page: 15, is_excuse: "0" }
+  );
 });

@@ -29,4 +29,7 @@ export const DAY_STATE_OPTIONS = [
   { value: 6, label: "غائب" },
   { value: 7, label: "عطلة" },
   { value: 8, label: "تسجيل مرفوض" },
+  // 2026-10-20: a day after today, or today before anything is recorded —
+  // not absent (parity audit S-1).
+  { value: 9, label: "لم يُسجَّل بعد" },
 ];

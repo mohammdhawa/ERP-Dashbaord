@@ -111,3 +111,19 @@ export const employeeAttendanceLink = (base, employeeId, from, to) =>
   `${base}hr/employees/${employeeId}?tab=attendance&from=${encodeURIComponent(
     from
   )}&to=${encodeURIComponent(to)}`;
+
+/**
+ * How much of a report's window the counts cover (API doc §14, 2026-10-20,
+ * parity audit S-1): the reports count only up to today, and say where they
+ * stopped in `counted_to` — null when the window starts after today.
+ *   "whole"   — every day of the window is counted;
+ *   "partial" — counted from `from` to `counted_to`;
+ *   "none"    — nothing counted yet.
+ */
+export const countedSpan = (report) => {
+  if (!report) return "whole";
+  if (report.counted_to === null) return "none";
+  if (report.counted_to === undefined || report.counted_to >= report.to)
+    return "whole";
+  return "partial";
+};

@@ -4,7 +4,7 @@
 // under plain Node, like auditParams.js. A wrong parameter here is either a 422
 // or a correct-looking page of the wrong rows — on the register, a quietly
 // wrong window is a wrong headcount of who was away.
-import { capSearch, isPositiveId } from "../../utils/filterValues.js";
+import { capSearch, isPositiveId, isRealDate } from "../../utils/filterValues.js";
 
 // Bare sort keys; the server also accepts each with a leading `-` (descending).
 export const REGISTER_SORT_KEYS = Object.freeze([
@@ -23,6 +23,11 @@ export const MY_LEAVE_SORT_KEYS = Object.freeze([
   "status",
   "decided_at",
   "id",
+]);
+export const ON_LEAVE_SORT_KEYS = Object.freeze([
+  "start_date",
+  "end_date",
+  "employee_name",
 ]);
 export const BALANCE_SORT_KEYS = Object.freeze([
   "employee_name",
@@ -117,6 +122,25 @@ export const buildRegisterParams = (page, perPage, f = {}, now = new Date()) => 
   addCommon(params, f);
   addEmployeeScope(params, f);
   const sort = sortParam(f.sort, REGISTER_SORT_KEYS);
+  if (sort) params.sort = sort;
+  return params;
+};
+
+/**
+ * GET /leave/on-leave (§16.9): one day (the server's today without one), the
+ * type(s), request or excuse, and the person filters. `date` is sent only as a
+ * real day — a half-typed one would be a 422.
+ */
+export const buildOnLeaveParams = (page, perPage, f = {}) => {
+  const params = { page, per_page: perPage };
+  const date = textParam(f.date);
+  if (isRealDate(date)) params.date = date;
+  const types = csvParam(f.leave_type_ids);
+  if (types) params.leave_type_ids = types;
+  const excuse = flagParam(f.is_excuse);
+  if (excuse) params.is_excuse = excuse;
+  addEmployeeScope(params, f);
+  const sort = sortParam(f.sort, ON_LEAVE_SORT_KEYS);
   if (sort) params.sort = sort;
   return params;
 };

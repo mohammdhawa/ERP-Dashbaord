@@ -42,8 +42,9 @@ test("option lists carry the server's wording and values", () => {
   );
   assert.deepEqual(
     DAY_STATE_OPTIONS.map((o) => o.value),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
+  assert.equal(DAY_STATE_OPTIONS[8].label, "لم يُسجَّل بعد");
   assert.equal(DAY_STATE_OPTIONS[0].label, "حاضر (لم ينصرف بعد)");
   assert.equal(DAY_STATE_OPTIONS[7].label, "تسجيل مرفوض");
 });
@@ -312,4 +313,20 @@ test("gridDayActions: no permission, no action; incomplete days offer nothing", 
     false,
   );
   assert.deepEqual(gridDayActions(null, all), none);
+});
+
+test("gridDayActions: a not-yet day is excusable only when it is today", () => {
+  const all = ["leave.excuses.create"];
+  const today = "2026-10-20";
+  assert.equal(gridDayActions({ status: 9, date: today }, all, today).excuse, true);
+  // An excuse may not end after today (§16.5, 2026-10-20).
+  assert.equal(gridDayActions({ status: 9, date: "2026-10-21" }, all, today).excuse, false);
+  // Without knowing today, nothing is offered on a not-yet day.
+  assert.equal(gridDayActions({ status: 9, date: today }, all).excuse, false);
+  assert.equal(gridDayActions({ status: 9, date: today }, [], today).excuse, false);
+});
+
+test("the grid's status filter accepts the not-yet state", () => {
+  assert.equal(buildEmployeeGridParams(7, { status: "9" }, NOW).status, 9);
+  assert.equal(buildEmployeeGridParams(7, { status: "10" }, NOW).status, undefined);
 });

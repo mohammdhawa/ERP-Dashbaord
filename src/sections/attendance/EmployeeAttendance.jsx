@@ -13,6 +13,8 @@ import { parseApiError } from "../../utils/apiHelpers";
 import { toastNotify } from "../../utils";
 import { formatAbsolute } from "../system/auditFormat";
 import CorrectCheckoutModal from "./actions/CorrectCheckoutModal";
+import CountedNote from "./CountedNote";
+import { todayInDamascus } from "./recordFilters";
 import ExcuseFormModal from "../leave/actions/ExcuseFormModal";
 import UndoExcuseModal from "../leave/actions/UndoExcuseModal";
 import {
@@ -26,9 +28,10 @@ import {
 // §14.3), with the range's summary and the day actions.
 //
 // A computed object, not a paged list, kept in local state; only the latest
-// response may write it. `summary` ALWAYS covers the whole range: `status` and
-// «أيام العمل فقط» narrow `days` only, so the tiles are labelled as the whole
-// period rather than as what the table shows.
+// response may write it. `summary` ALWAYS covers the whole range up to
+// `counted_to` (today at the latest, 2026-10-20): `status` and «أيام العمل
+// فقط» narrow `days` only. A day after today, or today before anything is
+// recorded, is state 9 «لم يُسجَّل بعد» and counts for nothing.
 //
 // After an action the grid is re-read WITHOUT blanking it; if that read fails
 // the days stay and the message is a toast. A 403 (out_of_scope) is final and
@@ -46,11 +49,12 @@ const STATUS_VARIANTS = {
   6: "bg-danger-transparent",
   7: "bg-light text-default",
   8: "bg-danger-transparent",
+  9: "bg-light text-muted",
 };
 
 // The tiles' titles are column names; the numbers are the server's own counts.
 const SUMMARY_TILES = [
-  { key: "expected_days", label: "أيام الدوام" },
+  { key: "expected_days", label: "الأيام المحسوبة" },
   { key: "present_days", label: "الحضور" },
   { key: "on_leave_days", label: "إجازة" },
   { key: "excused_days", label: "غياب بعذر" },
@@ -213,8 +217,11 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
 
   const days = report?.days || [];
   const summary = report?.summary || {};
-  // A 403 is final: retrying produces the same 403.
-  const denied = error?.status === 403;
+  // A 403 (out of reach) or 404 (a departed employee, 2026-10-20) is final:
+  // retrying produces the same answer.
+  const denied = error?.status === 403 || error?.status === 404;
+  // The server's today: a not-yet day is excusable only when it is today.
+  const today = todayInDamascus();
 
   return (
     <div>
@@ -310,7 +317,7 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
             <>
               <div className="mb-3">
                 <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
-                  <h6 className="mb-0">ملخص الفترة كاملة</h6>
+                  <h6 className="mb-0">ملخص الفترة</h6>
                   <span className="text-muted fs-13">
                     من <span dir="ltr">{report.from}</span> إلى{" "}
                     <span dir="ltr">{report.to}</span>
@@ -318,6 +325,12 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                   <span className="text-muted fs-12">
                     (لا يتأثر بفلاتر الأيام أدناه)
                   </span>
+                  {report.working_days != null && (
+                    <span className="text-muted fs-13">
+                      أيام العمل في الفترة: {report.working_days}
+                    </span>
+                  )}
+                  <CountedNote report={report} />
                 </div>
                 <Row className="g-2">
                   {SUMMARY_TILES.map((t) => (
@@ -376,7 +389,7 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                     </thead>
                     <tbody>
                       {days.map((d) => {
-                        const can = gridDayActions(d, permissions);
+                        const can = gridDayActions(d, permissions, today);
                         return (
                           <tr key={d.date}>
                             <td>

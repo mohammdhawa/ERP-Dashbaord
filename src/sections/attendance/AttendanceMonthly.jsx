@@ -18,6 +18,7 @@ import { buildMonthlyParams } from "../../redux/actions/attendanceParams";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { parseApiError } from "../../utils/apiHelpers";
 import { toastNotify } from "../../utils";
+import CountedNote from "./CountedNote";
 import MonthlyFilterBar from "./MonthlyFilterBar";
 import {
   defaultMonthlyFilters,
@@ -36,7 +37,9 @@ import {
 
 // Titles are column names; the numbers are the server's own counts.
 const COUNT_COLUMNS = [
-  { key: "expected_days", label: "أيام الدوام" },
+  // Per row since 2026-10-20: the working days up to `counted_to`, less today
+  // for someone with nothing recorded for it yet.
+  { key: "expected_days", label: "الأيام المحسوبة" },
   { key: "present_days", label: "الحضور" },
   { key: "on_leave_days", label: "إجازة" },
   { key: "excused_days", label: "غياب بعذر" },
@@ -213,8 +216,9 @@ const AttendanceMonthly = () => {
                     <span dir="ltr">{report.to}</span>
                   </h6>
                   <span className="text-muted fs-13">
-                    أيام الدوام: {report.working_days}
+                    أيام العمل في الفترة: {report.working_days}
                   </span>
+                  <CountedNote report={report} />
                 </div>
 
                 {rows.length === 0 ? (

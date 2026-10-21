@@ -52,7 +52,8 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const TYPES = [1, 2];
 const REJECTION_REASONS = [1, 2, 3];
-const DAY_STATES = [1, 2, 3, 4, 5, 6, 7, 8];
+const DAY_STATES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const NOT_YET = 9;
 const REASON_REQUIRING_NOTE = 3;
 
 const textParam = (value) => String(value ?? "").trim();
@@ -261,21 +262,26 @@ export const buildCheckoutCorrection = ({ date, time, note } = {}) => {
  * What a day of the employee grid offers (§14.3), for the caller's permissions:
  *   correct     — a missing check-out with a check-in to correct (§13.3);
  *   excuse      — an absent or refused day HR may excuse (a refused check-in is
- *                 not attendance, so the day is still an absence to excuse);
+ *                 not attendance, so the day is still an absence to excuse),
+ *                 and TODAY while nothing is recorded for it (state 9): an
+ *                 excuse may end today but not later (§16.5, 2026-10-20), so a
+ *                 state-9 day after today offers nothing;
  *   undoExcuse  — an excused day whose excuse is a leave request HR may delete.
  * The state is checked as well as the permission: the server refuses an action
- * on the wrong state, so the button should not be offered.
+ * on the wrong state, so the button should not be offered. `today` is the
+ * Damascus day (todayInDamascus) — the server's.
  */
-export const gridDayActions = (day, permissions) => {
+export const gridDayActions = (day, permissions, today = null) => {
   const status = day?.status;
   const excuse = day?.excuse;
+  const notYetToday = status === NOT_YET && Boolean(today) && day.date === today;
   return {
     correct:
       status === 3 &&
       Boolean(day.check_in_id) &&
       hasPermission(permissions, "attendance.records.correct"),
     excuse:
-      (status === 6 || status === 8) &&
+      (status === 6 || status === 8 || notYetToday) &&
       hasPermission(permissions, "leave.excuses.create"),
     undoExcuse:
       status === 5 &&

@@ -47,6 +47,7 @@ const AttendanceMonthly = lazy(() =>
   import("../sections/attendance/AttendanceMonthly")
 );
 const AbsentToday = lazy(() => import("../sections/attendance/AbsentToday"));
+const OnLeaveToday = lazy(() => import("../sections/attendance/OnLeaveToday"));
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held
@@ -189,5 +190,12 @@ export const RouteData = [
     path: `${import.meta.env.BASE_URL}approvals/all`,
     element: <ApprovalsList />,
     requiredPermissions: ["approvals.view"],
+  },
+  {
+    id: 22,
+    path: `${import.meta.env.BASE_URL}attendance/on-leave`,
+    element: <OnLeaveToday />,
+    // An attendance roster: the server gates it on attendance's grant (§16.9).
+    requiredPermissions: ["attendance.records.view"],
   },
 ];
