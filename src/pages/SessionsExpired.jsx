@@ -1,7 +1,6 @@
 import { Fragment } from "react";
-import { Col, Container, Row } from "react-bootstrap";
-import { Helmet } from "react-helmet";
-import { HelmetProvider } from "react-helmet-async";
+import { Container, Row } from "react-bootstrap";
+import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import ALLImages from "../data/Imagedata";
 
@@ -9,19 +8,12 @@ const SessionsExpired = () => {
   const navigate = useNavigate();
   return (
     <Fragment>
-      <HelmetProvider>
-        <Helmet>
-          <title>الراقي ERP | انتهت صلاحية الجلسة</title>
-        </Helmet>
-      </HelmetProvider>
-      <div
-        dir="rtl"
-        className="page"
-        style={{
-          userSelect: "none",
-          caretColor: "transparent",
-        }}
-      >
+      {/* Root provider only — see the note in NoAccess.jsx. */}
+      <Helmet>
+        <title>الراقي ERP | انتهت صلاحية الجلسة</title>
+      </Helmet>
+      {/* Selection left enabled, matching the other two error pages. */}
+      <div dir="rtl" className="page">
         <div className="error-page">
           <Container>
             <div className="my-auto">

@@ -1,17 +1,19 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Card, Col, Container, Form, Row, Spinner } from "react-bootstrap";
-import { Helmet, HelmetProvider } from "react-helmet-async";
+import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { login, clearRateLimit } from "../redux/actions/authActions";
 import ALLImages from "../data/Imagedata";
 import { ThemeChanger } from "../redux/actions/themeActions";
+import { loginRefusalView } from "../utils/loginRefusal";
 
 const Signin = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  // `login` is an employee number OR an email — see authActions.login.
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({ login: "", password: "" });
   // Local countdown mirroring the server's Retry-After (429, 5 req/min/IP);
   // blocks resubmission until it reaches zero.
   const [cooldown, setCooldown] = useState(0);
@@ -27,11 +29,21 @@ const Signin = () => {
     if (retryAfter) setCooldown(retryAfter);
   }, [retryAfter]);
 
+  // Keyed on the BOOLEAN, not on `cooldown` itself: depending on the number
+  // would tear down and recreate the interval every single tick. The condition
+  // is a named variable because a raw expression in a dependency array is
+  // something the linter cannot check — and something the next reader has to
+  // reverse-engineer. The functional updater means the effect never has to read
+  // `cooldown`, so the dependency list is genuinely complete.
+  const isCoolingDown = cooldown > 0;
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    if (!isCoolingDown) return undefined;
+    const timer = setInterval(
+      () => setCooldown((c) => Math.max(0, c - 1)),
+      1000
+    );
     return () => clearInterval(timer);
-  }, [cooldown > 0]);
+  }, [isCoolingDown]);
 
   // Falling edge of the countdown: once it lapses, drop the stale rate-limit
   // message so it doesn't reappear as a red error while the user can retry.
@@ -51,33 +63,32 @@ const Signin = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     if (cooldown > 0) return;
-    setErrors({ email: "", password: "" });
+    setErrors({ login: "", password: "" });
     let formValid = true;
 
-    const emailPattern = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!email) {
-      setErrors((prev) => ({ ...prev, email: "البريد الالكتروني مطلوب" }));
-      formValid = false;
-    } else if (!emailPattern.test(email)) {
+    // Presence only — NO email-shape check. Most staff sign in with their
+    // employee number, and an email pattern would reject `EMP-00042` before
+    // the request is ever sent. The server decides which kind it is.
+    const trimmed = identifier.trim();
+    if (!trimmed) {
       setErrors((prev) => ({
         ...prev,
-        email: "يرجى إدخال بريد إلكتروني صالح",
+        login: "رقم الموظف أو البريد الإلكتروني مطلوب",
       }));
       formValid = false;
     }
 
+    // Presence only. A minimum-length rule belongs on the SET-password form,
+    // not here: enforcing it at sign-in locks out any account whose password
+    // predates the policy, and tells an attacker the policy before they have
+    // authenticated. The server is the authority on whether a password is
+    // correct.
     if (!password) {
       setErrors((prev) => ({ ...prev, password: "كلمة المرور مطلوبة" }));
       formValid = false;
-    } else if (password.length < 8) {
-      setErrors((prev) => ({
-        ...prev,
-        password: "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
-      }));
-      formValid = false;
     }
     if (formValid) {
-      dispatch(login(email, password));
+      dispatch(login(trimmed, password));
     }
   };
 
@@ -100,41 +111,41 @@ const Signin = () => {
 
   return (
     <Fragment>
-      <HelmetProvider>
-        <Helmet>
-          <body className="bg-light"></body>
-          <title>الراقي ERP | تسجيل الدخول</title>
-        </Helmet>
-      </HelmetProvider>
+      {/* The provider lives at the root now; a nested one here made this page's
+          <title> register against a different context than every other page. */}
+      <Helmet>
+        <body className="bg-light"></body>
+        <title>الراقي ERP | تسجيل الدخول</title>
+      </Helmet>
       <Container>
-        <Row
-          style={{
-            position: "absolute",
-            top: "0",
-            right: "0",
-            height: "5rem",
-            padding: "1% 4%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "start",
-            width: "100%",
-          }}
-        >
-          <Link
-            to="#"
-            className="header-link layout-setting"
+        {/* Its own class, not `header-link-icon`: the theme only colours that
+            inside `.main-header-container`, so out here the icon fell back to
+            the button's dark default and all but vanished in dark mode. */}
+        <div className="signin-theme-toggle">
+          <button
+            type="button"
+            className="layout-setting btn border-0"
             onClick={() => ToggleDark()}
+            aria-label={
+              theme.datathememode === "dark"
+                ? "التبديل إلى الوضع الفاتح"
+                : "التبديل إلى الوضع الداكن"
+            }
+            aria-pressed={theme.datathememode === "dark"}
           >
             <span className="light-layout">
-              <i className="bi bi-moon header-link-icon"></i>
+              <i className="bi bi-moon" aria-hidden="true"></i>
             </span>
             <span className="dark-layout">
-              <i className="bi bi-brightness-high header-link-icon"></i>
+              <i className="bi bi-brightness-high" aria-hidden="true"></i>
             </span>
-          </Link>
-        </Row>
+          </button>
+        </div>
+        {/* minHeight, not maxHeight: capping the row at the viewport clipped
+            the card on short screens (and on mobile once the keyboard opens)
+            with no way to scroll to the submit button. */}
         <Row
-          style={{ maxHeight: "100vh" }}
+          style={{ minHeight: "100vh" }}
           className="justify-content-center align-items-center authentication authentication-basic"
         >
           <Col xxl={4} xl={5} lg={5} md={6} sm={8} className="col-12">
@@ -153,19 +164,27 @@ const Signin = () => {
               </Link>
             </div>
 
-            {/* 403 on login = disabled account. Deliberately a separate view:
-                it is NOT a credentials problem and must not look like one. */}
+            {/* 403 on login = disabled account, or (2026-10-20) a suspended
+                employee. Deliberately a separate view: it is NOT a
+                credentials problem and must not look like one. */}
             {disabled ? (
               <Card className="custom-card border border-danger">
                 <Card.Body className="text-center p-5">
                   <span className="avatar avatar-xl avatar-rounded bg-danger-transparent mb-3">
                     <i className="ri-user-forbid-line fs-2"></i>
                   </span>
-                  <h5 className="fw-medium mb-2">تم تعطيل هذا الحساب</h5>
+                  <h5 className="fw-medium mb-2">
+                    {loginRefusalView(error).title}
+                  </h5>
                   <p className="text-muted mb-4">
                     {error ||
                       "حسابك معطل حالياً. يرجى التواصل مع مسؤول النظام لإعادة تفعيله."}
                   </p>
+                  {loginRefusalView(error).hint && (
+                    <p className="text-muted fs-13 mt-n2 mb-4">
+                      {loginRefusalView(error).hint}
+                    </p>
+                  )}
                   <button
                     className="btn btn-light"
                     onClick={() => window.location.reload()}
@@ -183,25 +202,34 @@ const Signin = () => {
                 <form onSubmit={handleLogin}>
                   <Row className="gy-3">
                     <Col xl={12}>
-                      <Form.Group controlId="signin-email">
+                      <Form.Group controlId="signin-login">
                         <Form.Label className="text-default">
-                          البريد الالكتروني
+                          رقم الموظف أو البريد الإلكتروني
                         </Form.Label>
+                        {/* type="text", NOT "email": the browser's own email
+                            check would block an employee number before submit.
+                            autoComplete="username" still gives password
+                            managers their hint. */}
                         <Form.Control
                           type="text"
                           size="lg"
-                          placeholder="name@example.com"
-                          value={email}
+                          name="login"
+                          autoComplete="username"
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          dir="ltr"
+                          placeholder="EMP-00042 / name@example.com"
+                          value={identifier}
                           onChange={(e) => {
-                            setEmail(e.target.value);
-                            setErrors((prev) => ({ ...prev, email: "" }));
+                            setIdentifier(e.target.value);
+                            setErrors((prev) => ({ ...prev, login: "" }));
                           }}
-                          isInvalid={!!errors.email || !!serverFieldError("email")}
+                          isInvalid={!!errors.login || !!serverFieldError("login")}
                           autoFocus
                         />
-                        {(errors.email || serverFieldError("email")) && (
+                        {(errors.login || serverFieldError("login")) && (
                           <Form.Control.Feedback type="invalid">
-                            {errors.email || serverFieldError("email")}
+                            {errors.login || serverFieldError("login")}
                           </Form.Control.Feedback>
                         )}
                       </Form.Group>
@@ -212,11 +240,22 @@ const Signin = () => {
                         <Form.Label className="text-default d-block">
                           كلمة المرور
                         </Form.Label>
-                        <div className="position-relative authentication-input">
+                        {/* dir="ltr" like the identifier above: passwords are
+                            Latin, and typed RTL the characters ran from the
+                            wrong edge. On the WRAPPER, not the input, so the
+                            eye button flips with it — the input's end padding
+                            and the button must agree on which side "end" is.
+                            No placeholder: it only repeated the label, and an
+                            Arabic one would sit on the left in an LTR field. */}
+                        <div
+                          className="position-relative authentication-input"
+                          dir="ltr"
+                        >
                           <Form.Control
                             type={showPassword ? "text" : "password"}
                             size="lg"
-                            placeholder="كلمة المرور"
+                            name="password"
+                            autoComplete="current-password"
                             value={password}
                             onChange={(e) => {
                               setPassword(e.target.value);
@@ -226,23 +265,43 @@ const Signin = () => {
                               !!errors.password || !!serverFieldError("password")
                             }
                           />
-                          {(errors.password || serverFieldError("password")) && (
-                            <Form.Control.Feedback type="invalid">
-                              {errors.password || serverFieldError("password")}
-                            </Form.Control.Feedback>
-                          )}
-                          <Link
-                            to="#"
-                            className="show-password-button text-muted"
+                          {/* A <button>, not a <Link to="#">: the anchor
+                              navigated (leaving a "#" on the sign-in URL) and
+                              announced as a link. aria-pressed reports the
+                              current state to a screen reader. */}
+                          <button
+                            type="button"
+                            className="show-password-button text-muted btn border-0 bg-transparent"
                             onClick={() => setShowPassword(!showPassword)}
+                            aria-label={
+                              showPassword
+                                ? "إخفاء كلمة المرور"
+                                : "إظهار كلمة المرور"
+                            }
+                            aria-pressed={showPassword}
                           >
                             {showPassword ? (
-                              <i className="ri-eye-line align-middle"></i>
+                              <i
+                                className="ri-eye-line align-middle"
+                                aria-hidden="true"
+                              ></i>
                             ) : (
-                              <i className="ri-eye-off-line align-middle"></i>
+                              <i
+                                className="ri-eye-off-line align-middle"
+                                aria-hidden="true"
+                              ></i>
                             )}
-                          </Link>
+                          </button>
                         </div>
+                        {/* Outside the wrapper so the eye button (full wrapper
+                            height) stays the input's height when this shows.
+                            d-block because it is no longer the input's
+                            sibling, which is what Bootstrap keys display on. */}
+                        {(errors.password || serverFieldError("password")) && (
+                          <Form.Control.Feedback type="invalid" className="d-block">
+                            {errors.password || serverFieldError("password")}
+                          </Form.Control.Feedback>
+                        )}
                       </Form.Group>
                     </Col>
                   </Row>

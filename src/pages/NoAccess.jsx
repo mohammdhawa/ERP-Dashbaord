@@ -1,7 +1,6 @@
 import { Fragment } from "react";
-import { Col, Container, Row } from "react-bootstrap";
-import { Helmet } from "react-helmet";
-import { HelmetProvider } from "react-helmet-async";
+import { Container, Row } from "react-bootstrap";
+import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import ALLImages from "../data/Imagedata";
 
@@ -9,19 +8,17 @@ const NoAccess = () => {
   const navigate = useNavigate();
   return (
     <Fragment>
-      <HelmetProvider>
-        <Helmet>
-          <title>Syria Souq | No Access</title>
-        </Helmet>
-      </HelmetProvider>
-      <div
-        dir="rtl"
-        className="page"
-        style={{
-          userSelect: "none",
-          caretColor: "transparent",
-        }}
-      >
+      {/* No nested HelmetProvider: the single provider at the root in main.jsx
+          owns the document head for the whole app, and a second one here
+          registers this title against a different context than every other
+          page. The title itself was still the previous product's ("Syria
+          Souq"), which is what the browser tab and history showed. */}
+      <Helmet>
+        <title>الراقي ERP | لا تملك الصلاحية</title>
+      </Helmet>
+      {/* Selection left enabled: the user's likely next step is to quote this
+          message to whoever administers their permissions. */}
+      <div dir="rtl" className="page">
         <div className="error-page">
           <Container>
             <div className="my-auto">

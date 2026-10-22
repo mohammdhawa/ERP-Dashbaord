@@ -1,0 +1,56 @@
+// Sortable column headers in DataTableServer.
+//
+// A real <button> inside the <th>, stripped back to look like the header text
+// it replaces. It has to be a button rather than a click handler on the <th>:
+// only a button is reachable by keyboard, announced as actionable, and
+// activated by Enter/Space — a clickable <th> is a mouse-only control that
+// looks identical.
+.table-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  // The <th> is already text-start in RTL; inheriting keeps a `center` column
+  // centred without a second modifier.
+  text-align: inherit;
+  cursor: pointer;
+
+  i {
+    font-size: 0.85em;
+    // The neutral up-down glyph is the AFFORDANCE: it is what says "this column
+    // can be sorted" before anyone has clicked. Dimmed so it reads as a hint
+    // rather than as a current state, then brought to full strength in
+    // .is-sorted below, where it reports one.
+    opacity: 0.45;
+    transition: opacity 0.15s ease, color 0.15s ease;
+  }
+
+  &:hover i {
+    opacity: 0.85;
+  }
+
+  &.is-sorted {
+    // --primary-ink, not --primary-color: the brand yellow is 1.66:1 on a white
+    // table header, so "this column is sorted" was being said in a colour that
+    // cannot be read.
+    color: var(--primary-ink);
+
+    i {
+      opacity: 1;
+    }
+  }
+
+  // Never remove the ring without replacing it: this is the only thing telling
+  // a keyboard user which header they are on. The colour is the shared focus
+  // token — a yellow ring on white is under the 3:1 floor for a non-text
+  // indicator, so it was a ring you could not see either.
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+    border-radius: 0.25rem;
+  }
+}

@@ -37,6 +37,13 @@ const notificationsReducer = (state = initialState, action) => {
       };
     }
 
+    case "MARK_ALL_NOTIFICATIONS_READ":
+      return {
+        ...state,
+        items: state.items.map((n) => (n.is_read ? n : { ...n, is_read: true })),
+        unreadCount: 0,
+      };
+
     case "LOGOUT_SUCCESS":
       return initialState;
 

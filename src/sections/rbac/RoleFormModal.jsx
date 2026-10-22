@@ -1,16 +1,58 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Col, Form, Row, Modal, Spinner, Alert } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
 import { createRole, updateRole } from "../../redux/actions/rolesActions";
-import { PERMISSIONS_CATALOG } from "../../data/permissionsCatalog";
+import {
+  ASSIGN_ROLES_PERMISSION,
+  PERMISSIONS_CATALOG,
+  permissionLabel,
+} from "../../data/permissionsCatalog";
+import { confirmDiscardChanges } from "../../utils";
+import { permissionsNotHeld } from "./grantScope";
+
+// One checkbox row — the same flex layout as AssignmentFormModal's CarryOption,
+// for the same reason: `<Form.Check label="…" />` floats the marker into a
+// padding it only just fits, leaving ~5.6px before the first Arabic letter, and
+// a label that wraps runs its second line under the marker. Here `gap` is the
+// clearance, and the label is its own flex item, so a wrapped line stays
+// aligned with the first. `align-items-start` + the marker's small top margin
+// keep the box on the first line of a multi-line label.
+//
+// `indeterminate` is a DOM property with no HTML attribute, so it is set
+// through a ref rather than a prop.
+const CheckRow = ({ id, checked, indeterminate = false, disabled, onChange, children }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <Form.Check className="d-flex align-items-start gap-2 ps-0 mb-0">
+      <Form.Check.Input
+        ref={ref}
+        type="checkbox"
+        id={id}
+        className="flex-shrink-0 m-0 mt-1"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      <Form.Check.Label htmlFor={id} className="flex-grow-1">
+        {children}
+      </Form.Check.Label>
+    </Form.Check>
+  );
+};
 
 // Role create/edit with a checkbox matrix over the Phase-1 permission
 // catalogue. On UPDATE the `permissions` array is a full SYNC: the server
 // replaces the role's set with exactly what we send, and an empty array wipes
 // every permission — hence the explicit warning before submitting empty.
-const RoleFormModal = ({ open, close, role }) => {
+const RoleFormModal = ({ open, close, role, currentPage = 1, perPage }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.roles);
+  const { permissions: callerPermissions, user: currentUser } = useSelector(
+    (state) => state.auth
+  );
   const isEdit = Boolean(role);
 
   const [name, setName] = useState("");
@@ -24,16 +66,68 @@ const RoleFormModal = ({ open, close, role }) => {
   const [errors, setErrors] = useState({});
   const isSystemRole = Boolean(role?.is_system);
 
+  // The text fields as the modal opened, for the discard guard. The permission
+  // matrix is not snapshotted: `permsDirty` already records whether it was
+  // touched, and it is a better answer than comparing arrays — checking a box
+  // and unchecking it leaves an identical array but is still a session the user
+  // may not want thrown away without a word.
+  const [initialText, setInitialText] = useState({
+    name: "",
+    label: "",
+    description: "",
+  });
+
   useEffect(() => {
     if (open) {
-      setName(role?.name || "");
-      setLabel(role?.label || "");
-      setDescription(role?.description || "");
+      const values = {
+        name: role?.name || "",
+        label: role?.label || "",
+        description: role?.description || "",
+      };
+      setName(values.name);
+      setLabel(values.label);
+      setDescription(values.description);
+      setInitialText(values);
       setSelected(role?.permissions || []);
       setPermsDirty(false);
       setErrors({});
     }
   }, [open, role]);
+
+  // GAP-16 (2026-09-28): editing a role changes what every holder of it may
+  // do, so the server accepts only changes to permissions the editor holds
+  // company-wide (403 otherwise). Only what CHANGED is checked — a permission
+  // left as it was is not the editor's to hold. /auth/me carries no scopes,
+  // so this catches the certain refusals only; see permissionsNotHeld().
+  const original = role?.permissions || [];
+  const changedPermissions =
+    isEdit && !permsDirty
+      ? []
+      : [
+          ...selected.filter((p) => !original.includes(p)),
+          ...original.filter((p) => !selected.includes(p)),
+        ];
+  const notHeld = permissionsNotHeld(changedPermissions, {
+    roles: currentUser?.roles,
+    permissions: callerPermissions,
+  });
+
+  const isDirty =
+    permsDirty ||
+    name !== initialText.name ||
+    label !== initialText.label ||
+    description !== initialText.description;
+
+  // Of every form in this app, this is the one worth guarding most: the matrix
+  // below is 28 checkboxes, and rebuilding a role's permission set from memory
+  // after an accidental "إلغاء" is genuinely expensive.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
 
   const togglePermission = (permName) => {
     setPermsDirty(true);
@@ -75,9 +169,9 @@ const RoleFormModal = ({ open, close, role }) => {
 
     try {
       if (isEdit) {
-        await dispatch(updateRole(role.id, payload));
+        await dispatch(updateRole(role.id, payload, currentPage, perPage));
       } else {
-        await dispatch(createRole(payload));
+        await dispatch(createRole(payload, currentPage, perPage));
       }
       close();
     } catch (parsed) {
@@ -92,7 +186,7 @@ const RoleFormModal = ({ open, close, role }) => {
     <Modal
       show={open}
       size="lg"
-      onHide={close}
+      onHide={handleCancel}
       keyboard={false}
       centered
       backdrop="static"
@@ -183,42 +277,87 @@ const RoleFormModal = ({ open, close, role }) => {
                 <strong>إزالة جميع الصلاحيات</strong> من هذا الدور.
               </Alert>
             )}
+            {notHeld.length > 0 && (
+              <Alert variant="danger" className="py-2 px-3 mb-2">
+                <i className="ri-shield-keyhole-line align-middle me-1"></i>
+                لا تُضاف صلاحية إلى دور ولا تُزال منه ما لم تكن تملكها أنت،
+                فسيرفض الخادم الحفظ. لا تملك:
+                <span className="d-block mt-1">
+                  {notHeld.map((name) => `«${permissionLabel(name)}»`).join("، ")}
+                </span>
+              </Alert>
+            )}
+            {/* The assign card lives on the Roles screen, and both the screen
+                and the role picker on it need auth.roles.view. A role granting
+                only «إسناد الأدوار للمستخدمين» gives its holder a power they
+                have no way to reach. Legal, so a warning — the holder may get
+                the view from another role. */}
+            {selected.includes(ASSIGN_ROLES_PERMISSION) &&
+              !selected.includes("auth.roles.view") && (
+                <Alert variant="warning" className="py-2 px-3 mb-2">
+                  <i className="ri-alert-line align-middle me-1"></i>
+                  «إسناد الأدوار للمستخدمين» يحتاج إلى «عرض الأدوار» أيضاً:
+                  شاشة الأدوار وقائمة الأدوار فيها تتطلبانها، وبدونها لن يصل
+                  حامل هذا الدور إلى بطاقة الإسناد — إلا إن كان يملكها من دور
+                  آخر.
+                </Alert>
+              )}
             <Row className="g-3">
               {PERMISSIONS_CATALOG.map((group) => {
                 const groupNames = group.permissions.map((p) => p.name);
-                const allChecked = groupNames.every((n) =>
+                const checkedCount = groupNames.filter((n) =>
                   selected.includes(n)
-                );
+                ).length;
+                const allChecked = checkedCount === groupNames.length;
                 return (
                   <Col sm={12} md={6} key={group.key}>
-                    <div className="border rounded p-3 h-100">
-                      <Form.Check
-                        type="checkbox"
-                        id={`group-${group.key}`}
-                        className="fw-semibold mb-2"
-                        label={group.module}
-                        checked={allChecked}
-                        disabled={isSystemRole}
-                        onChange={() => toggleGroup(group)}
-                      />
-                      <div className="d-flex flex-column gap-1 ps-3">
-                        {group.permissions.map((perm) => (
-                          <Form.Check
-                            key={perm.name}
-                            type="checkbox"
-                            id={`perm-${perm.name}`}
-                            label={
-                              <span>
-                                {perm.label}{" "}
-                                <code className="fs-11 text-muted">
-                                  {perm.name}
-                                </code>
+                    <div className="border rounded h-100">
+                      <div className="bg-light rounded-top border-bottom px-3 py-2">
+                        <CheckRow
+                          id={`group-${group.key}`}
+                          checked={allChecked}
+                          indeterminate={checkedCount > 0 && !allChecked}
+                          disabled={isSystemRole}
+                          onChange={() => toggleGroup(group)}
+                        >
+                          <span className="d-flex align-items-center flex-wrap gap-2">
+                            <span className="fw-semibold">{group.module}</span>
+                            {group.fieldLevel && (
+                              <span className="badge bg-warning-transparent fs-11">
+                                على مستوى الحقل
                               </span>
-                            }
+                            )}
+                            <span className="text-muted fs-11 ms-auto">
+                              {checkedCount}/{groupNames.length}
+                            </span>
+                          </span>
+                        </CheckRow>
+                        {group.note && (
+                          <p className="text-muted fs-11 mb-0 mt-1">
+                            {group.note}
+                          </p>
+                        )}
+                      </div>
+                      <div className="d-flex flex-column gap-2 p-3">
+                        {group.permissions.map((perm) => (
+                          <CheckRow
+                            key={perm.name}
+                            id={`perm-${perm.name}`}
                             checked={selected.includes(perm.name)}
                             disabled={isSystemRole}
                             onChange={() => togglePermission(perm.name)}
-                          />
+                          >
+                            <span className="d-block">{perm.label}</span>
+                            {/* Own line, isolated LTR: inline beside Arabic
+                                text, the dotted name reorders under the bidi
+                                algorithm and forces the row to wrap. */}
+                            <code
+                              dir="ltr"
+                              className="d-block fs-11 text-muted text-end"
+                            >
+                              {perm.name}
+                            </code>
+                          </CheckRow>
                         ))}
                       </div>
                     </div>
@@ -257,7 +396,8 @@ const RoleFormModal = ({ open, close, role }) => {
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={close}
+                onClick={handleCancel}
+                disabled={saving}
               >
                 إلغاء
               </button>

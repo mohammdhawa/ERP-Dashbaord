@@ -6,6 +6,7 @@ import {
 } from "../../utils/tokenStore";
 import { parseApiError } from "../../utils/apiHelpers";
 import { toastNotify } from "../../utils";
+import { deviceName } from "../../utils/deviceName";
 
 export const loginStart = () => ({ type: "LOGIN_START" });
 export const loginSuccess = (user) => ({
@@ -47,10 +48,22 @@ export const bootstrapDone = () => ({ type: "AUTH_BOOTSTRAP_DONE" });
 
 export const logoutSuccess = () => ({ type: "LOGOUT_SUCCESS" });
 
-export const login = (email, password) => async (dispatch) => {
+// The field is `login`, not `email` (account model, 2026-09-22): it carries an
+// employee number (e.g. EMP-00042) or an email, and the server decides which.
+// Sending `email` is now a 422 — `login` is required.
+//
+// `device_name` / `platform` (backend 2026-10-10) label this browser's session
+// on /sessions. Both optional server-side; device_name is null for a browser
+// deviceName() cannot recognise, and the server accepts that.
+export const login = (identifier, password) => async (dispatch) => {
   dispatch(loginStart());
   try {
-    const response = await api.post("/auth/login", { email, password });
+    const response = await api.post("/auth/login", {
+      login: identifier,
+      password,
+      device_name: deviceName(navigator.userAgent),
+      platform: "web",
+    });
     const { user, access_token, refresh_token } = response.data.data;
 
     // access token in memory, refresh token persisted (single-use rotation).
@@ -109,12 +122,64 @@ export const refreshCurrentUser = () => async (dispatch) => {
   }
 };
 
+// POST /auth/password — replaces the caller's own password. Self-scoped, and one
+// of the three routes reachable while `must_change_password` is set (the others
+// are /auth/me and /auth/logout); it is the only one that clears the flag.
+//
+// The server revokes EVERY session on success, this one included, and hands
+// back a fresh pair — so the new tokens must be stored before anything else is
+// called, or the next request is a 401 against a dead refresh token.
+//
+// A wrong current password is a 401 on this endpoint (not a 422), so the call
+// allows ONE auth recovery instead of the usual two: enough to survive an
+// access token that expired while the form was open, without rotating the
+// session twice more just to learn the password was wrong.
+//
+// Throws the parsed error so the form can map the 422 bag onto its fields.
+export const changePassword =
+  ({ current_password, password, password_confirmation }) =>
+  async (dispatch) => {
+    try {
+      const response = await api.post(
+        "/auth/password",
+        { current_password, password, password_confirmation },
+        { __maxAuthAttempts: 1 }
+      );
+      const { access_token, refresh_token } = response.data.data;
+      setTokens(access_token, refresh_token);
+
+      // Re-read the user rather than flipping the flag locally: /auth/me is the
+      // authority on must_change_password.
+      const me = await api.get("/auth/me");
+      dispatch(bootstrapSuccess(me.data.data));
+      toastNotify(response.data.message, "success");
+    } catch (error) {
+      throw parseApiError(error);
+    }
+  };
+
 export const logout = () => async (dispatch) => {
   try {
-    // Revokes ALL access + refresh tokens server-side (every device).
+    // Ends THIS browser's session only (backend 2026-10-10) — the account's
+    // phone and other browsers stay signed in. logoutEverywhere() below ends
+    // them all.
     await api.post("/auth/logout");
   } catch {
     /* even if the call fails, wipe the local session */
+  }
+  clearTokens();
+  dispatch(logoutSuccess());
+};
+
+// POST /auth/logout-all — every session on every device, this one included.
+// Unlike logout(), a failure is THROWN, not swallowed: the caller asked to sign
+// other devices out, and wiping only this tab would look like success while
+// the others stayed signed in.
+export const logoutEverywhere = () => async (dispatch) => {
+  try {
+    await api.post("/auth/logout-all");
+  } catch (error) {
+    throw parseApiError(error);
   }
   clearTokens();
   dispatch(logoutSuccess());

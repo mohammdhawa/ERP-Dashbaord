@@ -1,4 +1,4 @@
-import { Fragment, useEffect } from "react";
+import { useEffect } from "react";
 
 const ScrollTop = () => {
   const screenUp = () => {
@@ -22,15 +22,21 @@ const ScrollTop = () => {
     };
   }, []);
 
+  // No second #responsive-overlay here. Sidebar.jsx already renders one with
+  // that id and the click handler that closes the menu; this duplicate was
+  // invalid markup and inert — Header's document.querySelector("#responsive-
+  // overlay") always matched the sidebar's copy, which comes first in the DOM.
   return (
-    <Fragment>
-      <div className="scrollToTop" onClick={screenUp}>
-        <span className="arrow">
-          <i className="ri-arrow-up-line fs-16"></i>
-        </span>
-      </div>
-      <div id="responsive-overlay"></div>
-    </Fragment>
+    <button
+      type="button"
+      className="scrollToTop"
+      onClick={screenUp}
+      aria-label="العودة إلى أعلى الصفحة"
+    >
+      <span className="arrow">
+        <i className="ri-arrow-up-line fs-16" aria-hidden="true"></i>
+      </span>
+    </button>
   );
 };
 

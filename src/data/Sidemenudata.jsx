@@ -1,3 +1,15 @@
+// A GROUP EARNS ITS NESTING BY HAVING SOMETHING TO GROUP.
+//
+// "المؤسسة" and "الحساب" were `sub` entries wrapping exactly one child each, so
+// reaching الوحدات التنظيمية or الإشعارات cost an expand plus a click for a
+// submenu that could never contain a choice. They are flat `link` rows now,
+// carrying the permission their single child used to carry — Sidebar.jsx
+// filters top-level links on `requiredPermissions`, so the gating is unchanged.
+//
+// الموارد البشرية and إدارة النظام keep their nesting: each holds two real
+// siblings. الإجازات (three children) and الحضور والانصراف (five) are nested
+// for the same reason. When a flat link here grows a second item, promote it
+// back to `sub`.
 export const MENUITEMS = [
   {
     title: "لوحة التحكم",
@@ -11,25 +23,54 @@ export const MENUITEMS = [
     requiredPermissions: [],
   },
   {
-    title: "المؤسسة",
-    icon: "ri-community-line",
-    menusub: true,
-    type: "sub",
+    title: "الاعتمادات",
+    icon: "ri-checkbox-multiple-line",
+    menusub: false,
+    type: "link",
     active: false,
     selected: false,
     dirchange: false,
+    path: `${import.meta.env.BASE_URL}approvals`,
+    // Self-scoped: an account with nothing to decide just sees an empty list.
     requiredPermissions: [],
-    children: [
-      {
-        path: `${import.meta.env.BASE_URL}departments`,
-        type: "link",
-        active: false,
-        selected: false,
-        dirchange: false,
-        title: "الوحدات التنظيمية",
-        requiredPermissions: ["departments.view"],
-      },
-    ],
+  },
+  {
+    // HR's view of every request in reach (§15.7). A flat sibling, not a child
+    // of الاعتمادات: every approver keeps their inbox one click away, and an
+    // account without approvals.view would otherwise get a group of one.
+    title: "كل الطلبات",
+    icon: "ri-list-check-3",
+    menusub: false,
+    type: "link",
+    active: false,
+    selected: false,
+    dirchange: false,
+    path: `${import.meta.env.BASE_URL}approvals/all`,
+    requiredPermissions: ["approvals.view"],
+  },
+  {
+    title: "طلباتي",
+    icon: "ri-file-list-3-line",
+    menusub: false,
+    type: "link",
+    active: false,
+    selected: false,
+    dirchange: false,
+    path: `${import.meta.env.BASE_URL}my-leave`,
+    requiredPermissions: [],
+    // Dropped by Sidebar for an account with no linked employee (showsMyLeave).
+    requiresEmployee: true,
+  },
+  {
+    title: "الوحدات التنظيمية",
+    icon: "ri-community-line",
+    menusub: false,
+    type: "link",
+    active: false,
+    selected: false,
+    dirchange: false,
+    path: `${import.meta.env.BASE_URL}departments`,
+    requiredPermissions: ["departments.view"],
   },
   {
     title: "الموارد البشرية",
@@ -49,6 +90,116 @@ export const MENUITEMS = [
         dirchange: false,
         title: "الموظفين",
         requiredPermissions: ["hr.employees.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}hr/job-titles`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "المسميات الوظيفية",
+        requiredPermissions: ["hr.job_titles.view"],
+      },
+    ],
+  },
+  {
+    title: "الإجازات",
+    icon: "ri-calendar-check-line",
+    menusub: true,
+    type: "sub",
+    active: false,
+    selected: false,
+    dirchange: false,
+    requiredPermissions: [],
+    // Nested from the start: سجل الإجازات, الأرصدة and أنواع الإجازات.
+    children: [
+      {
+        path: `${import.meta.env.BASE_URL}leave/register`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "سجل الإجازات",
+        requiredPermissions: ["leave.requests.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}leave/balances`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "الأرصدة",
+        requiredPermissions: ["leave.balances.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}leave/types`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "أنواع الإجازات",
+        requiredPermissions: [
+          "leave.types.create",
+          "leave.types.update",
+          "leave.types.delete",
+        ],
+      },
+    ],
+  },
+  {
+    title: "الحضور والانصراف",
+    icon: "ri-fingerprint-line",
+    menusub: true,
+    type: "sub",
+    active: false,
+    selected: false,
+    dirchange: false,
+    requiredPermissions: [],
+    children: [
+      {
+        path: `${import.meta.env.BASE_URL}attendance/records`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "السجلات",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/daily`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "التقرير اليومي",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/monthly`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "التقرير الشهري",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/absent-today`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "الغائبون اليوم",
+        requiredPermissions: ["attendance.records.view"],
+      },
+      {
+        path: `${import.meta.env.BASE_URL}attendance/on-leave`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "في إجازة اليوم",
+        requiredPermissions: ["attendance.records.view"],
       },
     ],
   },
@@ -80,27 +231,27 @@ export const MENUITEMS = [
         title: "الأدوار والصلاحيات",
         requiredPermissions: ["auth.roles.view"],
       },
-    ],
-  },
-  {
-    title: "الحساب",
-    icon: "ri-user-line",
-    menusub: true,
-    type: "sub",
-    active: false,
-    selected: false,
-    dirchange: false,
-    requiredPermissions: [],
-    children: [
       {
-        path: `${import.meta.env.BASE_URL}notifications`,
+        path: `${import.meta.env.BASE_URL}audit-log`,
         type: "link",
         active: false,
         selected: false,
         dirchange: false,
-        title: "الإشعارات",
-        requiredPermissions: [],
+        title: "سجل التدقيق",
+        requiredPermissions: ["auth.audit.view"],
       },
     ],
+  },
+  {
+    title: "الإشعارات",
+    icon: "ri-notification-3-line",
+    menusub: false,
+    type: "link",
+    active: false,
+    selected: false,
+    dirchange: false,
+    path: `${import.meta.env.BASE_URL}notifications`,
+    // Owner-scoped: every signed-in account has its own notifications.
+    requiredPermissions: [],
   },
 ];

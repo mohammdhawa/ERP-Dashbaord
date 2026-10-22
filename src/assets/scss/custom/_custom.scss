@@ -26,9 +26,13 @@ body {
 *:hover::-webkit-scrollbar-thumb {
   background: $light;
 }
-a,
-button {
-  outline: 0 !important;
+// Scoped to the MOUSE case only. As `a, button { outline: 0 !important }` this
+// removed the only indicator a keyboard user has of where they are, everywhere
+// in the app. The replacement ring lives in the focus block at the end of
+// assets/css/styles.css.
+a:focus:not(:focus-visible),
+button:focus:not(:focus-visible) {
+  outline: 0;
 }
 
 /* Start::basic */

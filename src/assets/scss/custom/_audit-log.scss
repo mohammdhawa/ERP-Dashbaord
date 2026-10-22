@@ -1,0 +1,139 @@
+// سجل التدقيق — the filter panel (AuditLogFilters.jsx).
+//
+// One panel, so the filters read as a unit separate from the table under them;
+// the tokens are the theme's own, so it follows dark mode without a second rule.
+.audit-filters {
+  padding: 1rem;
+  border: 1px solid var(--default-border);
+  border-radius: 0.5rem;
+  background-color: var(--default-background);
+
+  // ONE label style for every cell. Some cells are named by a <label>, some —
+  // the two-box questions — by a <span> heading, and the two used to render at
+  // different sizes. Both carry .form-label, and this is what they look like.
+  .form-label {
+    display: block;
+    margin-block-end: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .form-text {
+    margin-block-start: 0.25rem;
+    font-size: 0.6875rem;
+  }
+}
+
+// The action bar: the parent's api_request switch on the start side, the
+// disclosure and the reset pushed to the end. Logical properties throughout,
+// so "start" is the right edge in RTL without a mirrored rule.
+.audit-filters__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-block-start: 1rem;
+  padding-block-start: 0.75rem;
+  border-block-start: 1px dashed var(--default-border);
+}
+
+.audit-filters__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+
+// One question answered in two boxes — المنفّذ without a user directory,
+// السجل, النطاق الزمني — side by side at a single control's height, so the cell
+// stays level with its neighbours.
+//
+// A native date input reports a min-content width of roughly 140px, and a flex
+// item will not shrink below min-content without being told it may. Two of them
+// side by side therefore overflowed their column at the narrower end of `lg`,
+// where the grid gives the cell about 250px. `min-width: 0` is what lets the
+// pair shrink to the space that is actually there instead of pushing out of it.
+.audit-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+
+  > .form-control,
+  > .audit-pair__main {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  // The id half of a pair: a number, so it takes a fixed narrow width and
+  // leaves the rest to the select it qualifies.
+  > .audit-pair__id {
+    flex: 0 0 5.5rem;
+  }
+}
+
+// The "+N" that stands in for the الحدث chips past the first two. Sized to sit
+// in the chip row without making it taller.
+.audit-chip-more {
+  flex: none;
+  margin-inline: 2px;
+  cursor: help;
+}
+
+.audit-pair__sep {
+  flex: none;
+  color: var(--text-muted);
+}
+
+// IP addresses and request ids are typed left-to-right, but a left-aligned box
+// in an RTL form breaks the right edge every other field shares. The text keeps
+// its LTR direction; only its alignment follows the form. `right` rather than
+// `end` on purpose: on a dir="ltr" element `end` IS left.
+.audit-ltr-input {
+  text-align: right;
+}
+
+// سجل التدقيق — the timestamp button that opens a row's detail panel.
+//
+// This column is the row's keyboard entry point (see TimeCell in
+// auditColumns.jsx), so it has to be a real, focusable button. What it must NOT
+// be is the loudest thing on the screen: as `btn-link` it rendered every
+// timestamp primary-blue and bold, and since every row carries one, the effect
+// was a bright vertical stripe down the least informative column — the event
+// badges beside it, which are the actual signal, lost the comparison.
+//
+// So it reads as body text at rest and takes emphasis only on hover and focus,
+// where the emphasis reports something true: this one, now, is the target.
+// It carries NO bootstrap button class, for the same reason .table-sort-button
+// does not: `@use` is hoisted above the bootstrap `@import`, so `.btn-link`
+// would win every colour declaration below on source order alone. Stripping the
+// button back by hand is the house pattern and the one that actually holds.
+.audit-time-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  color: inherit;
+  // Timestamps are a column of digits read down the page; tabular figures keep
+  // the columns of that column aligned.
+  font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    // --primary-ink, not --primary-color: the brand yellow does not carry
+    // enough contrast on a white table cell to be read as text.
+    color: var(--primary-ink);
+    text-decoration: underline;
+  }
+
+  // The only thing telling a keyboard user which row they are on, since this
+  // table has no actions column to focus instead.
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+    border-radius: 0.25rem;
+  }
+}

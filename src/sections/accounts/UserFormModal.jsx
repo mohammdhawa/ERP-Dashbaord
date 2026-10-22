@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Col, Form, Row, Modal, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import { useDispatch, useSelector } from "react-redux";
 import { createUser, updateUser } from "../../redux/actions/usersActions";
 import { hasPermission } from "../../data/permissionsCatalog";
 import { useResourceOptions } from "../departments/useResourceOptions";
+import { confirmDiscardChanges } from "../../utils";
 
 // Create + edit user accounts. Notes from the API doc (§4):
 // - An account stores NO name of its own: the display name tracks the linked
@@ -15,12 +16,26 @@ import { useResourceOptions } from "../departments/useResourceOptions";
 // - password: required on create, optional on edit (sent only when filled —
 //   a blank password is omitted, never submitted as "").
 // - roles are read-only here; grant/revoke lives on the Roles page.
-const employeeToOption = (e) => ({
-  value: e.id,
-  label: e.name ? `${e.name} (#${e.id})` : `موظف #${e.id}`,
-});
+// The employee resource split in Batch 2: `name` is gone, replaced by the
+// read-only `full_name` accessor. Reading the old key degraded EVERY option to
+// "موظف #id", which is unusable for picking a person.
+//
+// The label pairs the name with `employee_number` because two people genuinely
+// share a name — الاسم الثلاثي is not unique in a company this size — and the
+// staff number is the thing that tells them apart on paper. The id is shown
+// only when there is no staff number to show.
+//
+// NOTE: `user.name` on the Users screen is a different field — an ACCOUNT's
+// display name, unchanged by Batch 2. Do not "fix" that one to match this.
+const employeeToOption = (e) => {
+  const name = e.full_name || `موظف #${e.id}`;
+  return {
+    value: e.id,
+    label: e.employee_number ? `${name} — ${e.employee_number}` : `${name} (#${e.id})`,
+  };
+};
 
-const UserFormModal = ({ open, close, user }) => {
+const UserFormModal = ({ open, close, user, currentPage = 1, perPage }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.users);
   const { permissions } = useSelector((state) => state.auth);
@@ -36,6 +51,9 @@ const UserFormModal = ({ open, close, user }) => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  // The values the modal opened with, so "has anything been typed?" can be
+  // answered without a dirty flag on every field.
+  const [initialForm, setInitialForm] = useState(form);
 
   // Full employee list for the picker: loaded only while the modal is open and
   // only when the user owns hr.employees.view. Walks documented pages so the
@@ -48,16 +66,33 @@ const UserFormModal = ({ open, close, user }) => {
 
   useEffect(() => {
     if (open) {
-      setForm({
+      const values = {
         employee_id: user?.employee_id ?? "",
         email: user?.email || "",
         password: "",
         is_active: user ? Boolean(user.is_active) : true,
-      });
+      };
+      setForm(values);
+      setInitialForm(values);
       setErrors({});
       setShowPassword(false);
     }
   }, [open, user]);
+
+  const isDirty = useMemo(
+    () => Object.keys(form).some((key) => form[key] !== initialForm[key]),
+    [form, initialForm]
+  );
+
+  // The × and "إلغاء" both run the guard. This modal refuses Escape and
+  // backdrop clicks to protect the form, then let these two discard it silently.
+  const handleCancel = async () => {
+    if (!isDirty) {
+      close();
+      return;
+    }
+    if (await confirmDiscardChanges()) close();
+  };
 
   const setField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -70,9 +105,12 @@ const UserFormModal = ({ open, close, user }) => {
     if (!isEdit && (form.employee_id === "" || form.employee_id == null)) {
       clientErrors.employee_id = ["يجب ربط الحساب بموظف."];
     }
-    if (!form.email.trim()) {
-      clientErrors.email = ["البريد الإلكتروني مطلوب."];
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email)) {
+    // Email is OPTIONAL since the account model (2026-09-22): most staff have
+    // none and sign in with their employee number. Shape-checked only if given.
+    if (
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())
+    ) {
       clientErrors.email = ["يرجى إدخال بريد إلكتروني صالح."];
     }
     if (!isEdit && form.password.length < 8) {
@@ -92,7 +130,9 @@ const UserFormModal = ({ open, close, user }) => {
     }
 
     const payload = {
-      email: form.email.trim(),
+      // Blank → null, never "": the rule is `nullable|email`, so "" would be a
+      // 422, while null clears the address on edit.
+      email: form.email.trim() || null,
       is_active: form.is_active,
     };
     // On edit, omit password entirely unless the admin typed a new one
@@ -114,9 +154,9 @@ const UserFormModal = ({ open, close, user }) => {
 
     try {
       if (isEdit) {
-        await dispatch(updateUser(user.id, payload));
+        await dispatch(updateUser(user.id, payload, currentPage, perPage));
       } else {
-        await dispatch(createUser(payload));
+        await dispatch(createUser(payload, currentPage, perPage));
       }
       close();
     } catch (parsed) {
@@ -130,7 +170,13 @@ const UserFormModal = ({ open, close, user }) => {
   const showEmployeePicker = canReadEmployees && !employees.error;
 
   return (
-    <Modal show={open} onHide={close} keyboard={false} centered backdrop="static">
+    <Modal
+      show={open}
+      onHide={handleCancel}
+      keyboard={false}
+      centered
+      backdrop="static"
+    >
       <Modal.Header closeButton>
         <Modal.Title as="h6">
           {isEdit
@@ -200,7 +246,9 @@ const UserFormModal = ({ open, close, user }) => {
             </Col>
 
             <Col sm={12}>
-              <Form.Label htmlFor="user-email">البريد الإلكتروني *</Form.Label>
+              <Form.Label htmlFor="user-email">
+                البريد الإلكتروني (اختياري)
+              </Form.Label>
               <Form.Control
                 id="user-email"
                 type="email"
@@ -214,6 +262,9 @@ const UserFormModal = ({ open, close, user }) => {
               {fieldError("email") && (
                 <div className="text-danger small mt-1">{fieldError("email")}</div>
               )}
+              <div className="text-muted small mt-1">
+                يسجّل الموظف دخوله برقمه الوظيفي؛ البريد وسيلة تواصل فقط.
+              </div>
             </Col>
 
             <Col sm={12}>
@@ -229,16 +280,29 @@ const UserFormModal = ({ open, close, user }) => {
                   onChange={(e) => setField("password", e.target.value)}
                   isInvalid={!!fieldError("password")}
                 />
+                {/* Named and stateful, matching the sign-in screen's reveal
+                    button. Without the label a screen reader announced an
+                    unlabelled button; without aria-pressed it could not tell
+                    whether the password was currently visible — which is the
+                    one thing this control is for. `tabIndex={-1}` is gone too:
+                    it put the button out of tab order, so a keyboard user could
+                    not reach the only way to check what they had typed. */}
                 <button
                   type="button"
-                  className="btn btn-link show-password-button text-muted p-0"
+                  className="btn btn-link show-password-button text-muted"
                   onClick={() => setShowPassword(!showPassword)}
-                  tabIndex={-1}
+                  aria-label={
+                    showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
+                  }
+                  aria-pressed={showPassword}
                 >
                   {showPassword ? (
-                    <i className="ri-eye-line align-middle"></i>
+                    <i className="ri-eye-line align-middle" aria-hidden="true"></i>
                   ) : (
-                    <i className="ri-eye-off-line align-middle"></i>
+                    <i
+                      className="ri-eye-off-line align-middle"
+                      aria-hidden="true"
+                    ></i>
                   )}
                 </button>
               </div>
@@ -247,6 +311,11 @@ const UserFormModal = ({ open, close, user }) => {
                   {fieldError("password")}
                 </div>
               )}
+              {/* The server sets must_change_password on create AND on any
+                  admin password reset, so this is always a temporary one. */}
+              <div className="text-muted small mt-1">
+                كلمة مرور مؤقتة: سيُطلب من المستخدم تغييرها عند أول تسجيل دخول.
+              </div>
             </Col>
 
             <Col sm={12}>
@@ -308,7 +377,8 @@ const UserFormModal = ({ open, close, user }) => {
               <button
                 type="button"
                 className="btn btn-light fw-md w-100"
-                onClick={close}
+                onClick={handleCancel}
+                disabled={saving}
               >
                 إلغاء
               </button>

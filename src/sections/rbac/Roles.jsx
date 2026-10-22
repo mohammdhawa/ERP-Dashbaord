@@ -1,30 +1,76 @@
-import React, { Fragment, useEffect, useState, Suspense, lazy } from "react";
-import { Helmet } from "react-helmet";
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  Suspense,
+  lazy,
+} from "react";
+import { Helmet } from "react-helmet-async";
 import { Card, Col, Row } from "react-bootstrap";
 import { useDispatch, useSelector } from "react-redux";
-import { PageHeader, DataTable } from "../../components";
+import { PageHeader, ModalFallback } from "../../components";
+import DataTableServer from "../../components/DataTableServer";
 import ProtectedElement from "../../pages/layout/ProtectedElement";
-import { fetchRoles, deleteRole } from "../../redux/actions/rolesActions";
-import { fetchUsers } from "../../redux/actions/usersActions";
-import { permissionLabel } from "../../data/permissionsCatalog";
+import {
+  fetchRoles,
+  fetchAllRoles,
+  deleteRole,
+} from "../../redux/actions/rolesActions";
+import { fetchAllUsers } from "../../redux/actions/usersActions";
+import {
+  ASSIGN_ROLES_PERMISSION,
+  permissionLabel,
+} from "../../data/permissionsCatalog";
 import AssignRoleCard from "./AssignRoleCard";
 
 const RoleFormModal = lazy(() => import("./RoleFormModal"));
 
 const Roles = () => {
   const dispatch = useDispatch();
-  const { roles, fetchLoading } = useSelector((state) => state.roles);
+  const { items, meta, fetchLoading, error } = useSelector(
+    (state) => state.roles
+  );
   const { permissions } = useSelector((state) => state.auth);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
+  const [page, setPage] = useState(1);
+  // Must be one of TablePagination's ROW_COUNT_OPTIONS (10/50/100).
+  // 15 is the SERVER default, not an offered option: bound to the select
+  // it showed "10" while fetching 15, and picking 10 changed nothing.
+  const [perPage, setPerPage] = useState(10);
 
-  const canAssign = permissions.includes("auth.roles.update");
+  // auth.roles.assign since 2026-09-26 (GAP-15) — split out of
+  // auth.roles.update, which now means editing role definitions only.
+  const canAssign = permissions.includes(ASSIGN_ROLES_PERMISSION);
   const canListUsers = permissions.includes("auth.users.view");
 
+  // The TABLE reads one page; the assignment card needs every row. Two separate
+  // reads on purpose — a picker that stops at page 1 cannot grant a role to
+  // user #200, and nothing on screen would say why.
+  const load = useCallback(() => {
+    dispatch(fetchRoles(page, perPage));
+  }, [dispatch, page, perPage]);
+
   useEffect(() => {
-    dispatch(fetchRoles());
-    // Users feed the assignment dropdown — only fetch when both visible and allowed.
-    if (canAssign && canListUsers) dispatch(fetchUsers());
+    load();
+  }, [load]);
+
+  // Keep the COMPONENT page in step with the server. A delete that empties
+  // the last page makes the action re-fetch the preceding one, but nothing
+  // moved `page` itself, so the next mutation re-fetched the page that no
+  // longer exists. Snapping back here is the same repair the departments and
+  // employees lists already do.
+  useEffect(() => {
+    if (meta && meta.last_page >= 1 && page > meta.last_page) {
+      setPage(meta.last_page);
+    }
+  }, [meta, page]);
+
+  useEffect(() => {
+    if (!canAssign) return;
+    dispatch(fetchAllRoles());
+    if (canListUsers) dispatch(fetchAllUsers());
   }, [dispatch, canAssign, canListUsers]);
 
   const columns = [
@@ -104,29 +150,44 @@ const Roles = () => {
         />
       </PageHeader>
 
-      {/* Assignment block needs auth.roles.update */}
+      {/* Assignment block needs auth.roles.assign (auth.roles.update until
+          GAP-15, 2026-09-26) */}
       <ProtectedElement
         element={<AssignRoleCard />}
-        requiredPermissions={["auth.roles.update"]}
+        requiredPermissions={[ASSIGN_ROLES_PERMISSION]}
       />
 
       <Row>
         <Col xl={12}>
           <Card className="custom-card">
             <Card.Body>
-              <DataTable
+              <DataTableServer
                 columns={columns}
-                data={roles}
-                itemsPerPage={10}
+                data={items}
+                currentPage={meta?.current_page || page}
+                totalPages={meta?.last_page || 1}
+                dataCount={meta?.total || 0}
+                onPageChange={setPage}
+                itemsPerPage={meta?.per_page || perPage}
+                onItemsPerPageChange={(size) => {
+                  setPerPage(size);
+                  setPage(1);
+                }}
                 loading={fetchLoading}
+                // A failed fetch used to fall through to the generic empty
+                // message, presenting an outage as "there are no roles".
+                error={error}
+                onRetry={load}
                 updatePermission="auth.roles.update"
                 deletePermission="auth.roles.delete"
                 functions={{
+                  rowLabel: (role) => role.name,
                   handleUpdate: (role) => {
                     setEditingRole(role);
                     setModalOpen(true);
                   },
-                  handleDelete: (id) => dispatch(deleteRole(id)),
+                  handleDelete: (id) =>
+                    dispatch(deleteRole(id, page, items.length, perPage)),
                   // System roles (is_system) cannot be renamed/edited/deleted
                   // (server 409). Disable both controls; assignment stays open.
                   disableUpdate: (role) => role.is_system,
@@ -140,11 +201,18 @@ const Roles = () => {
         </Col>
       </Row>
 
-      <Suspense fallback={null}>
+      {/* Fallback gated on the open flag, NOT unconditional: the lazy
+          element below is always mounted so its chunk prefetches with the
+          page, which means this boundary is suspended during ordinary page
+          load too — an unconditional fallback would flash a modal shell on
+          every visit. See ModalFallback. */}
+      <Suspense fallback={modalOpen ? <ModalFallback /> : null}>
         <RoleFormModal
           open={modalOpen}
           close={() => setModalOpen(false)}
           role={editingRole}
+          currentPage={page}
+          perPage={perPage}
         />
       </Suspense>
     </Fragment>

@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { Card, Col, Row } from "react-bootstrap";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { useSelector } from "react-redux";
 import { hasPermission } from "../../data/permissionsCatalog";
 
@@ -58,6 +58,12 @@ const Dashboard = () => {
     hasPermission(permissions, m.permission)
   );
 
+  // "This account can reach nothing" — i.e. everything on screen is a module
+  // that needs no permission at all. This used to be `length === 1`, which was
+  // only ever true because notifications happens to be the single auth-only
+  // tile; adding a second one would have silently switched the warning off.
+  const hasNoModuleAccess = visibleModules.every((m) => m.permission === null);
+
   return (
     <Fragment>
       <Helmet>
@@ -103,7 +109,7 @@ const Dashboard = () => {
             </Card>
           </Col>
         ))}
-        {visibleModules.length === 1 && (
+        {hasNoModuleAccess && (
           <Col sm={12}>
             <Card className="custom-card">
               <Card.Body className="text-center p-5">

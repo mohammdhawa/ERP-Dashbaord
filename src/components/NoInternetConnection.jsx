@@ -1,9 +1,13 @@
-import React from "react";
-import { Card, Col, Row } from "react-bootstrap";
-
 const NoInternetConnection = () => {
   return (
     <div
+      // Announced, not just drawn. This banner appears without any user action
+      // — the network drops and it is suddenly there — so a user who does not
+      // see it otherwise gets no notice at all, and every subsequent failure
+      // reads as the app breaking rather than the connection being down.
+      // "assertive" because it invalidates whatever the user is about to do.
+      role="alert"
+      aria-live="assertive"
       style={{
         position: "fixed",
         background: "transparent",
