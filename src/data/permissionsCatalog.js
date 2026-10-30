@@ -29,6 +29,10 @@ export const PERMISSIONS_CATALOG = [
       { name: "hr.employees.create", label: "إضافة موظف" },
       { name: "hr.employees.update", label: "تعديل موظف" },
       { name: "hr.employees.delete", label: "حذف موظف" },
+      // Company-only, and the server also wants viewSalary and viewIdentity
+      // company-wide (backend EmployeeImportRunPolicy) — so it is NOT in
+      // HONOURED_FROM_SCOPED_GRANT below.
+      { name: "hr.employees.import", label: "استيراد الموظفين من ملف" },
     ],
   },
   {

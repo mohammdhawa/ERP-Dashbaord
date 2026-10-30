@@ -1,4 +1,4 @@
-// The one way an employee is labelled in a picker: «الاسم — EMP-…», or
+// The one way an employee is labelled in a picker: «الاسم — 582974643» (the Kobo id), or
 // «الاسم (#id)» when there is no staff number. Two people genuinely share a name,
 // and the staff number is what tells them apart on paper. Same rule as the user
 // form's employee picker (UserFormModal), which keeps its own copy.

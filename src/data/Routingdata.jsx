@@ -21,6 +21,9 @@ const Departments = lazy(() => import("../sections/departments/Departments"));
 const Employees = lazy(() => import("../sections/hr/Employees"));
 const EmployeeProfile = lazy(() => import("../sections/hr/EmployeeProfile"));
 const JobTitles = lazy(() => import("../sections/hr/JobTitles"));
+const EmployeeImport = lazy(() =>
+  import("../sections/hr/import/EmployeeImport")
+);
 const Users = lazy(() => import("../sections/accounts/Users"));
 const Roles = lazy(() => import("../sections/rbac/Roles"));
 const AuditLog = lazy(() => import("../sections/system/AuditLog"));
@@ -197,5 +200,14 @@ export const RouteData = [
     element: <OnLeaveToday />,
     // An attendance roster: the server gates it on attendance's grant (§16.9).
     requiredPermissions: ["attendance.records.view"],
+  },
+  {
+    // The upload import (API doc §18). The server also wants viewSalary and
+    // viewIdentity company-wide; a user without them sees its 403 message.
+    // A static segment, so it wins over hr/employees/:id.
+    id: 23,
+    path: `${import.meta.env.BASE_URL}hr/employees/import`,
+    element: <EmployeeImport />,
+    requiredPermissions: ["hr.employees.import"],
   },
 ];

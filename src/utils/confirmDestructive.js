@@ -1,4 +1,5 @@
 import Swal from "sweetalert2";
+import { confirmOptions } from "./confirmOptions";
 
 // Shared confirmation for destructive actions.
 //
@@ -30,24 +31,11 @@ const confirmDestructive = async ({
   // Overridden where "حذف" misdescribes the outcome (سحب الإنذار).
   confirmButtonText = "حذف",
 }) => {
-  const trimmedSubject = typeof subject === "string" ? subject.trim() : "";
-
-  const result = await Swal.fire({
-    title: trimmedSubject ? `${action}: ${trimmedSubject}؟` : `${action}؟`,
-    text,
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText,
-    cancelButtonText: "إلغاء",
-    // Confirm on the trailing side, cancel under the reading hand: the same
-    // order every other dialog in the app uses.
-    reverseButtons: true,
-    customClass: {
-      confirmButton: "btn btn-danger me-2",
-      cancelButton: "btn btn-light me-2",
-    },
-    buttonsStyling: false,
-  });
+  // The options live in confirmOptions.js, where they are tested: the title
+  // is plain text there, since `subject` is often a name someone typed.
+  const result = await Swal.fire(
+    confirmOptions({ action, subject, text, confirmButtonText })
+  );
 
   return result.isConfirmed;
 };

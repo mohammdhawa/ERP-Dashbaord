@@ -63,14 +63,24 @@ export const fetchBlobUrl = async (path) => {
   }
 };
 
-export const downloadFile = async (path, fallbackName) => {
-  const { url, filename } = await fetchBlobUrl(path);
+// Hand an object URL to the browser as a download, then let it go.
+const saveUrl = (url, filename) => {
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename || fallbackName;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   // Revoking in the same tick can cancel the save in some browsers.
   setTimeout(() => URL.revokeObjectURL(url), 0);
+};
+
+// Bytes already in hand — the import's passwords file, which arrives inside
+// a JSON response rather than from a download endpoint.
+export const saveBlob = (blob, filename) =>
+  saveUrl(URL.createObjectURL(blob), filename);
+
+export const downloadFile = async (path, fallbackName) => {
+  const { url, filename } = await fetchBlobUrl(path);
+  saveUrl(url, filename || fallbackName);
 };

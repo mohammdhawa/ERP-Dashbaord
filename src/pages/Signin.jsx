@@ -67,7 +67,7 @@ const Signin = () => {
     let formValid = true;
 
     // Presence only — NO email-shape check. Most staff sign in with their
-    // employee number, and an email pattern would reject `EMP-00042` before
+    // employee number (their Kobo id), and an email pattern would reject it before
     // the request is ever sent. The server decides which kind it is.
     const trimmed = identifier.trim();
     if (!trimmed) {
@@ -218,7 +218,7 @@ const Signin = () => {
                           autoCapitalize="off"
                           spellCheck={false}
                           dir="ltr"
-                          placeholder="EMP-00042 / name@example.com"
+                          placeholder="582974643 / name@example.com"
                           value={identifier}
                           onChange={(e) => {
                             setIdentifier(e.target.value);

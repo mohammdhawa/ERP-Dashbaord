@@ -1,6 +1,6 @@
 import React from "react";
 import { Card } from "react-bootstrap";
-import { formatAbsolute } from "../system/auditFormat";
+import { formatAbsolute, parseServerTimestamp } from "../system/auditFormat";
 
 // One bucket of the daily board (API doc §14.1) as a table. The board is not
 // paged and every bucket is sorted by the server, so this only draws rows and
@@ -14,7 +14,41 @@ import { formatAbsolute } from "../system/auditFormat";
 const dash = <span className="text-muted">—</span>;
 
 const time = (value) =>
-  value ? <span dir="ltr">{formatAbsolute(value)}</span> : dash;
+  value ? (
+    <span dir="ltr">{parseServerTimestamp(value)?.time ?? String(value)}</span>
+  ) : (
+    dash
+  );
+
+const LocationLink = ({ location, label }) => {
+  if (location?.latitude == null || location?.longitude == null) return null;
+
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return null;
+  }
+
+  const query = new URLSearchParams({ api: "1", query: `${latitude},${longitude}` });
+  return (
+    <div className="fs-12 mt-1">
+      <a
+        href={`https://www.google.com/maps/search/?${query}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`${label} على الخريطة`}
+      >
+        <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
+        عرض الموقع
+      </a>
+    </div>
+  );
+};
 
 const checkInRecord = (row) => ({
   id: row.record_id,
@@ -44,8 +78,8 @@ export const Employee = ({ employee }) =>
     <>
       <div>{employee.full_name}</div>
       {employee.employee_number && (
-        <div className="text-muted fs-12" dir="ltr">
-          {employee.employee_number}
+        <div className="text-muted fs-12">
+          <span dir="ltr">{employee.employee_number}</span>
         </div>
       )}
     </>
@@ -123,8 +157,14 @@ const AttendanceTable = ({ bucket, rows, can, undoingId, on }) => (
               <Employee employee={row.employee} />
             </td>
             <td>{row.department?.name || dash}</td>
-            <td>{time(row.check_in_time)}</td>
-            <td>{time(row.check_out_time)}</td>
+            <td>
+              {time(row.check_in_time)}
+              <LocationLink location={row.check_in_location} label="موقع الحضور" />
+            </td>
+            <td>
+              {time(row.check_out_time)}
+              <LocationLink location={row.check_out_location} label="موقع الانصراف" />
+            </td>
             <td>
               {row.work_hours_formatted ? (
                 <span dir="ltr">{row.work_hours_formatted}</span>
