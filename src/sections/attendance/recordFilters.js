@@ -14,6 +14,7 @@ export const DATE_MODES = [
   { value: "day", label: "يوم" },
   { value: "range", label: "فترة" },
   { value: "month", label: "شهر" },
+  { value: "open", label: "مراجعات مفتوحة" },
 ];
 const MODE_VALUES = DATE_MODES.map((m) => m.value);
 
@@ -72,6 +73,7 @@ export const defaultRecordFilters = (now = new Date()) => {
     is_corrected: "",
     rejected: "",
     rejection_reason: "",
+    location_review_status: "",
     employee_id: "",
     department_id: "",
     search: "",
@@ -85,8 +87,11 @@ export const defaultRecordFilters = (now = new Date()) => {
  * left over from «مرفوض» would otherwise keep filtering invisibly).
  */
 export const toQueryFilters = (f) => {
-  const { mode, date, from, to, month, year, rejection_reason, ...rest } = f;
+  const { mode, date, from, to, month, year, rejection_reason, location_review_status, ...rest } = f;
   const out = { ...rest };
+  if (location_review_status && !(mode === "open" && location_review_status === "approved")) {
+    out.location_review_status = location_review_status;
+  }
   // The department box falls back to a free number input (no departments.view),
   // and the params builder only trims: an invalid id is simply not sent, so it
   // can never become a 422 that a retry cannot cure. The control keeps the text.
@@ -94,6 +99,7 @@ export const toQueryFilters = (f) => {
     if (!isPositiveId(out[key])) out[key] = "";
   }
   if (f.rejected === "1") out.rejection_reason = rejection_reason;
+  if (mode === "open") return { ...out, open_location_review: "1" };
   if (mode === "range") return { ...out, from, to };
   if (mode === "month") return { ...out, month, year };
   return { ...out, date };
@@ -106,6 +112,7 @@ export const toQueryFilters = (f) => {
  * under a filter that says otherwise.
  */
 export const dateProblem = (f) => {
+  if (f.mode === "open") return null;
   if (f.mode === "range") {
     if (!isDate(f.from) || !isDate(f.to)) return "حدّد تاريخ البداية وتاريخ النهاية.";
     if (f.to < f.from) return "تاريخ النهاية يجب أن يكون مساوياً أو بعد تاريخ البداية.";
@@ -146,6 +153,7 @@ export const filtersFromSearch = (get, defaults) => {
     pick(key, (v) => TRI.includes(v));
   }
   pick("rejection_reason", (v) => ["1", "2", "3"].includes(v));
+  pick("location_review_status", (v) => ["for_review", "in_process", "approved"].includes(v));
   pick("employee_id", isPositiveId);
   pick("department_id", isPositiveId);
   pick("sort", (v) =>

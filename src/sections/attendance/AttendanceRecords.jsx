@@ -1,4 +1,5 @@
-import React, {
+/* eslint-disable react/prop-types */
+import {
   Fragment,
   Suspense,
   lazy,
@@ -29,10 +30,14 @@ import {
   toQueryFilters,
 } from "./recordFilters";
 import undoRejection from "./actions/undoRejection";
+import LocationReviewEvidence from "./LocationReviewEvidence";
+import { canApproveLocation } from "./locationReview";
 
 const SelfieModal = lazy(() => import("./actions/SelfieModal"));
 const RejectRecordModal = lazy(() => import("./actions/RejectRecordModal"));
 const CorrectCheckoutModal = lazy(() => import("./actions/CorrectCheckoutModal"));
+const ApproveLocationReviewModal = lazy(() => import("./actions/ApproveLocationReviewModal"));
+const BulkApproveLocationModal = lazy(() => import("./actions/BulkApproveLocationModal"));
 
 // السجلات — HR's attendance records (API doc §13.1). Without a date the server
 // lists today, and so does this screen: its default mode is «يوم» with today
@@ -122,6 +127,11 @@ const columns = [
     render: (label) => label || dash,
   },
   {
+    key: "location_review",
+    label: "مراجعة الموقع",
+    render: (review, row) => <LocationReviewEvidence review={review} record={row} />,
+  },
+  {
     key: "badges",
     label: "ملاحظات",
     render: (_, row) => {
@@ -179,6 +189,7 @@ const AttendanceRecords = () => {
   const { permissions } = useSelector((state) => state.auth);
   const canReject = hasPermission(permissions, "attendance.records.reject");
   const canCorrect = hasPermission(permissions, "attendance.records.correct");
+  const canApprove = hasPermission(permissions, "attendance.records.approveLocation");
 
   const [defaults] = useState(() => defaultRecordFilters());
   const [searchParams, setSearchParams] = useSearchParams();
@@ -240,6 +251,19 @@ const AttendanceRecords = () => {
   }, [settled, meta, page]);
 
   const rows = settled ? items : [];
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [approving, setApproving] = useState(null);
+  const [bulkRequest, setBulkRequest] = useState(null);
+  useEffect(() => { setSelectedIds([]); }, [viewKey]);
+  const eligibleRows = rows.filter((row) => canApproveLocation(row, permissions));
+  const tableColumns = canApprove ? [{
+    key: "location_selection", label: "تحديد",
+    render: (_, row) => canApproveLocation(row, permissions) ? (
+      <input type="checkbox" aria-label={`تحديد سجل ${row.id}`} checked={selectedIds.includes(row.id)}
+        onChange={(event) => setSelectedIds((current) => event.target.checked
+          ? [...current, row.id] : current.filter((id) => id !== row.id))} />
+    ) : dash,
+  }, ...columns] : columns;
 
   const [selfieId, setSelfieId] = useState(null);
   const [rejecting, setRejecting] = useState(null); // the row
@@ -295,9 +319,21 @@ const AttendanceRecords = () => {
                 problem={problem}
               />
 
+              {!problem && canApprove && <div className="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" className="btn btn-outline-primary btn-sm" disabled={!eligibleRows.length}
+                  onClick={() => setSelectedIds(eligibleRows.map((row) => row.id).slice(0, 100))}>تحديد المتاح في الصفحة</button>
+                <button type="button" className="btn btn-outline-secondary btn-sm" disabled={!selectedIds.length}
+                  onClick={() => setSelectedIds([])}>إلغاء التحديد</button>
+                <button type="button" className="btn btn-success btn-sm" disabled={!selectedIds.length}
+                  onClick={() => setBulkRequest({ mode: "selected", ids: selectedIds, filters: queryFilters })}>اعتماد المحدد ({selectedIds.length})</button>
+                <button type="button" className="btn btn-outline-success btn-sm"
+                  disabled={queryFilters.rejected === "1" || ["for_review", "approved"].includes(queryFilters.location_review_status)}
+                  title="يتطلب فلتر السجلات المقبولة وحالة قيد المعالجة أو كل الحالات"
+                  onClick={() => setBulkRequest({ mode: "matching", ids: [], filters: queryFilters })}>اعتماد كل قيد المعالجة ضمن الفلتر</button>
+              </div>}
               {!problem && (
                 <DataTableServer
-                  columns={columns}
+                  columns={tableColumns}
                   data={rows}
                   loading={fetchLoading || !settled}
                   error={error}
@@ -349,6 +385,10 @@ const AttendanceRecords = () => {
                               تصحيح الانصراف
                             </button>
                           )}
+                        {canApproveLocation(row, permissions) && (
+                          <button type="button" className="btn btn-sm btn-success-light btn-wave"
+                            onClick={() => setApproving(row)}>اعتماد الموقع</button>
+                        )}
                         {canReject && !rejected && (
                           <button
                             type="button"
@@ -382,7 +422,7 @@ const AttendanceRecords = () => {
           chunks prefetch, and an unconditional fallback would flash a modal
           shell on every visit. See ModalFallback. */}
       <Suspense
-        fallback={selfieId || rejecting || correcting ? <ModalFallback /> : null}
+        fallback={selfieId || rejecting || correcting || approving || bulkRequest ? <ModalFallback /> : null}
       >
         <SelfieModal
           show={Boolean(selfieId)}
@@ -398,6 +438,11 @@ const AttendanceRecords = () => {
             load();
           }}
         />
+        <ApproveLocationReviewModal show={Boolean(approving)} record={approving}
+          onHide={() => setApproving(null)} onDone={() => { setApproving(null); setSelectedIds([]); load(); }} />
+        <BulkApproveLocationModal show={Boolean(bulkRequest)} mode={bulkRequest?.mode}
+          ids={bulkRequest?.ids || []} queryFilters={bulkRequest?.filters || {}}
+          onHide={() => setBulkRequest(null)} onDone={() => { setSelectedIds([]); load(); }} />
         <CorrectCheckoutModal
           show={Boolean(correcting)}
           checkIn={correcting}

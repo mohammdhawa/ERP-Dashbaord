@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+/* eslint-disable react/prop-types */
+import { useEffect, useState } from "react";
 import { Col, Form, Row } from "react-bootstrap";
 import Select from "react-select";
 import { useSelector } from "react-redux";
@@ -21,6 +22,7 @@ import {
   isValidYear,
 } from "./recordFilters";
 import { MAX_SEARCH, isPositiveId } from "../../utils/filterValues";
+import { REVIEW_STATUSES } from "./locationReview";
 
 // فلاتر سجلات الحضور (API doc §13.1). Controlled by the screen, which owns the
 // filter object, the URL and the fetch; this only edits it.
@@ -114,7 +116,7 @@ const AttendanceRecordFilters = ({
   const setMode = (mode) => {
     // An abandoned half-typed year must not follow the user into the next mode.
     setYearDraft(filters.year);
-    onChange({ mode });
+    onChange({ mode, ...(mode === "open" && filters.location_review_status === "approved" ? { location_review_status: "" } : {}) });
   };
 
   const triSelect = (key, label, id) => (
@@ -284,6 +286,15 @@ const AttendanceRecordFilters = ({
         {triSelect("missing_checkout", "انصراف مفقود", "rec-f-missing")}
         {triSelect("is_corrected", "مصحَّح", "rec-f-corrected")}
         {triSelect("rejected", "مرفوض", "rec-f-rejected")}
+        <Col sm={6} md={4} lg={2}>
+          <Form.Label htmlFor="rec-f-location-review" className="fs-12 mb-1">مراجعة الموقع</Form.Label>
+          <Form.Select id="rec-f-location-review" value={filters.location_review_status}
+            onChange={(event) => onChange({ location_review_status: event.target.value })}>
+            <option value="">كل الحالات</option>
+            {REVIEW_STATUSES.map((status) => <option key={status.value} value={status.value}
+              disabled={filters.mode === "open" && status.value === "approved"}>{status.label}</option>)}
+          </Form.Select>
+        </Col>
 
         {filters.rejected === "1" && (
           <Col sm={6} md={4} lg={4}>

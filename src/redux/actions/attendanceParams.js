@@ -162,6 +162,12 @@ export const buildRecordsParams = (page, perPage, f = {}, now = new Date()) => {
   }
   const reason = enumParam(f.rejection_reason, REJECTION_REASONS);
   if (reason !== null) params.rejection_reason = reason;
+  const openReview = onlyWhenTrue(f.open_location_review);
+  if (openReview) params.open_location_review = openReview;
+  if (["for_review", "in_process", "approved"].includes(f.location_review_status) &&
+      !(openReview && f.location_review_status === "approved")) {
+    params.location_review_status = f.location_review_status;
+  }
 
   addPeople(params, f);
   addSort(params, f, RECORDS_SORT_KEYS);
