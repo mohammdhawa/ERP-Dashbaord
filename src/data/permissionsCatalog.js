@@ -1,4 +1,4 @@
-// Permission catalogue (API doc §2) — 45 rows: 42 route-level + 3 field-level.
+// Permission catalogue (API doc §2) — 49 seeded permissions.
 // Format: {module}.{resource}.{action}
 //
 // Arabic labels come from the backend seeder. No endpoint serves permission
@@ -91,6 +91,15 @@ export const PERMISSIONS_CATALOG = [
       { name: "attendance.records.view", label: "عرض سجلات الحضور" },
       { name: "attendance.records.correct", label: "تصحيح انصراف منسي" },
       { name: "attendance.records.reject", label: "رفض سجل حضور" },
+      { name: "attendance.records.approveLocation", label: "اعتماد مراجعة موقع الحضور" },
+    ],
+  },
+  {
+    module: "مواقع العمل",
+    key: "attendance.work_sites",
+    permissions: [
+      { name: "attendance.work_sites.view", label: "عرض مواقع العمل وتعييناتها" },
+      { name: "attendance.work_sites.manage", label: "إدارة مواقع العمل" },
     ],
   },
   {
@@ -221,6 +230,7 @@ export const HONOURED_FROM_SCOPED_GRANT = Object.freeze([
   "attendance.records.view",
   "attendance.records.correct",
   "attendance.records.reject",
+  "attendance.records.approveLocation",
   "approvals.view",
   "approvals.reassign",
   "leave.balances.view",

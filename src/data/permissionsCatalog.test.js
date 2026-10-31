@@ -12,7 +12,7 @@ test("auth.roles.assign is in the catalogue with the server's label", () => {
   // role matrix could not grant it, and the assign card would be unreachable.
   assert.ok(ALL_PERMISSION_NAMES.includes("auth.roles.assign"));
   assert.equal(permissionLabel("auth.roles.assign"), "إسناد الأدوار للمستخدمين");
-  assert.equal(ALL_PERMISSION_NAMES.length, 46);
+  assert.equal(ALL_PERMISSION_NAMES.length, 49);
 });
 
 test("the attendance, approvals and leave permissions are in the catalogue with their labels", () => {
@@ -22,6 +22,9 @@ test("the attendance, approvals and leave permissions are in the catalogue with 
     "attendance.records.view": "عرض سجلات الحضور",
     "attendance.records.correct": "تصحيح انصراف منسي",
     "attendance.records.reject": "رفض سجل حضور",
+    "attendance.records.approveLocation": "اعتماد مراجعة موقع الحضور",
+    "attendance.work_sites.view": "عرض مواقع العمل وتعييناتها",
+    "attendance.work_sites.manage": "إدارة مواقع العمل",
     "approvals.view": "عرض مسارات الاعتماد",
     "approvals.reassign": "إعادة إسناد خطوة اعتماد",
     "leave.types.create": "إضافة نوع إجازة",
@@ -54,6 +57,8 @@ test("the company-only set matches the server's, written out in full", () => {
   // server decides and /auth/me reports.
   const companyOnly = companyOnlyPermissions(ALL_PERMISSION_NAMES).sort();
   assert.deepEqual(companyOnly, [
+    "attendance.work_sites.manage",
+    "attendance.work_sites.view",
     "auth.audit.view",
     "auth.audit.viewValues",
     "auth.roles.create",

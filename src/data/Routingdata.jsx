@@ -43,6 +43,7 @@ const MyLeave = lazy(() => import("../sections/leave/MyLeave"));
 const AttendanceRecords = lazy(() =>
   import("../sections/attendance/AttendanceRecords")
 );
+const WorkSites = lazy(() => import("../sections/attendance/WorkSites"));
 const AttendanceDaily = lazy(() =>
   import("../sections/attendance/AttendanceDaily")
 );
@@ -209,5 +210,11 @@ export const RouteData = [
     path: `${import.meta.env.BASE_URL}hr/employees/import`,
     element: <EmployeeImport />,
     requiredPermissions: ["hr.employees.import"],
+  },
+  {
+    id: 24,
+    path: `${import.meta.env.BASE_URL}attendance/work-sites`,
+    element: <WorkSites />,
+    requiredPermissions: ["attendance.work_sites.view"],
   },
 ];
