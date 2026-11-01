@@ -2,8 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildAssignmentPayload,
+  buildAssignmentEndPayload,
   buildSitePayload,
   canManageSites,
+  damascusInstant,
+  siteToOption,
+  validateAssignmentEnd,
   formatEffectiveTime,
   siteErrorMessage,
   validateAssignmentForm,
@@ -63,8 +67,50 @@ test("site payload uses numbers and dates only for edits", () => {
     latitude: 33.500001,
     longitude: 36.3,
     radius_m: 125,
-    effective_from: "2026-10-31T06:30:00.000Z",
+    effective_from: "2026-10-31T09:30:00+03:00",
   });
+});
+
+test("datetime-local values are Damascus wall clock, whatever the browser's zone", () => {
+  assert.equal(damascusInstant("2026-10-31T09:30"), "2026-10-31T09:30:00+03:00");
+  assert.equal(damascusInstant("2026-10-31T09:30:15"), "2026-10-31T09:30:15+03:00");
+  assert.equal(damascusInstant("2026-10-31T06:30:00Z"), "2026-10-31T06:30:00Z");
+  // 08:59 Damascus is a minute before `now` (09:00 Damascus): refused as past.
+  assert.ok(
+    validateSiteForm(
+      { name: "Plant", latitude: "33.5", longitude: "36.3", radius_m: "100", effective_from: "2026-10-31T08:59" },
+      { editing: true, now }
+    ).effective_from
+  );
+  assert.equal(
+    validateSiteForm(
+      { name: "Plant", latitude: "33.5", longitude: "36.3", radius_m: "100", effective_from: "2026-10-31T09:01" },
+      { editing: true, now }
+    ).effective_from,
+    undefined
+  );
+  assert.deepEqual(
+    buildAssignmentPayload({ employee_id: "7", work_site_id: "3", effective_from: "2026-11-01T08:00" }),
+    { employee_id: 7, work_site_id: 3, effective_from: "2026-11-01T08:00:00+03:00" }
+  );
+});
+
+test("ending an assignment is now or later, after its start, in Damascus time", () => {
+  const from = "2026-10-31T10:00:00+03:00";
+  assert.ok(validateAssignmentEnd("2026-10-31T08:00", from, { now }));
+  assert.ok(validateAssignmentEnd("2026-10-31T09:30", from, { now }));
+  assert.ok(validateAssignmentEnd("", from, { now }));
+  assert.equal(validateAssignmentEnd("2026-10-31T10:30", from, { now }), null);
+  assert.deepEqual(buildAssignmentEndPayload("2026-10-31T10:30"), {
+    effective_to: "2026-10-31T10:30:00+03:00",
+  });
+});
+
+test("site options name the site and mark an archived one", () => {
+  assert.deepEqual(siteToOption({ id: 3, name: "المعمل", is_active: true }), {
+    value: 3, label: "المعمل (#3)", isActive: true,
+  });
+  assert.equal(siteToOption({ id: 4, name: "قديم", is_active: false }).isActive, false);
 });
 
 test("one-employee assignment validates IDs and no backdating", () => {

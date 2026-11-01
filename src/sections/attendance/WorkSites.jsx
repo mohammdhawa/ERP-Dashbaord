@@ -4,15 +4,21 @@ import { Alert, Card, Col, Form, Row, Spinner } from "react-bootstrap";
 import { useSelector } from "react-redux";
 import { PageHeader } from "../../components";
 import DataTableServer from "../../components/DataTableServer";
+import EmployeePicker from "../../components/EmployeePicker";
+import { hasPermission } from "../../data/permissionsCatalog";
 import api from "../../redux/api";
 import { parseApiError } from "../../utils/apiHelpers";
 import { confirmDestructive, toastNotify } from "../../utils";
+import { useResourceOptions } from "../departments/useResourceOptions";
 import WorkSiteFormModal from "./WorkSiteFormModal";
 import {
+  buildAssignmentEndPayload,
   buildAssignmentPayload,
   canManageSites,
   formatEffectiveTime,
   siteErrorMessage,
+  siteToOption,
+  validateAssignmentEnd,
   validateAssignmentForm,
 } from "./workSiteForm";
 
@@ -22,6 +28,12 @@ const dash = <span className="text-muted">—</span>;
 const WorkSites = () => {
   const { permissions } = useSelector((state) => state.auth);
   const canManage = canManageSites(permissions);
+  // The employee picker walks /hr/employees, so it needs hr.employees.view;
+  // without it the field falls back to the internal id, as other screens do.
+  const canPickEmployee = hasPermission(permissions, "hr.employees.view");
+  // Every site, not just the table's page: the assignment form picks from all
+  // active ones, and the filter can name an archived one.
+  const siteLookup = useResourceOptions("/attendance/work-sites", siteToOption);
   const siteRequest = useRef(0);
   const assignmentRequest = useRef(0);
 
@@ -102,6 +114,7 @@ const WorkSites = () => {
       const response = await api.patch(`/attendance/work-sites/${site.id}/archive`);
       toastNotify(response.data.message, "success");
       loadSites();
+      siteLookup.reload();
     } catch (error) {
       setActionError(siteErrorMessage(error));
     }
@@ -133,17 +146,18 @@ const WorkSites = () => {
   const endAssignment = async (event) => {
     event.preventDefault();
     if (!ending || endingBusy) return;
-    const at = new Date(endTime);
-    if (!Number.isFinite(at.getTime()) || at < new Date() || at <= new Date(ending.effective_from)) {
-      setEndError("حدد وقت انتهاء بعد بداية التعيين، الآن أو في المستقبل.");
+    const problem = validateAssignmentEnd(endTime, ending.effective_from);
+    if (problem) {
+      setEndError(problem);
       return;
     }
     setEndingBusy(true);
     setEndError("");
     try {
-      const response = await api.patch(`/attendance/work-site-assignments/${ending.id}`, {
-        effective_to: at.toISOString(),
-      });
+      const response = await api.patch(
+        `/attendance/work-site-assignments/${ending.id}`,
+        buildAssignmentEndPayload(endTime),
+      );
       toastNotify(response.data.message, "success");
       setEnding(null);
       setEndTime("");
@@ -154,6 +168,40 @@ const WorkSites = () => {
       setEndingBusy(false);
     }
   };
+
+  // The employee and site fields of the assignment form and of its filter.
+  // `onChange` always receives an id string, or "" when cleared.
+  const employeeField = (inputId, value, onChange, error) => (
+    <>
+      {canPickEmployee ? (
+        <EmployeePicker inputId={inputId} value={value} onChange={(id) => onChange(id === "" ? "" : String(id))} />
+      ) : (
+        <Form.Control id={inputId} type="number" min="1" value={value} isInvalid={Boolean(error)}
+          onChange={(event) => onChange(event.target.value)} />
+      )}
+      {error && <div className="invalid-feedback d-block">{error}</div>}
+    </>
+  );
+
+  const siteField = (inputId, value, onChange, { activeOnly = false, placeholder, error } = {}) => (
+    <>
+      {siteLookup.error ? (
+        <div role="alert">
+          <div className="text-danger small">{siteLookup.error}</div>
+          <button type="button" className="btn btn-link btn-sm p-0" onClick={siteLookup.reload}>إعادة المحاولة</button>
+        </div>
+      ) : (
+        <Form.Select id={inputId} value={value} isInvalid={Boolean(error)} disabled={siteLookup.loading}
+          onChange={(event) => onChange(event.target.value)}>
+          <option value="">{siteLookup.loading ? "جارٍ التحميل…" : placeholder}</option>
+          {siteLookup.options
+            .filter((option) => !activeOnly || option.isActive)
+            .map((option) => <option key={option.value} value={String(option.value)}>{option.label}</option>)}
+        </Form.Select>
+      )}
+      {error && <div className="invalid-feedback d-block">{error}</div>}
+    </>
+  );
 
   const siteColumns = useMemo(() => [
     { key: "id", label: "الرقم" },
@@ -243,20 +291,20 @@ const WorkSites = () => {
           <Col xs={12}>
             <Card className="custom-card"><Card.Body>
               <h5>تعيين موظف لموقع عمل</h5>
-              <p className="text-muted small">تعيين واحد لكل موظف. استخدم رقم الموظف الداخلي ورقم الموقع من الجدول؛ لا تُستخدم قيمة مكان العمل النصية.</p>
+              <p className="text-muted small">تعيين واحد لكل موظف في أي وقت. لا تُستخدم قيمة مكان العمل النصية في ملف الموظف.</p>
               {assignmentErrors._general && <Alert variant="danger">{assignmentErrors._general}</Alert>}
               <Form onSubmit={assign} noValidate><Row className="g-3 align-items-end">
-                {[
-                  ["employee_id", "رقم الموظف الداخلي"],
-                  ["work_site_id", "رقم موقع العمل"],
-                ].map(([key, label]) => (
-                  <Col xs={12} md={3} key={key}><Form.Group controlId={`assign-${key}`}>
-                    <Form.Label>{label}</Form.Label>
-                    <Form.Control type="number" min="1" value={assignmentForm[key]} isInvalid={Boolean(assignmentErrors[key])}
-                      onChange={(event) => setAssignmentForm((value) => ({ ...value, [key]: event.target.value }))} />
-                    <Form.Control.Feedback type="invalid">{assignmentErrors[key]}</Form.Control.Feedback>
-                  </Form.Group></Col>
-                ))}
+                <Col xs={12} md={3}>
+                  <Form.Label htmlFor="assign-employee_id">{canPickEmployee ? "الموظف" : "رقم الموظف الداخلي"}</Form.Label>
+                  {employeeField("assign-employee_id", assignmentForm.employee_id,
+                    (id) => setAssignmentForm((value) => ({ ...value, employee_id: id })), assignmentErrors.employee_id)}
+                </Col>
+                <Col xs={12} md={3}>
+                  <Form.Label htmlFor="assign-work_site_id">موقع العمل</Form.Label>
+                  {siteField("assign-work_site_id", assignmentForm.work_site_id,
+                    (id) => setAssignmentForm((value) => ({ ...value, work_site_id: id })),
+                    { activeOnly: true, placeholder: "اختر موقع العمل", error: assignmentErrors.work_site_id })}
+                </Col>
                 <Col xs={12} md={4}><Form.Group controlId="assign-effective-from">
                   <Form.Label>سريان التعيين (اختياري؛ الآن افتراضياً)</Form.Label>
                   <Form.Control type="datetime-local" value={assignmentForm.effective_from} isInvalid={Boolean(assignmentErrors.effective_from)}
@@ -276,14 +324,17 @@ const WorkSites = () => {
             <h5>تعيينات مواقع العمل</h5>
             <Form onSubmit={(event) => { event.preventDefault(); setAssignmentPage(1); setActiveFilter(Object.fromEntries(Object.entries(assignmentFilter).filter(([, value]) => value !== ""))); }}>
               <Row className="g-2 align-items-end mb-3">
-                <Col xs={12} md={4}><Form.Group controlId="filter-employee"><Form.Label>رقم الموظف</Form.Label>
-                  <Form.Control type="number" min="1" value={assignmentFilter.employee_id}
-                    onChange={(event) => setAssignmentFilter((value) => ({ ...value, employee_id: event.target.value }))} />
-                </Form.Group></Col>
-                <Col xs={12} md={4}><Form.Group controlId="filter-site"><Form.Label>رقم الموقع</Form.Label>
-                  <Form.Control type="number" min="1" value={assignmentFilter.work_site_id}
-                    onChange={(event) => setAssignmentFilter((value) => ({ ...value, work_site_id: event.target.value }))} />
-                </Form.Group></Col>
+                <Col xs={12} md={4}>
+                  <Form.Label htmlFor="filter-employee">{canPickEmployee ? "الموظف" : "رقم الموظف الداخلي"}</Form.Label>
+                  {employeeField("filter-employee", assignmentFilter.employee_id,
+                    (id) => setAssignmentFilter((value) => ({ ...value, employee_id: id })))}
+                </Col>
+                <Col xs={12} md={4}>
+                  <Form.Label htmlFor="filter-site">موقع العمل</Form.Label>
+                  {siteField("filter-site", assignmentFilter.work_site_id,
+                    (id) => setAssignmentFilter((value) => ({ ...value, work_site_id: id })),
+                    { placeholder: "كل المواقع" })}
+                </Col>
                 <Col xs={12} md={4}><button type="submit" className="btn btn-primary">بحث</button></Col>
               </Row>
             </Form>
@@ -319,7 +370,7 @@ const WorkSites = () => {
 
       <WorkSiteFormModal
         show={modalOpen} site={editingSite} onHide={() => setModalOpen(false)}
-        onSaved={() => { setModalOpen(false); loadSites(); }}
+        onSaved={() => { setModalOpen(false); loadSites(); siteLookup.reload(); }}
       />
     </Fragment>
   );

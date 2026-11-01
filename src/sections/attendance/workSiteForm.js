@@ -1,5 +1,17 @@
+// A <input type="datetime-local"> value («2026-10-31T09:30») carries no zone,
+// and `new Date()` would read it in the browser's own. Effective times are
+// Damascus wall clock, as the server and formatEffectiveTime read them, so the
+// offset is written on explicitly — the same rule as the checkout correction
+// (attendanceParams: `…:00+03:00`). A value that already has a zone is kept.
+export const damascusInstant = (value) => {
+  const text = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) return `${text}:00+03:00`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(text)) return `${text}+03:00`;
+  return text;
+};
+
 const validDate = (value, now) => {
-  const parsed = new Date(value);
+  const parsed = new Date(damascusInstant(value));
   return Number.isFinite(parsed.getTime()) && parsed.getTime() >= now.getTime();
 };
 
@@ -33,7 +45,7 @@ export const buildSitePayload = (fields, { editing = false } = {}) => ({
   latitude: Number(fields.latitude),
   longitude: Number(fields.longitude),
   radius_m: Number(fields.radius_m),
-  ...(editing ? { effective_from: new Date(fields.effective_from).toISOString() } : {}),
+  ...(editing ? { effective_from: damascusInstant(fields.effective_from) } : {}),
 });
 
 export const validateAssignmentForm = (fields, { now = new Date() } = {}) => {
@@ -50,8 +62,28 @@ export const buildAssignmentPayload = (fields) => ({
   employee_id: Number(fields.employee_id),
   work_site_id: Number(fields.work_site_id),
   ...(fields.effective_from
-    ? { effective_from: new Date(fields.effective_from).toISOString() }
+    ? { effective_from: damascusInstant(fields.effective_from) }
     : {}),
+});
+
+/** Ending an assignment: now or later, and after it started. */
+export const validateAssignmentEnd = (value, effectiveFrom, { now = new Date() } = {}) => {
+  const at = new Date(damascusInstant(value));
+  if (!Number.isFinite(at.getTime()) || at < now || at <= new Date(effectiveFrom)) {
+    return "حدد وقت انتهاء بعد بداية التعيين، الآن أو في المستقبل.";
+  }
+  return null;
+};
+
+export const buildAssignmentEndPayload = (value) => ({
+  effective_to: damascusInstant(value),
+});
+
+/** A site in the assignment pickers: «الاسم (#3)», archived ones marked. */
+export const siteToOption = (site) => ({
+  value: site.id,
+  label: `${site.name || "موقع"} (#${site.id})${site.is_active === false ? " — مؤرشف" : ""}`,
+  isActive: site.is_active !== false,
 });
 
 export const formatEffectiveTime = (value) => {
