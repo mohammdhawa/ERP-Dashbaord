@@ -7,19 +7,20 @@ import {
   getEmployeeFormValues,
   recordFieldAccess,
   untouchedSuggestionRejections,
+  validateEmployeeForm,
 } from "./employeePayload.js";
 
 // A server record as a caller with BOTH field grants sees it.
 const fullRecord = () => ({
   id: 9,
-  employee_number: "EMP-00009",
+  employee_number: "582974609",
   first_name: "سامر",
   middle_name: "خالد",
   last_name: "الحلبي",
   gender: 1,
   department_id: 4,
   job_title_id: 2,
-  manager: { id: 3, full_name: "رئيس القسم", employee_number: "EMP-00003" },
+  manager: { id: 3, full_name: "رئيس القسم", employee_number: "582974603" },
   national_id: "01234567890",
   activity_type: 1,
   organizational_grade: 3,
@@ -237,4 +238,38 @@ test("any other rejected field sends the whole bag down the normal path", () => 
 test("no field errors means nothing to retry", () => {
   assert.equal(untouchedSuggestionRejections(undefined, {}), null);
   assert.equal(untouchedSuggestionRejections({}, {}), null);
+});
+
+// ── The number is the Kobo id (backend KOBO_EMPLOYEE_NUMBER_DESIGN.md) ───────
+
+const newPerson = (employee_number) => ({
+  ...emptyEmployeeForm,
+  first_name: "سامر",
+  middle_name: "خالد",
+  last_name: "الحلبي",
+  gender: 1,
+  employee_number,
+});
+
+test("creating, the Kobo id is required", () => {
+  assert.deepEqual(validateEmployeeForm(newPerson("")).employee_number, ["رقم كوبو مطلوب."]);
+});
+
+test("creating, the Kobo id is digits with no leading zero", () => {
+  for (const number of ["EMP-1", "0582974643", "1".repeat(21)]) {
+    assert.deepEqual(validateEmployeeForm(newPerson(number)).employee_number, [
+      "رقم كوبو يتكوّن من أرقام فقط.",
+    ]);
+  }
+  assert.equal(validateEmployeeForm(newPerson("582974643")).employee_number, undefined);
+});
+
+test("creating, the Kobo id is sent", () => {
+  assert.equal(buildEmployeePayload(newPerson("582974643")).employee_number, "582974643");
+});
+
+test("editing never sends the number, even when the form holds one", () => {
+  const payload = editPayload(fullRecord(), { employee_number: "582974644", phone: "0933111222" });
+  assert.equal("employee_number" in payload, false);
+  assert.equal(validateEmployeeForm(getEmployeeFormValues(fullRecord()), { isEdit: true }).employee_number, undefined);
 });

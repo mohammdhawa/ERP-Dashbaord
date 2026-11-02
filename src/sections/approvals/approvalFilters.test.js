@@ -19,12 +19,12 @@ test("the HR list starts on every status, the inbox has no status at all", () =>
 test("a good link is read back whole", () => {
   const f = approvalFiltersFromSearch(
     from(
-      "search=EMP-7&department_id=3&leave_type_ids=2,5&date_from=2026-06-01&date_to=2026-06-30&submitted_from=2026-05-01&submitted_to=2026-05-31&sort=-employee_name"
+      "search=5829746&department_id=3&leave_type_ids=2,5&date_from=2026-06-01&date_to=2026-06-30&submitted_from=2026-05-01&submitted_to=2026-05-31&sort=-employee_name"
     ),
     defaultApprovalFilters()
   );
   assert.deepEqual(f, {
-    search: "EMP-7",
+    search: "5829746",
     department_id: "3",
     leave_type_ids: "2,5",
     date_from: "2026-06-01",

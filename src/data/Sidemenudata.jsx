@@ -100,6 +100,15 @@ export const MENUITEMS = [
         title: "المسميات الوظيفية",
         requiredPermissions: ["hr.job_titles.view"],
       },
+      {
+        path: `${import.meta.env.BASE_URL}hr/employees/import`,
+        type: "link",
+        active: false,
+        selected: false,
+        dirchange: false,
+        title: "استيراد الموظفين",
+        requiredPermissions: ["hr.employees.import"],
+      },
     ],
   },
   {

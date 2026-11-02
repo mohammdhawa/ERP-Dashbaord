@@ -49,7 +49,7 @@ export const bootstrapDone = () => ({ type: "AUTH_BOOTSTRAP_DONE" });
 export const logoutSuccess = () => ({ type: "LOGOUT_SUCCESS" });
 
 // The field is `login`, not `email` (account model, 2026-09-22): it carries an
-// employee number (e.g. EMP-00042) or an email, and the server decides which.
+// employee number (the Kobo id, e.g. 582974643) or an email, and the server decides which.
 // Sending `email` is now a 422 — `login` is required.
 //
 // `device_name` / `platform` (backend 2026-10-10) label this browser's session

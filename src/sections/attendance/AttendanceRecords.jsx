@@ -85,8 +85,8 @@ const columns = [
         <>
           <div>{employee.full_name}</div>
           {employee.employee_number && (
-            <div className="text-muted fs-12" dir="ltr">
-              {employee.employee_number}
+            <div className="text-muted fs-12">
+              <span dir="ltr">{employee.employee_number}</span>
             </div>
           )}
         </>

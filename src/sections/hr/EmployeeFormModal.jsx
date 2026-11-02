@@ -3,6 +3,8 @@ import { Alert, Col, Form, Modal, Nav, Row, Spinner, Tab } from "react-bootstrap
 import { useDispatch, useSelector } from "react-redux";
 import Select from "react-select";
 import { confirmDiscardChanges, toastNotify } from "../../utils";
+import NewAccountModal from "./NewAccountModal";
+import { newAccountNotice } from "./newAccount";
 import {
   createEmployee,
   updateEmployee,
@@ -46,8 +48,8 @@ const {
 // WHY A TABBED MODAL, not a flat column of forty inputs and not a full page:
 // the list already opens this modal from a row, so a full-page form would throw
 // away the page, filters and scroll position the user came from. Seven labelled
-// tabs keep the four required create fields on the first one — a minimal create
-// is four inputs and a save, without scrolling past thirty-six others — while
+// tabs keep the five required create fields on the first one — a minimal create
+// is five inputs and a save, without scrolling past thirty-six others — while
 // still reaching every field. The cost of tabs is that a rejected field can sit
 // on a tab you cannot see, so a 422 lists the tab each error belongs to and the
 // first offending tab is opened automatically.
@@ -255,6 +257,9 @@ const EmployeeFormModal = ({
 }) => {
   const dispatch = useDispatch();
   const { saving } = useSelector((state) => state.employees);
+  // After a create: the new account and its one-time password, shown in place
+  // of the form until «تم».
+  const [createdAccount, setCreatedAccount] = useState(null);
   const { permissions } = useSelector((state) => state.auth);
 
   // FIELD-LEVEL ACCESS. Thirteen inputs hang off these two flags: the twelve
@@ -462,8 +467,9 @@ const EmployeeFormModal = ({
     };
 
     try {
+      let saved;
       try {
-        await save(payload);
+        saved = await save(payload);
       } catch (parsed) {
         // CREATE ONLY: the server refused nothing but pay values a job title
         // suggested and the user never touched — the usual reason being a
@@ -487,7 +493,7 @@ const EmployeeFormModal = ({
           });
           return next;
         });
-        await save(
+        saved = await save(
           buildEmployeePayload(cleared, {
             isEdit,
             canViewSalary,
@@ -504,7 +510,9 @@ const EmployeeFormModal = ({
         );
       }
       onSaved?.();
-      close();
+      const notice = isEdit ? null : newAccountNotice(saved?.account);
+      if (notice) setCreatedAccount(notice);
+      else close();
     } catch (parsed) {
       // Server 422 mapped back by EXACT field name, so each message lands on
       // the input it belongs to rather than in a generic banner.
@@ -564,6 +572,18 @@ const EmployeeFormModal = ({
   const title = isEdit
     ? `تعديل بيانات الموظف: ${employee?.full_name || ""}`
     : "إضافة موظف جديد";
+
+  if (createdAccount) {
+    return (
+      <NewAccountModal
+        notice={createdAccount}
+        onDone={() => {
+          setCreatedAccount(null);
+          close();
+        }}
+      />
+    );
+  }
 
   return (
     <Modal
@@ -640,26 +660,38 @@ const EmployeeFormModal = ({
                     />
                   </Col>
                   <Col sm={12} md={4}>
+                    {/* The fifth required create field: the person's Kobo id
+                        is their number and their login, typed once and never
+                        changed (backend KOBO_EMPLOYEE_NUMBER_DESIGN.md), so on
+                        edit it is shown, not offered. */}
                     <Form.Label htmlFor="emp-employee_number">
-                      الرقم الوظيفي{" "}
-                      <span className="text-muted">
-                        {isEdit ? "(لا يمكن إفراغه)" : "(يُنشأ تلقائياً)"}
-                      </span>
+                      رقم كوبو (الرقم الوظيفي){isEdit ? "" : " *"}
                     </Form.Label>
                     <Form.Control
                       id="emp-employee_number"
                       type="text"
-                      maxLength={50}
+                      inputMode="numeric"
+                      maxLength={20}
                       dir="ltr"
-                      placeholder={
-                        isEdit ? "" : "اتركه فارغاً للإنشاء التلقائي"
-                      }
+                      readOnly={isEdit}
+                      placeholder={isEdit ? "" : "582974643"}
                       value={form.employee_number}
                       onChange={(e) =>
                         setField("employee_number", e.target.value)
                       }
                       isInvalid={!!fieldError("employee_number")}
+                      aria-invalid={!!fieldError("employee_number") || undefined}
+                      aria-describedby={
+                        fieldError("employee_number")
+                          ? errorId("employee_number")
+                          : undefined
+                      }
                     />
+                    {isEdit && (
+                      <div className="text-muted small mt-1">
+                        لا يتغيّر بعد الإنشاء.
+                      </div>
+                    )}
                     <Err field="employee_number" />
                   </Col>
                   {canViewIdentity && (

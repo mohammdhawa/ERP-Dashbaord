@@ -331,13 +331,10 @@ export const buildEmployeePayload = (values, options = {}) => {
   // اللقب (backend 2026-10-14): identity, not gated.
   setNullableStr("nickname", values.nickname);
 
-  // The ONE staff number since 2026-09-23 — `legacy_number` is gone, and a
-  // paper-file M024333 is stored here exactly as typed.
-  //
-  // Omitted when blank in BOTH directions: on create that is what triggers
-  // EMP-00001 generation; on update the rule is `filled`, so it cannot be
-  // cleared and a blank box must not try.
-  setOmittableStr("employee_number", values.employee_number);
+  // The number is the person's Kobo id (backend KOBO_EMPLOYEE_NUMBER_DESIGN.md):
+  // typed once at creation, never changed after — so an edit never sends it,
+  // whatever the box holds.
+  if (!isEdit) setOmittableStr("employee_number", values.employee_number);
 
   // ---- البيانات الشخصية ---------------------------------------------------
   setOmittableNum("gender", values.gender);
@@ -500,6 +497,9 @@ function identityBlock(values) {
 // Client-side mirror of the documented cross-field rules, so the common
 // mistakes are caught before the request. The server still decides: a 422 is
 // mapped back by exact field name, and these messages match its wording.
+// The Kobo id: digits, no leading zero, at most 20 — the backend's create rule.
+const KOBO_NUMBER = /^[1-9]\d{0,19}$/;
+
 export const validateEmployeeForm = (values, options = {}) => {
   const { isEdit = false, canViewSalary = false, canViewIdentity = false } =
     options;
@@ -510,10 +510,11 @@ export const validateEmployeeForm = (values, options = {}) => {
     if (!str(values.middle_name)) errors.middle_name = ["اسم الأب مطلوب."];
     if (!str(values.last_name)) errors.last_name = ["الكنية مطلوبة."];
     if (isBlank(values.gender)) errors.gender = ["الجنس مطلوب."];
-  } else if (isEdit && str(values.employee_number) === "") {
-    // `filled` on update: present-but-empty is rejected. We omit it instead,
-    // but tell the user their edit will not clear it.
-    errors.employee_number = ["لا يمكن إفراغ الرقم الوظيفي بعد إنشائه."];
+    const number = str(values.employee_number);
+    if (number === "") errors.employee_number = ["رقم كوبو مطلوب."];
+    else if (!KOBO_NUMBER.test(number)) {
+      errors.employee_number = ["رقم كوبو يتكوّن من أرقام فقط."];
+    }
   }
 
   if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(values.email))

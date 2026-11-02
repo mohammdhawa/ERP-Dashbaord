@@ -50,18 +50,26 @@ export const EVENT_META = Object.freeze({
   // --- request group: written by AuditLogMiddleware, once per authenticated
   // request. Muted, and hidden by default on the list — see AuditLogFilters.
   api_request: M("request", "muted"),
+
+  // --- hr group: actions over many employees at once (backend 2026-10-22) —
+  // the upload import's check and its real run. The rows the real run writes
+  // appear separately, under the model group.
+  employees_import_checked: M("hr", "muted"),
+  employees_import_excluded: M("hr", "muted"),
+  employees_import_executed: M("hr", "primary"),
 });
 
-// The three groups the `event_group` filter accepts, CSV-joined. THE SINGLE
+// The groups the `event_group` filter accepts, CSV-joined. THE SINGLE
 // SOURCE OF THE LIST: AuditLog derives the two group sets the api_request
 // switch chooses between from it, and AuditLogFilters groups its event picker
 // by it. A second copy is a second thing to forget when the backend adds a
 // fourth group.
-export const EVENT_GROUPS = Object.freeze(["model", "auth", "request"]);
+export const EVENT_GROUPS = Object.freeze(["model", "auth", "hr", "request"]);
 
 export const EVENT_GROUP_LABELS = Object.freeze({
   model: "تغييرات السجلات",
   auth: "المصادقة والصلاحيات",
+  hr: "الموارد البشرية",
   request: "طلبات الواجهة البرمجية",
 });
 
@@ -86,6 +94,9 @@ export const EVENT_FALLBACK_LABELS = Object.freeze({
   role_assigned: "إسناد دور",
   role_unassigned: "سحب دور",
   api_request: "طلب واجهة برمجية",
+  employees_import_checked: "فحص ملف استيراد الموظفين",
+  employees_import_excluded: "استبعاد سطور من استيراد الموظفين",
+  employees_import_executed: "استيراد الموظفين من ملف",
 });
 
 /**

@@ -132,7 +132,9 @@ export const createEmployee =
       dispatch(saveEmployeeSuccess());
       toastNotify(response.data.message, "success");
       dispatch(fetchEmployees(currentPage, perPage, filters));
-      return response.data.data;
+      // The account the server made with the employee rides beside `data`,
+      // its temporary password shown this once (EMPLOYEE_ACCOUNT_ON_CREATE_DESIGN.md).
+      return { employee: response.data.data, account: response.data.account ?? null };
     } catch (error) {
       const parsed = parseApiError(error);
       dispatch(saveEmployeeFailure(parsed.message));

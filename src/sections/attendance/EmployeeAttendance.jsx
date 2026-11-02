@@ -14,6 +14,7 @@ import { toastNotify } from "../../utils";
 import { formatAbsolute } from "../system/auditFormat";
 import CorrectCheckoutModal from "./actions/CorrectCheckoutModal";
 import CountedNote from "./CountedNote";
+import { refusedCheckInsLine } from "./rejectionText";
 import { todayInDamascus } from "./recordFilters";
 import ExcuseFormModal from "../leave/actions/ExcuseFormModal";
 import UndoExcuseModal from "../leave/actions/UndoExcuseModal";
@@ -86,6 +87,9 @@ const Details = ({ day }) => {
             </span>
           )}
           {rejection.note && <div className="text-muted">{rejection.note}</div>}
+          {refusedCheckInsLine(rejection) && (
+            <div className="text-danger">{refusedCheckInsLine(rejection)}</div>
+          )}
         </div>
       )}
       {correction && (
