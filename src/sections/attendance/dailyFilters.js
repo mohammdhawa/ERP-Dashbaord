@@ -57,3 +57,20 @@ export const toDailyQuery = (f) => {
 };
 
 export const dateIsValid = (f) => isDate(f.date);
+
+// The overview omits `present` because it repeats checked-in and checked-out
+// rows. When that summary tile is selected, the server's combined list is the
+// only section shown.
+export const visibleDailySections = (sections, board, selectedTile) => {
+  if (!board) return [];
+  if (selectedTile === "present") {
+    return board.present?.length
+      ? [{ bucket: "present", title: "الحاضرون", kind: "attendance" }]
+      : [];
+  }
+  return sections.filter(
+    (section) =>
+      (!selectedTile || section.bucket === selectedTile) &&
+      (board[section.bucket] || []).length > 0
+  );
+};

@@ -5,6 +5,7 @@ import {
   dateIsValid,
   defaultDailyFilters,
   toDailyQuery,
+  visibleDailySections,
 } from "./dailyFilters.js";
 import {
   ABSENT_SORT_KEYS,
@@ -77,4 +78,29 @@ test("another one-day list reads the URL through its own sort vocabulary", () =>
   assert.equal(read("sort=work_hours").sort, "");
   // ...and the other way round on the board itself.
   assert.equal(from("sort=employee_number").sort, "");
+});
+
+test("daily summary selection shows only the matching populated sections", () => {
+  const sections = [
+    { bucket: "checked_in" },
+    { bucket: "checked_out" },
+    { bucket: "missing_checkout" },
+    { bucket: "rejected" },
+  ];
+  const board = {
+    checked_in: [{ id: 1 }],
+    checked_out: [{ id: 2 }],
+    present: [{ id: 1 }, { id: 2 }],
+    missing_checkout: [{ id: 3 }],
+    rejected: [],
+  };
+  const buckets = (selection) =>
+    visibleDailySections(sections, board, selection).map((s) => s.bucket);
+
+  assert.deepEqual(buckets(null), [
+    "checked_in", "checked_out", "missing_checkout",
+  ]);
+  assert.deepEqual(buckets("present"), ["present"]);
+  assert.deepEqual(buckets("missing_checkout"), ["missing_checkout"]);
+  assert.deepEqual(buckets("rejected"), []);
 });
