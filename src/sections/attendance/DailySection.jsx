@@ -1,6 +1,7 @@
 import React from "react";
 import { Card } from "react-bootstrap";
 import { formatAbsolute, parseServerTimestamp } from "../system/auditFormat";
+import { refusedCheckInsLine } from "./rejectionText";
 
 // One bucket of the daily board (API doc §14.1) as a table. The board is not
 // paged and every bucket is sorted by the server, so this only draws rows and
@@ -118,6 +119,9 @@ const Details = ({ row }) => {
             </span>
           )}
           {rejection.note && <div className="text-muted">{rejection.note}</div>}
+          {refusedCheckInsLine(rejection) && (
+            <div className="text-danger">{refusedCheckInsLine(rejection)}</div>
+          )}
         </div>
       )}
     </div>
