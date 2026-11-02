@@ -1,4 +1,4 @@
-import React, {
+import {
   Fragment,
   Suspense,
   lazy,
@@ -26,6 +26,7 @@ import {
   dateIsValid,
   defaultDailyFilters,
   toDailyQuery,
+  visibleDailySections,
 } from "./dailyFilters";
 import undoRejection from "./actions/undoRejection";
 
@@ -41,8 +42,8 @@ const ExcuseFormModal = lazy(() => import("../leave/actions/ExcuseFormModal"));
 // response may write it (a date changed while a read is in flight must not be
 // overwritten by the older answer).
 //
-// `present` (checked_in + checked_out) is a tile only: drawing it as a section
-// would list every present employee twice. The buckets are otherwise disjoint.
+// `present` (checked_in + checked_out) is shown only when its tile is selected;
+// drawing it in the overview would list every present employee twice.
 // Every action re-reads the board — refusing a check-in takes that day's
 // check-out with it, and undoing it brings the whole decision back.
 
@@ -84,6 +85,7 @@ const AttendanceDaily = () => {
   const [filters, setFilters] = useState(() =>
     dailyFiltersFromSearch((key) => searchParams.get(key), defaults)
   );
+  const [selectedTile, setSelectedTile] = useState(null);
 
   // The URL is written back as well as read, so the view survives a refresh
   // and the back button; `replace` stops typing from stacking history.
@@ -99,7 +101,10 @@ const AttendanceDaily = () => {
   }, [filters]);
 
   const handleFilterChange = (patch) => setFilters((prev) => ({ ...prev, ...patch }));
-  const handleFilterReset = () => setFilters({ ...defaults });
+  const handleFilterReset = () => {
+    setFilters({ ...defaults });
+    setSelectedTile(null);
+  };
 
   // An empty or impossible date is never requested: the server would answer
   // with TODAY's board under a date field that says otherwise.
@@ -191,9 +196,7 @@ const AttendanceDaily = () => {
     undoExcuse: setUndoing,
   };
 
-  const shown = board
-    ? SECTIONS.filter((s) => (board[s.bucket] || []).length > 0)
-    : [];
+  const shown = visibleDailySections(SECTIONS, board, selectedTile);
   const anyOpen =
     selfieId || rejecting || correcting || returning || undoing || excuseOpen;
 
@@ -251,7 +254,27 @@ const AttendanceDaily = () => {
               <Row className="g-2 mb-3">
                 {TILES.map((tile) => (
                   <Col key={tile.key} xs={6} md={4} xl>
-                    <Card className="custom-card mb-0 h-100">
+                    <Card
+                      as="button"
+                      type="button"
+                      className="custom-card mb-0 h-100 w-100"
+                      style={{
+                        cursor: "pointer",
+                        textAlign: "start",
+                        font: "inherit",
+                        outline:
+                          selectedTile === tile.key
+                            ? "2px solid var(--primary-color)"
+                            : undefined,
+                        outlineOffset: "-2px",
+                      }}
+                      aria-pressed={selectedTile === tile.key}
+                      onClick={() =>
+                        setSelectedTile((current) =>
+                          current === tile.key ? null : tile.key
+                        )
+                      }
+                    >
                       <Card.Body className="py-3">
                         <div className="text-muted fs-12">{tile.title}</div>
                         <div className={`fs-22 fw-semibold text-${tile.tone}`}>
