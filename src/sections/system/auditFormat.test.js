@@ -186,7 +186,7 @@ test("auditable keys are the server's morph aliases, not shorter synonyms", () =
   assert.ok(!isKnownAuditableType("warning"));
 });
 
-test("all current morph aliases are present, and only those", () => {
+test("all nine morph aliases from API doc §9.1 are present, and only those", () => {
   // THE SERVER HAS A TEST FOR ITS OWN MAPS (AuditTargetStubTest); NOTHING
   // GUARDS THIS COPY. employee_document was missing here for the whole first
   // release — inherited from a work-order parameter table that omitted it —
@@ -196,20 +196,15 @@ test("all current morph aliases are present, and only those", () => {
   // no وثيقة موظف option to offer. Pin the whole set, sorted, so a future
   // omission fails here instead of going unnoticed again.
   assert.deepEqual([...AUDITABLE_TYPES].sort(), [
-    "attendance_location_review",
-    "attendance_record",
     "department",
     "employee",
     "employee_assignment",
     "employee_document",
     "employee_warning",
-    "employee_work_site_assignment",
     "job_title",
     "permission",
     "role",
     "user",
-    "work_site",
-    "work_site_version",
   ]);
 });
 

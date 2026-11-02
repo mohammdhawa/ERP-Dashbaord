@@ -1,5 +1,4 @@
-/* eslint-disable react/prop-types */
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Col, Form, Row } from "react-bootstrap";
 import { useSelector } from "react-redux";
 import SortableTh from "../../components/SortableTh";
@@ -15,7 +14,6 @@ import { toastNotify } from "../../utils";
 import { formatAbsolute } from "../system/auditFormat";
 import CorrectCheckoutModal from "./actions/CorrectCheckoutModal";
 import CountedNote from "./CountedNote";
-import LocationReviewEvidence from "./LocationReviewEvidence";
 import { todayInDamascus } from "./recordFilters";
 import ExcuseFormModal from "../leave/actions/ExcuseFormModal";
 import UndoExcuseModal from "../leave/actions/UndoExcuseModal";
@@ -414,8 +412,8 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                                 <div className="text-muted fs-12">{d.leave_type}</div>
                               )}
                             </td>
-                            <td>{time(d.check_in_time)}{d.check_in_id && <div className="mt-1"><LocationReviewEvidence review={d.check_in_location_review} compact /></div>}</td>
-                            <td>{time(d.check_out_time)}{d.check_out_time && <div className="mt-1"><LocationReviewEvidence review={d.check_out_location_review} compact /></div>}</td>
+                            <td>{time(d.check_in_time)}</td>
+                            <td>{time(d.check_out_time)}</td>
                             <td>
                               {d.work_hours_formatted ? (
                                 <span dir="ltr">{d.work_hours_formatted}</span>

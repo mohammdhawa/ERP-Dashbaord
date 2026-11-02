@@ -166,15 +166,6 @@ export const MENUITEMS = [
     requiredPermissions: [],
     children: [
       {
-        path: `${import.meta.env.BASE_URL}attendance/work-sites`,
-        type: "link",
-        active: false,
-        selected: false,
-        dirchange: false,
-        title: "مواقع العمل",
-        requiredPermissions: ["attendance.work_sites.view"],
-      },
-      {
         path: `${import.meta.env.BASE_URL}attendance/records`,
         type: "link",
         active: false,

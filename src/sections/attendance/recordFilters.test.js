@@ -144,18 +144,3 @@ test("URL: employee_id=0, department_id=0 and over-long ids are dropped", () => 
   assert.equal(from("employee_id=007&department_id=123456789012").employee_id, "");
   assert.equal(from("department_id=12").department_id, "12");
 });
-
-test("open review mode omits the day, survives the URL, and guards approved conflict", () => {
-  const base = defaultRecordFilters(NOW);
-  const open = { ...base, mode: "open", location_review_status: "for_review" };
-  assert.equal(dateProblem(open), null);
-  const query = buildRecordsParams(1, 15, toQueryFilters(open), NOW);
-  assert.equal(query.date, undefined);
-  assert.equal(query.open_location_review, "1");
-  assert.equal(query.location_review_status, "for_review");
-  const parsed = from("mode=open&location_review_status=in_process");
-  assert.equal(parsed.mode, "open");
-  assert.equal(parsed.location_review_status, "in_process");
-  const conflict = from("mode=open&location_review_status=approved");
-  assert.equal(toQueryFilters(conflict).location_review_status, undefined);
-});

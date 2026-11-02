@@ -188,11 +188,6 @@ export const AUDITABLE_META = Object.freeze({
   // inside an employee profile tab and the audit row carries only the
   // document's own id, so there is no URL that opens it.
   employee_document: { label: "وثيقة موظف", route: null },
-  attendance_record: { label: "سجل حضور", route: () => "attendance/records" },
-  attendance_location_review: { label: "مراجعة موقع حضور", route: () => "attendance/records" },
-  work_site: { label: "موقع عمل", route: () => "attendance/work-sites" },
-  work_site_version: { label: "نسخة موقع عمل", route: () => "attendance/work-sites" },
-  employee_work_site_assignment: { label: "تعيين موقع عمل", route: () => "attendance/work-sites" },
 });
 
 export const AUDITABLE_TYPES = Object.freeze(Object.keys(AUDITABLE_META));
@@ -240,11 +235,6 @@ const VALUES_PERMISSIONS_BY_TYPE = Object.freeze({
   // Permissions have no screen of their own; they are managed inside roles,
   // and the roles read permission is what governs them server-side too.
   permission: Object.freeze(["auth.roles.view"]),
-  attendance_record: Object.freeze(["attendance.records.view"]),
-  attendance_location_review: Object.freeze(["attendance.records.view"]),
-  work_site: Object.freeze(["attendance.work_sites.view"]),
-  work_site_version: Object.freeze(["attendance.work_sites.view"]),
-  employee_work_site_assignment: Object.freeze(["attendance.work_sites.view"]),
 });
 
 /**
