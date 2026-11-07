@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  approverBalanceView,
   cancellationView,
   leaveActions,
   leaveStatusText,
   skipNote,
   reassignableSteps,
   refreshAfterRefusal,
+  requesterRoleLine,
   stagesOf,
   subjectPath,
 } from "./approvalView.js";
@@ -158,4 +160,61 @@ test("leaveStatusText: the lists name a withdrawal «مسحوب»", () => {
     leaveStatusText({ status: 2, status_label: "معتمدة", approval: null }),
     "معتمدة"
   );
+});
+
+// approver_view (API doc §16.4): only someone on the chain receives it.
+const view = (over) => ({
+  job_title: { id: 4, name: "مصمم واجهات" },
+  department: { id: 120, name: "قسم تطوير البرمجيات" },
+  balance: null,
+  ...over,
+});
+
+test("requesterRoleLine joins the job and the unit, whichever there is", () => {
+  assert.equal(requesterRoleLine(view()), "مصمم واجهات · قسم تطوير البرمجيات");
+  assert.equal(requesterRoleLine(view({ department: null })), "مصمم واجهات");
+  assert.equal(requesterRoleLine(view({ job_title: null })), "قسم تطوير البرمجيات");
+  assert.equal(requesterRoleLine(view({ job_title: null, department: null })), null);
+});
+
+test("requesterRoleLine is nothing for a reader off the chain", () => {
+  assert.equal(requesterRoleLine(undefined), null);
+  assert.equal(requesterRoleLine(null), null);
+});
+
+test("approverBalanceView reads what is left after the request", () => {
+  const b = approverBalanceView(
+    view({ balance: { year: 2026, remaining_days: 15, after_request: 12 } })
+  );
+  assert.deepEqual(b, { text: "15 يوماً ← يتبقى 12", over: false });
+});
+
+test("approverBalanceView says by how much a request passes the balance", () => {
+  const b = approverBalanceView(
+    view({ balance: { year: 2026, remaining_days: 12, after_request: -3 } })
+  );
+  assert.deepEqual(b, { text: "12 يوماً ← يتجاوز الرصيد بـ 3 أيام", over: true });
+});
+
+test("approverBalanceView: a balance used up exactly is not over it", () => {
+  const b = approverBalanceView(
+    view({ balance: { year: 2026, remaining_days: 3, after_request: 0 } })
+  );
+  assert.deepEqual(b, { text: "3 أيام ← يتبقى 0", over: false });
+});
+
+test("approverBalanceView words one and two days", () => {
+  assert.equal(
+    approverBalanceView(view({ balance: { year: 2026, remaining_days: 1, after_request: 0 } })).text,
+    "يوم واحد ← يتبقى 0"
+  );
+  assert.equal(
+    approverBalanceView(view({ balance: { year: 2026, remaining_days: 2, after_request: -1 } })).text,
+    "يومان ← يتجاوز الرصيد بـ يوم واحد"
+  );
+});
+
+test("approverBalanceView is nothing without a balance or a view", () => {
+  assert.equal(approverBalanceView(view()), null);
+  assert.equal(approverBalanceView(undefined), null);
 });

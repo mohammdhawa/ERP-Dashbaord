@@ -104,3 +104,33 @@ export const cancellationView = (leave) => {
 // tell a withdrawal from HR's cancellation, as the request screen does).
 export const leaveStatusText = (leave) =>
   cancellationView(leave)?.badge ?? leave?.status_label;
+
+// A day count with Arabic number agreement, as the employee app words it.
+const daysText = (n) => {
+  if (n === 1) return "يوم واحد";
+  if (n === 2) return "يومان";
+  if (n >= 3 && n <= 10) return `${n} أيام`;
+  return `${n} يوماً`;
+};
+
+// The requester's job and unit from the leave's approver_view (API doc §16.4):
+// "<job> · <unit>", whichever of them there is. The server sends the view only
+// to someone on the chain, so anyone else gets null and the line stays out.
+export const requesterRoleLine = (view) => {
+  const parts = [view?.job_title?.name, view?.department?.name].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+};
+
+// The requester's balance around this leave, from the same view: what is left
+// after it, or by how much it passes the balance. after_request is not clamped
+// (pending requests reserve nothing), so it can go below zero. null when the
+// leave does not deduct, once it is decided, or for a reader off the chain.
+export const approverBalanceView = (view) => {
+  const balance = view?.balance;
+  if (!balance) return null;
+  const remaining = daysText(balance.remaining_days);
+  const after = balance.after_request;
+  return after < 0
+    ? { text: `${remaining} ← يتجاوز الرصيد بـ ${daysText(-after)}`, over: true }
+    : { text: `${remaining} ← يتبقى ${after}`, over: false };
+};
