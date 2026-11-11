@@ -525,6 +525,19 @@ These journeys are the final release gate. They intentionally cross modules and 
 | E2E-011 | Start with an authorized page open in two tabs; remove the user’s role in an admin session and retry navigation/mutation in both tabs. | Both tabs converge on revoked access, no stale mutation completes, and logout/session coordination remains stable. |
 | E2E-012 | Run E2E-001 through E2E-004 on desktop light theme, then recheck key views at 390 px dark theme using keyboard only. | The same business outcomes remain possible and readable across theme, viewport, and input method. |
 
+### 18.1 Work shifts and schedules (added 2026-11-10)
+
+Accounts for these: an HR account holding `scheduling.view` and `scheduling.manage` (call it `A-SHIFTS`); a guards' direct manager whose guards are on a cycle schedule (`A-GUARD-MANAGER`); and a view-only account with `scheduling.view` only. Data: at least three active guards under that manager (and a few office staff), one active shift `GUARD` (08:00, 1440 minutes), and one approved exchange that has not started and one that has, prepared by the environment owner.
+
+| ID | Journey and steps | Expected result |
+|---|---|---|
+| E2E-013 | As `A-SHIFTS`, open «الورديات والجداول» → الورديات and create `GUARD` (08:00, 1440 minutes). Open الجداول and create a cycle schedule of 6 days: day 1 `GUARD`, day 2 `GUARD`, day 3 `GUARD`, days 4–6 «راحة». Open التقويم, filter the guards' unit, tick the guards (or choose everyone in the filtered unit), press «إسناد جدول», choose the schedule, a `from_date` of today or later and a cycle start date, and submit. | Both modals close or end on a result table; the bulk table lists each person as assigned or refused with the server's reason; the calendar reloads and shows the guards on `GUARD` for three days then «راحة». A weekly schedule would show no cycle start date field. The schedule's editor refuses a fourth back-to-back shift with the server's message. |
+| E2E-014 | As `A-SHIFTS` on التقويم, click a future day of one guard, choose a shift (or «يوم راحة»), enter a reason, and save. Then shift-click a second day in the same row and change the range. Then click a past day of a guard who has a check-in and change it. Then open «تعديل الوردية» and press save without choosing a shift. | The future day turns amber (a change) with the new shift or «راحة»; the range changes all its days or none (a 422 shows in the modal and nothing is written); a second row, or a range over 31 days, is refused with a message before any request. The past-day dialog says the check-ins will be matched again and the employee is not told; after saving, the guard's attendance record follows the new shift. The page reloads from the server each time. With no shift chosen the save button stays disabled (the select shows «اختر الوردية…», never «يوم راحة»). |
+| E2E-015 | As `A-SHIFTS`, open a day that has an HR change (calendar cell or the profile's «الجدول» tab) and press «إزالة»; confirm. Then open a day that comes from an exchange. | The change is removed after the confirmation and the day falls back to the schedule's shift; if removing would leave a run of more than six shifts, the server's refusal shows as it comes. The exchange's day opens read-only with a link to `scheduling/swaps?swap=…` and no remove button. |
+| E2E-016 | As `A-SHIFTS`, open الورديات والجداول → التبديلات, filter by status, employee and dates, open the approved exchange that has not started, press «إلغاء التبديل», enter a reason, and confirm. Try the same on the one that has started. | The not-started exchange is cancelled: its status label changes, why and when it was cancelled show in its detail, and both guards' days return to their schedules. The started one offers no cancel button (or the server's refusal shows). A view-only account sees no cancel button. |
+| E2E-017 | A guard files an exchange in the app (or the environment owner prepares a pending one). As `A-GUARD-MANAGER`, follow the bell notification, which opens the inbox filtered to exchanges; open the row; read both names and duties; press «موافقة». Repeat with another pending exchange using the reject and reassign actions. | The notification opens `approvals?subject_type=shift_swap`; the row opens `approvals/:id` showing the subject's title and summary, the chain and the status; approval redraws the screen from the server's answer and the exchange appears approved in `A-SHIFTS`' list and on the calendar as a swap (blue) for both guards. There is no withdraw button on this screen. A refusal at approval (a rule that no longer holds) shows the server's message. |
+| E2E-018 | As `A-SHIFTS`, try to: change a day inside a recorded duty; change a shift's time while a schedule uses it; delete a shift in use; edit the default schedule's days; end or delete a schedule span the server will not accept. | Each shows the server's own Arabic message inside the open modal (or as a toast on a network failure), the modal keeps what was typed, nothing is written, and the screen reloads unchanged. A 403 on any of these screens for a user without the permission is the usual refusal panel, and write buttons are absent without `scheduling.manage`. |
+
 ## 19. Release completion and traceability
 
 A release candidate is not manually approved until:
@@ -554,6 +567,7 @@ A release candidate is not manually approved until:
 | Audit | AUD-001–AUD-036 |
 | Accessibility/resilience/browser safety | QUAL-001–QUAL-020 |
 | Cross-module release journeys | E2E-001–E2E-012 |
+| Work shifts and schedules | E2E-013–E2E-018 |
 
 ### Exact route inventory
 
@@ -568,6 +582,11 @@ A release candidate is not manually approved until:
 | `/roles` | `auth.roles.view` | ROLE-001–ROLE-015, GRANT-001–GRANT-020 |
 | `/audit-log` | `auth.audit.view` | AUD-001–AUD-036 |
 | `/notifications` | Authenticated; owner-scoped | NOTIF-001–NOTIF-014 |
+| `/scheduling/calendar` | `scheduling.view` (writes: `scheduling.manage`) | E2E-013–E2E-015, E2E-018 |
+| `/scheduling/shifts` | `scheduling.view` (writes: `scheduling.manage`) | E2E-013, E2E-018 |
+| `/scheduling/schedules` | `scheduling.view` (writes: `scheduling.manage`) | E2E-013, E2E-018 |
+| `/scheduling/swaps` | `scheduling.view` (cancel: `scheduling.manage`) | E2E-016 |
+| `/approvals/:id` | Authenticated; the server decides who may read it (on the chain, or `approvals.view`) and the approval's `can_*` flags decide the actions | E2E-017 |
 
 ### Exact permission catalogue checklist
 
@@ -584,6 +603,7 @@ For each row, verify the role matrix label, whether the user can see the related
 | Users | `auth.users.view`, `auth.users.create`, `auth.users.update`, `auth.users.delete` |
 | Roles | `auth.roles.view`, `auth.roles.create`, `auth.roles.update`, `auth.roles.delete`, `auth.roles.assign` |
 | Audit | `auth.audit.view`, `auth.audit.viewValues` |
+| Scheduling | `scheduling.view`, `scheduling.manage` |
 
-**Total:** 319 unique executable manual scenarios, all initiated and judged through the dashboard UI.
+**Total:** 325 unique executable manual scenarios, all initiated and judged through the dashboard UI.
 <!-- End of manual test pack. -->

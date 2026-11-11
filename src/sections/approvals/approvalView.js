@@ -13,10 +13,16 @@ const SKIP_TOP_OF_TREE = 5;
 const ORIGIN_REQUEST = 1;
 const ORIGIN_EXCUSE = 2;
 
-// Where an approval's subject lives, BASE_URL-relative. Only leave requests are
-// reachable from this dashboard; any other subject type has no screen to open.
-export const subjectPath = (subject) =>
-  subject?.type === "leave_request" ? `leave/requests/${subject.id}` : null;
+// Where an approval's subject lives, BASE_URL-relative. A leave request opens
+// its own screen; a shift exchange opens the general approval screen, which is
+// addressed by the APPROVAL's id (the inbox row's approval_id, the list row's
+// id), not the exchange's. Any other subject type has no screen to open.
+export const subjectPath = (subject, approvalId) => {
+  if (subject?.type === "leave_request") return `leave/requests/${subject.id}`;
+  if (subject?.type === "shift_swap" && approvalId)
+    return `approvals/${approvalId}`;
+  return null;
+};
 
 // Steps grouped by step_order, ascending. Steps that share an order run in
 // parallel, so they belong to one stage.

@@ -52,6 +52,20 @@ test("an approval step on a leave request opens that request", () => {
   assert.equal(destinationOf(n("approval.step_assigned", leave)), "leave/requests/9");
 });
 
+test("an approval step on a shift exchange opens the inbox filtered to exchanges", () => {
+  const swap = { type: "shift_swap", id: 5 };
+
+  assert.equal(
+    destinationOf(n("approval.step_pending", swap)),
+    "approvals?subject_type=shift_swap"
+  );
+  assert.equal(
+    destinationOf(n("approval.step_assigned", swap)),
+    "approvals?subject_type=shift_swap"
+  );
+  assert.equal(destinationOf(n("shift_swap.approved", swap)), null);
+});
+
 test("an approval step on any other request has no screen yet, so the full text", () => {
   const document = { type: "document", id: 3 };
 

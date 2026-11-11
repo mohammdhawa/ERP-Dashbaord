@@ -94,6 +94,14 @@ export const PERMISSIONS_CATALOG = [
     ],
   },
   {
+    module: "الورديات والجداول",
+    key: "scheduling",
+    permissions: [
+      { name: "scheduling.view", label: "عرض الورديات والجداول" },
+      { name: "scheduling.manage", label: "إدارة الورديات والجداول" },
+    ],
+  },
+  {
     // The approve and reject buttons need no permission: the step's owner acts
     // on their own step in the approval chain. These two are for seeing chains
     // and moving a step to someone else.

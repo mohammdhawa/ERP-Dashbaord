@@ -27,6 +27,9 @@ export const LIST_SORT_KEYS = Object.freeze([
 // 4 cancelled (withdrawn by the requester).
 export const APPROVAL_STATUSES = Object.freeze(["1", "2", "3", "4"]);
 
+// What an approval is about (§15.2 `subject_type`): the request-type filter.
+export const SUBJECT_TYPES = Object.freeze(["leave_request", "shift_swap"]);
+
 const DATE_KEYS = ["date_from", "date_to", "submitted_from", "submitted_to"];
 
 const textParam = (value) => String(value ?? "").trim();
@@ -52,6 +55,8 @@ const addFilters = (params, f) => {
   if (search !== "") params.search = search;
   const department = textParam(f.department_id);
   if (isPositiveId(department)) params.department_id = department;
+  const subjectType = textParam(f.subject_type);
+  if (SUBJECT_TYPES.includes(subjectType)) params.subject_type = subjectType;
   const types = csvOf(f.leave_type_ids, isPositiveId);
   if (types) params.leave_type_ids = types;
   for (const key of DATE_KEYS) {

@@ -1,4 +1,4 @@
-import React, {
+import {
   Fragment,
   Suspense,
   lazy,
@@ -24,6 +24,7 @@ import EmployeeAssignments from "./EmployeeAssignments";
 import EmployeeWarnings from "./EmployeeWarnings";
 import AuditTrail from "../system/AuditTrail";
 import EmployeeAttendance from "../attendance/EmployeeAttendance";
+import EmployeeSchedule from "../scheduling/EmployeeSchedule";
 import {
   initialTabFromQuery,
   windowFromQuery,
@@ -55,6 +56,7 @@ const EmployeeProfile = () => {
   const canViewWarnings = hasPermission(permissions, "hr.warnings.view");
   const canViewAudit = hasPermission(permissions, "auth.audit.view");
   const canViewAttendance = hasPermission(permissions, "attendance.records.view");
+  const canViewScheduling = hasPermission(permissions, "scheduling.view");
 
   const [searchParams] = useSearchParams();
   const [editOpen, setEditOpen] = useState(false);
@@ -85,6 +87,7 @@ const EmployeeProfile = () => {
         },
         { key: "warnings", title: "الإنذارات", show: canViewWarnings },
         { key: "attendance", title: "الحضور", show: canViewAttendance },
+        { key: "schedule", title: "الجدول", show: canViewScheduling },
         {
           // Read-only history of this employee's record. Gated on
           // auth.audit.view like every other tab gates on its own permission:
@@ -94,7 +97,13 @@ const EmployeeProfile = () => {
           show: canViewAudit,
         },
       ].filter((t) => t.show),
-    [canViewAssignments, canViewWarnings, canViewAudit, canViewAttendance]
+    [
+      canViewAssignments,
+      canViewWarnings,
+      canViewAudit,
+      canViewAttendance,
+      canViewScheduling,
+    ]
   );
 
   // `?tab=` (the monthly report links here with tab=attendance) picks the first
@@ -336,6 +345,11 @@ const EmployeeProfile = () => {
                         initialFrom={attendanceWindow?.from}
                         initialTo={attendanceWindow?.to}
                       />
+                    </Tab.Pane>
+                  )}
+                  {canViewScheduling && (
+                    <Tab.Pane eventKey="schedule" mountOnEnter>
+                      <EmployeeSchedule employee={current} />
                     </Tab.Pane>
                   )}
                   {canViewAudit && (

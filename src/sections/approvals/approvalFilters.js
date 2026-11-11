@@ -8,6 +8,7 @@
 import {
   APPROVAL_STATUSES,
   INBOX_SORT_KEYS,
+  SUBJECT_TYPES,
 } from "../../redux/actions/approvalsParams.js";
 import {
   MAX_SEARCH,
@@ -18,6 +19,7 @@ import {
 export const defaultApprovalFilters = () => ({
   search: "",
   department_id: "",
+  subject_type: "",
   leave_type_ids: "",
   date_from: "",
   date_to: "",
@@ -64,6 +66,7 @@ export const approvalFiltersFromSearch = (
     if (kept !== "") out[key] = kept;
   };
   pick("department_id", isPositiveId);
+  pick("subject_type", (v) => SUBJECT_TYPES.includes(v));
   pickList("leave_type_ids", isPositiveId);
   pickList("statuses", (v) => APPROVAL_STATUSES.includes(v));
   for (const key of [

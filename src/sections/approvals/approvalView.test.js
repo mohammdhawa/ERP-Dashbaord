@@ -28,6 +28,15 @@ test("subjectPath maps a leave request, and nothing else", () => {
   assert.equal(subjectPath(null), null);
 });
 
+test("subjectPath opens a shift exchange by its approval id", () => {
+  assert.equal(subjectPath({ type: "shift_swap", id: 5 }, 17), "approvals/17");
+  assert.equal(subjectPath({ type: "shift_swap", id: 5 }), null);
+  assert.equal(
+    subjectPath({ type: "leave_request", id: 9 }, 17),
+    "leave/requests/9"
+  );
+});
+
 test("stagesOf groups by step_order ascending; parallel steps share a stage", () => {
   const stages = stagesOf([
     { id: "a", step_order: 2 },

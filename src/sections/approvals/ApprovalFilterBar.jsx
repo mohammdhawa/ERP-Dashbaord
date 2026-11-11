@@ -33,6 +33,12 @@ const STATUS_OPTIONS = [
   { value: "4", label: "مسحوب" },
 ];
 
+// «نوع الطلب»: what the approval is about (subject_type, §15.2).
+const SUBJECT_OPTIONS = [
+  { value: "leave_request", label: "إجازة" },
+  { value: "shift_swap", label: "تبديل مناوبة" },
+];
+
 const csv = (value) =>
   String(value ?? "")
     .split(",")
@@ -179,6 +185,25 @@ const ApprovalFilterBar = ({
               }
             />
           )}
+        </Col>
+
+        <Col sm={6} md={4} lg={3}>
+          <Form.Label htmlFor={id("subject")} className="fs-12 mb-1">
+            نوع الطلب
+          </Form.Label>
+          <Select
+            inputId={id("subject")}
+            classNamePrefix="Select2"
+            options={SUBJECT_OPTIONS}
+            value={
+              SUBJECT_OPTIONS.find((o) => o.value === filters.subject_type) ||
+              null
+            }
+            onChange={(opt) => onChange({ subject_type: opt ? opt.value : "" })}
+            isClearable
+            placeholder="الكل"
+            menuPosition="fixed"
+          />
         </Col>
 
         <Col sm={6} md={4} lg={3}>

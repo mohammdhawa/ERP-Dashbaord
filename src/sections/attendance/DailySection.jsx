@@ -2,6 +2,8 @@ import React from "react";
 import { Card } from "react-bootstrap";
 import { formatAbsolute, parseServerTimestamp } from "../system/auditFormat";
 import { refusedCheckInsLine } from "./rejectionText";
+import { calendarCellTitle } from "../scheduling/shiftDisplay.js";
+import { formatMinutes } from "./minutesText.js";
 
 // One bucket of the daily board (API doc §14.1) as a table. The board is not
 // paged and every bucket is sorted by the server, so this only draws rows and
@@ -145,9 +147,12 @@ const AttendanceTable = ({ bucket, rows, can, undoingId, on }) => (
       <tr>
         <th>الموظف</th>
         <th>القسم</th>
+        <th>الوردية</th>
         <th>الحضور</th>
         <th>الانصراف</th>
         <th>ساعات العمل</th>
+        <th>تأخر</th>
+        <th>انصراف مبكر</th>
         <th>تفاصيل</th>
         <th>إجراءات</th>
       </tr>
@@ -161,6 +166,13 @@ const AttendanceTable = ({ bucket, rows, can, undoingId, on }) => (
               <Employee employee={row.employee} />
             </td>
             <td>{row.department?.name || dash}</td>
+            <td>
+              {row.shift ? (
+                <span title={calendarCellTitle(row.shift)}>{row.shift.code}</span>
+              ) : (
+                dash
+              )}
+            </td>
             <td>
               {time(row.check_in_time)}
               <LocationLink location={row.check_in_location} label="موقع الحضور" />
@@ -176,6 +188,8 @@ const AttendanceTable = ({ bucket, rows, can, undoingId, on }) => (
                 dash
               )}
             </td>
+            <td>{formatMinutes(row.late_minutes)}</td>
+            <td>{formatMinutes(row.early_departure_minutes)}</td>
             <td>
               <Details row={row} />
             </td>

@@ -16,16 +16,30 @@ test("the HR list starts on every status, the inbox has no status at all", () =>
   assert.equal("statuses" in defaultApprovalFilters(), false);
 });
 
+test("subject_type is read back only when valid", () => {
+  const d = defaultApprovalFilters();
+  assert.equal(d.subject_type, "");
+  assert.equal(
+    approvalFiltersFromSearch(from("subject_type=shift_swap"), d).subject_type,
+    "shift_swap"
+  );
+  assert.equal(
+    approvalFiltersFromSearch(from("subject_type=memo"), d).subject_type,
+    ""
+  );
+});
+
 test("a good link is read back whole", () => {
   const f = approvalFiltersFromSearch(
     from(
-      "search=5829746&department_id=3&leave_type_ids=2,5&date_from=2026-06-01&date_to=2026-06-30&submitted_from=2026-05-01&submitted_to=2026-05-31&sort=-employee_name"
+      "search=5829746&department_id=3&leave_type_ids=2,5&date_from=2026-06-01&date_to=2026-06-30&submitted_from=2026-05-01&submitted_to=2026-05-31&sort=-employee_name&subject_type=shift_swap"
     ),
     defaultApprovalFilters()
   );
   assert.deepEqual(f, {
     search: "5829746",
     department_id: "3",
+    subject_type: "shift_swap",
     leave_type_ids: "2,5",
     date_from: "2026-06-01",
     date_to: "2026-06-30",
