@@ -5,9 +5,34 @@ import {
   calendarCellTitle,
   daysText,
   displayPositions,
+  durationFromTimes,
+  endFromDuration,
+  endsNextDay,
   scheduleDayLabel,
   shiftSpan,
 } from "./shiftDisplay.js";
+
+test("a shift's length comes from its start and end, wrapping past midnight", () => {
+  assert.equal(durationFromTimes("09:00", "16:00"), 420);
+  assert.equal(durationFromTimes("22:00", "06:00"), 480);
+  assert.equal(durationFromTimes("08:00", "08:00"), 1440);
+  assert.equal(durationFromTimes("23:30", "00:15"), 45);
+  assert.equal(durationFromTimes("", "06:00"), null);
+  assert.equal(durationFromTimes("9:00", "16:00"), null);
+});
+
+test("the end is the start plus the length", () => {
+  assert.equal(endFromDuration("22:00", 480), "06:00");
+  assert.equal(endFromDuration("09:00", 420), "16:00");
+  assert.equal(endFromDuration("08:00", 1440), "08:00");
+  assert.equal(endFromDuration("", 60), "");
+});
+
+test("an end at or before the start is the next day", () => {
+  assert.equal(endsNextDay("22:00", "06:00"), true);
+  assert.equal(endsNextDay("08:00", "08:00"), true);
+  assert.equal(endsNextDay("09:00", "16:00"), false);
+});
 
 test("shiftSpan shows start and end, flagging the next day", () => {
   assert.equal(shiftSpan({ starts_at: "09:00", duration_minutes: 420, ends_next_day: false }), "09:00 – 16:00");

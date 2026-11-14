@@ -153,6 +153,8 @@ const AttendanceTable = ({ bucket, rows, can, undoingId, on }) => (
         <th>ساعات العمل</th>
         <th>تأخر</th>
         <th>انصراف مبكر</th>
+        <th>عمل إضافي</th>
+        <th>نقص ساعات</th>
         <th>تفاصيل</th>
         <th>إجراءات</th>
       </tr>
@@ -190,6 +192,8 @@ const AttendanceTable = ({ bucket, rows, can, undoingId, on }) => (
             </td>
             <td>{formatMinutes(row.late_minutes)}</td>
             <td>{formatMinutes(row.early_departure_minutes)}</td>
+            <td>{formatMinutes(row.overtime_minutes)}</td>
+            <td>{formatMinutes(row.short_minutes)}</td>
             <td>
               <Details row={row} />
             </td>

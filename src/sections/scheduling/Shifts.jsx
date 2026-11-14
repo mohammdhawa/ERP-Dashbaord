@@ -138,7 +138,12 @@ const Shifts = () => {
                             <td dir="ltr" className="text-end">
                               {shift.code}
                             </td>
-                            <td>{shift.name}</td>
+                            <td>
+                              {shift.name}
+                              {shift.rules?.overtime_enabled && (
+                                <span className="badge bg-info-transparent ms-2">عمل إضافي</span>
+                              )}
+                            </td>
                             <td dir="ltr" className="text-end">
                               {shift.starts_at}
                             </td>
@@ -191,6 +196,7 @@ const Shifts = () => {
           shift={editing}
           onHide={() => setModalOpen(false)}
           onSaved={handleSaved}
+          onRulesChanged={load}
         />
       </Suspense>
     </Fragment>

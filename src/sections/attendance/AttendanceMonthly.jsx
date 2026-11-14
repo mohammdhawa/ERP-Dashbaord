@@ -60,6 +60,11 @@ const COUNT_COLUMNS = [
     plain: true,
     minutes: true,
   },
+  // Per-shift rules (2026-11-11): counted and shown, nothing paid or deducted.
+  { key: "overtime_count", label: "مرات العمل الإضافي", plain: true },
+  { key: "overtime_minutes", label: "دقائق العمل الإضافي", plain: true, minutes: true },
+  { key: "short_count", label: "مرات نقص الساعات", plain: true },
+  { key: "short_minutes", label: "دقائق نقص الساعات", plain: true, minutes: true },
 ];
 
 const countCell = (c, source, fallback) =>

@@ -6,7 +6,77 @@ import {
   toShiftChangeBody,
   toAssignmentBody,
   toBulkBody,
+  toRulesBody,
+  rulesFormFrom,
+  rulesProblem,
 } from "./schedulingPayload.js";
+
+test("a cleared rule field is a problem, never a silent 0", () => {
+  const full = rulesFormFrom(null);
+  assert.equal(rulesProblem(full), null);
+  assert.equal(rulesProblem({ ...full, check_in_opens_minutes: "" }), "أكمل قواعد الوردية.");
+  assert.equal(rulesProblem({ ...full, late_grace_minutes: "  " }), "أكمل قواعد الوردية.");
+  assert.equal(rulesProblem({ ...full, check_in_opens_minutes: "0" }), null, "0 typed on purpose is fine");
+  assert.equal(rulesProblem({ ...full, overtime_enabled: true, overtime_min_minutes: "" }), "أكمل قواعد الوردية.");
+  assert.equal(rulesProblem({ ...full, overtime_enabled: false, overtime_min_minutes: "" }), null, "unused while overtime is off");
+  assert.equal(rulesProblem({ ...full, required_hours: "", required_mins: "" }), null, "blank required = the whole shift");
+});
+
+test("the rules body is numbers and a boolean, required hours in minutes", () => {
+  const body = toRulesBody(
+    {
+      late_grace_minutes: "5",
+      early_leave_grace_minutes: "20",
+      check_in_opens_minutes: "30",
+      check_out_closes_minutes: "120",
+      overtime_enabled: true,
+      overtime_min_minutes: "30",
+      required_hours: "6",
+      required_mins: "30",
+    },
+    420
+  );
+  assert.deepEqual(body, {
+    late_grace_minutes: 5,
+    early_leave_grace_minutes: 20,
+    check_in_opens_minutes: 30,
+    check_out_closes_minutes: 120,
+    overtime_enabled: true,
+    overtime_min_minutes: 30,
+    required_minutes: 390,
+  });
+});
+
+test("blank required hours mean the whole shift", () => {
+  const body = toRulesBody({ ...rulesFormFrom(null), required_hours: "", required_mins: "" }, 480);
+  assert.equal(body.required_minutes, 480);
+  assert.equal(body.overtime_enabled, false);
+});
+
+test("the rules form starts from the given rules, or the defaults", () => {
+  assert.deepEqual(rulesFormFrom(null), {
+    late_grace_minutes: "15",
+    early_leave_grace_minutes: "15",
+    check_in_opens_minutes: "60",
+    check_out_closes_minutes: "240",
+    overtime_enabled: false,
+    overtime_min_minutes: "0",
+    required_hours: "",
+    required_mins: "",
+  });
+  const form = rulesFormFrom({
+    late_grace_minutes: 5,
+    early_leave_grace_minutes: 20,
+    check_in_opens_minutes: 30,
+    check_out_closes_minutes: 120,
+    overtime_enabled: true,
+    overtime_min_minutes: 30,
+    required_minutes: 390,
+  });
+  assert.equal(form.required_hours, "6");
+  assert.equal(form.required_mins, "30");
+  assert.equal(form.overtime_enabled, true);
+});
 
 const shiftForm = {
   code: " NIGHT ",

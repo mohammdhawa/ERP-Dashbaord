@@ -13,6 +13,31 @@ export const shiftSpan = ({ starts_at, duration_minutes, ends_next_day }) => {
   return ends_next_day ? `${span} (اليوم التالي)` : span;
 };
 
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const toMinutes = (hhmm) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
+
+// A shift's length from its start and end (per-shift rules spec §5.2): an end
+// at or before the start is the next day; equal start and end is 24 hours.
+// null until both are "HH:MM".
+export const durationFromTimes = (start, end) => {
+  if (!TIME.test(start ?? "") || !TIME.test(end ?? "")) return null;
+  const diff = toMinutes(end) - toMinutes(start);
+  return diff > 0 ? diff : diff + 1440;
+};
+
+// The end clock time of a shift of `minutes` from `start`; "" without a start.
+export const endFromDuration = (start, minutes) => {
+  if (!TIME.test(start ?? "")) return "";
+  const end = (toMinutes(start) + Number(minutes)) % 1440;
+  return `${pad(Math.floor(end / 60))}:${pad(end % 60)}`;
+};
+
+export const endsNextDay = (start, end) =>
+  TIME.test(start ?? "") && TIME.test(end ?? "") && toMinutes(end) <= toMinutes(start);
+
 export const displayPositions = (kind, cycleDays) =>
   kind === 1 ? [...WEEK_ORDER] : Array.from({ length: cycleDays }, (_, i) => i);
 

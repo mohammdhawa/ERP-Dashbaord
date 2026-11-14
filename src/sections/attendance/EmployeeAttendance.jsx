@@ -392,6 +392,8 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                         />
                         <th scope="col">تأخر</th>
                         <th scope="col">انصراف مبكر</th>
+                        <th scope="col">عمل إضافي</th>
+                        <th scope="col">نقص ساعات</th>
                         <th scope="col">تفاصيل</th>
                         <th scope="col">إجراءات</th>
                       </tr>
@@ -439,6 +441,8 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                             </td>
                             <td>{formatMinutes(d.late_minutes)}</td>
                             <td>{formatMinutes(d.early_departure_minutes)}</td>
+                            <td>{formatMinutes(d.overtime_minutes)}</td>
+                            <td>{formatMinutes(d.short_minutes)}</td>
                             <td>
                               <Details day={d} />
                             </td>

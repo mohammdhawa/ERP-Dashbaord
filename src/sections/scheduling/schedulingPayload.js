@@ -93,3 +93,67 @@ export const toBulkBody = ({
   if (!employeeIds || employeeIds.length === 0) return null;
   return { ...body, employee_ids: employeeIds };
 };
+
+// A shift's rules (per-shift rules spec §2.1, §5.1). The form holds strings;
+// required hours are entered as hours and minutes.
+export const RULE_DEFAULTS = Object.freeze({
+  late_grace_minutes: 15,
+  early_leave_grace_minutes: 15,
+  check_in_opens_minutes: 60,
+  check_out_closes_minutes: 240,
+  overtime_enabled: false,
+  overtime_min_minutes: 0,
+});
+
+// The rules form from a rules object (the one in force), or the defaults with
+// required hours blank (= the whole shift).
+export const rulesFormFrom = (rules) => {
+  const source = rules ?? RULE_DEFAULTS;
+  const required = rules?.required_minutes;
+  return {
+    late_grace_minutes: String(source.late_grace_minutes),
+    early_leave_grace_minutes: String(source.early_leave_grace_minutes),
+    check_in_opens_minutes: String(source.check_in_opens_minutes),
+    check_out_closes_minutes: String(source.check_out_closes_minutes),
+    overtime_enabled: Boolean(source.overtime_enabled),
+    overtime_min_minutes: String(source.overtime_min_minutes),
+    required_hours: required == null ? "" : String(Math.floor(required / 60)),
+    required_mins: required == null ? "" : String(required % 60),
+  };
+};
+
+// The seven rule fields for the API. Blank required hours mean the whole
+// shift (`lengthMinutes`), the server's own default for a first version.
+export const toRulesBody = (form, lengthMinutes) => {
+  const blank = String(form.required_hours ?? "").trim() === "" && String(form.required_mins ?? "").trim() === "";
+  return {
+    late_grace_minutes: Number(form.late_grace_minutes),
+    early_leave_grace_minutes: Number(form.early_leave_grace_minutes),
+    check_in_opens_minutes: Number(form.check_in_opens_minutes),
+    check_out_closes_minutes: Number(form.check_out_closes_minutes),
+    overtime_enabled: Boolean(form.overtime_enabled),
+    overtime_min_minutes: Number(form.overtime_min_minutes),
+    required_minutes: blank
+      ? Number(lengthMinutes)
+      : Number(form.required_hours || 0) * 60 + Number(form.required_mins || 0),
+  };
+};
+
+const RULE_NUMBER_FIELDS = [
+  "late_grace_minutes",
+  "early_leave_grace_minutes",
+  "check_in_opens_minutes",
+  "check_out_closes_minutes",
+];
+
+// A cleared rule field must not reach the API as 0 (final review): every
+// window and grace needs a value — 0 typed on purpose is a value — and the
+// overtime minimum does while overtime is on. Blank required hours are fine:
+// they mean the whole shift.
+export const rulesProblem = (form) => {
+  const blank = (key) => String(form[key] ?? "").trim() === "";
+  if (RULE_NUMBER_FIELDS.some(blank) || (form.overtime_enabled && blank("overtime_min_minutes"))) {
+    return "أكمل قواعد الوردية.";
+  }
+  return null;
+};
