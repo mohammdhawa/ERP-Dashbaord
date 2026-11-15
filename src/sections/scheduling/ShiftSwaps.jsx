@@ -22,7 +22,6 @@ import { formatAbsolute } from "../system/auditFormat";
 import {
   SWAP_STATUS_OPTIONS,
   defaultSwapFilters,
-  dutySpanText,
   swapFiltersFromSearch,
   swapWindowProblem,
   toSwapParams,
@@ -44,27 +43,42 @@ const STATUS_BADGE = {
   5: "bg-dark-transparent",
 };
 
-const dutyCell = (duty) =>
-  duty?.date ? (
-    <>
-      <div dir="ltr" className="text-end">
-        {duty.date}
-      </div>
-      {duty.starts_at && (
-        <div className="text-muted fs-12" dir="ltr">
-          {dutySpanText(duty.starts_at, duty.ends_at)}
+const buildColumns = (openSwap) => [
+  {
+    key: "requester",
+    label: "مقدّم الطلب",
+    render: (p) => p ? (
+      <>
+        <div>{p.name}</div>
+        {p.employee_number && (
+          <small className="text-muted" dir="ltr">{p.employee_number}</small>
+        )}
+      </>
+    ) : dash,
+  },
+  {
+    key: "id",
+    label: "الطلب",
+    render: (_id, row) => (
+      <>
+        <div>
+          <button
+            type="button"
+            className="btn btn-link p-0 text-decoration-none text-reset fw-semibold"
+            onClick={() => openSwap(row)}
+          >
+            تبديل مناوبة
+          </button>
         </div>
-      )}
-    </>
-  ) : (
-    dash
-  );
-
-const columns = [
-  { key: "requester", label: "مقدّم الطلب", render: (p) => p?.name || dash },
-  { key: "partner", label: "الزميل", render: (p) => p?.name || dash },
-  { key: "requester_duty", label: "مناوبته", nowrap: true, render: dutyCell },
-  { key: "partner_duty", label: "مناوبة الزميل", nowrap: true, render: dutyCell },
+        <small className="text-muted">
+          {row.requester?.name || "—"} ↔ {row.partner?.name || "—"}
+          {row.requester_duty?.date && row.partner_duty?.date && (
+            <> · <span dir="ltr">{row.requester_duty.date} ⇄ {row.partner_duty.date}</span></>
+          )}
+        </small>
+      </>
+    ),
+  },
   {
     key: "status_label",
     label: "الحالة",
@@ -266,7 +280,7 @@ const ShiftSwaps = () => {
               )}
 
               <DataTableServer
-                columns={columns}
+                columns={buildColumns(openSwap)}
                 data={rows}
                 loading={loading}
                 error={error}
