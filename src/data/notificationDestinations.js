@@ -30,10 +30,19 @@
 const toLeaveRequest = ({ reference }) =>
   reference?.type === "leave_request" && reference.id ? `leave/requests/${reference.id}` : null;
 
+// An approval step on an exchange opens the inbox filtered to exchanges: the
+// notification carries the exchange's id, not the approval's, so the approver
+// picks the row from the list. A leave reference still opens its own screen.
+const toApprovalTarget = (notification) =>
+  toLeaveRequest(notification) ??
+  (notification.reference?.type === "shift_swap"
+    ? "approvals?subject_type=shift_swap"
+    : null);
+
 // type -> ({ reference }) => path | null. See API_DOCUMENTATION.md §6 "What a tap opens".
 const BY_TYPE = Object.freeze({
-  "approval.step_pending": toLeaveRequest,
-  "approval.step_assigned": toLeaveRequest,
+  "approval.step_pending": toApprovalTarget,
+  "approval.step_assigned": toApprovalTarget,
   "leave.submitted": toLeaveRequest,
   "leave.approved": toLeaveRequest,
   "leave.rejected": toLeaveRequest,

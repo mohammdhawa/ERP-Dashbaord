@@ -12,7 +12,9 @@ test("auth.roles.assign is in the catalogue with the server's label", () => {
   // role matrix could not grant it, and the assign card would be unreachable.
   assert.ok(ALL_PERMISSION_NAMES.includes("auth.roles.assign"));
   assert.equal(permissionLabel("auth.roles.assign"), "إسناد الأدوار للمستخدمين");
-  assert.equal(ALL_PERMISSION_NAMES.length, 46);
+  assert.equal(ALL_PERMISSION_NAMES.length, 48);
+  assert.equal(permissionLabel("scheduling.view"), "عرض الورديات والجداول");
+  assert.equal(permissionLabel("scheduling.manage"), "إدارة الورديات والجداول");
 });
 
 test("the attendance, approvals and leave permissions are in the catalogue with their labels", () => {
@@ -73,6 +75,8 @@ test("the company-only set matches the server's, written out in full", () => {
     "leave.types.create",
     "leave.types.delete",
     "leave.types.update",
+    "scheduling.manage",
+    "scheduling.view",
   ]);
 });
 

@@ -108,7 +108,7 @@ Authentication uses **Laravel Sanctum bearer tokens** with a custom refresh‑to
   access tokens are configured never to expire.
 - **Refresh token** lifetime: **30 days**, single‑use (rotated on every refresh).
 - On `401 Unauthorized`, call `POST /api/auth/refresh` with the refresh token to obtain a new pair, then retry the original request.
-- Tokens are per‑user and replace each other: logging in (or refreshing) **deletes the previous access token**, so a user effectively holds one active access token at a time.
+- Tokens are per‑session: each sign‑in starts a **session** (§3.6) with its own access and refresh token, so a user holds one active access token per signed‑in device. Logging in leaves the user's other sessions untouched; refreshing **deletes only that session's previous access token**.
 
 **Recommended client storage**
 

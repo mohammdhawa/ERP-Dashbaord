@@ -52,7 +52,7 @@ const time = (value) =>
   value ? <span dir="ltr">{formatAbsolute(value)}</span> : dash;
 
 const rowTarget = (row) => {
-  const path = subjectPath(row.subject);
+  const path = subjectPath(row.subject, row.id);
   return path ? `${import.meta.env.BASE_URL}${path}` : null;
 };
 

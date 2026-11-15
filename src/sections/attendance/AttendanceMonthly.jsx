@@ -19,6 +19,7 @@ import { hasPermission } from "../../data/permissionsCatalog";
 import { parseApiError } from "../../utils/apiHelpers";
 import { toastNotify } from "../../utils";
 import CountedNote from "./CountedNote";
+import { formatMinutes } from "./minutesText.js";
 import MonthlyFilterBar from "./MonthlyFilterBar";
 import {
   defaultMonthlyFilters,
@@ -48,7 +49,26 @@ const COUNT_COLUMNS = [
   { key: "absent_days", label: "غياب" },
   { key: "rejected_days", label: "مرفوض" },
   { key: "missing_checkouts", label: "انصراف مفقود" },
+  // Since the work-shifts contract (API doc §14): the server does not sort by
+  // these, so their headers are plain. `minutes` cells read as hours and minutes.
+  { key: "late_count", label: "مرات التأخر", plain: true },
+  { key: "late_minutes", label: "دقائق التأخر", plain: true, minutes: true },
+  { key: "early_departure_count", label: "مرات الانصراف المبكر", plain: true },
+  {
+    key: "early_departure_minutes",
+    label: "دقائق الانصراف المبكر",
+    plain: true,
+    minutes: true,
+  },
+  // Per-shift rules (2026-11-11): counted and shown, nothing paid or deducted.
+  { key: "overtime_count", label: "مرات العمل الإضافي", plain: true },
+  { key: "overtime_minutes", label: "دقائق العمل الإضافي", plain: true, minutes: true },
+  { key: "short_count", label: "مرات نقص الساعات", plain: true },
+  { key: "short_minutes", label: "دقائق نقص الساعات", plain: true, minutes: true },
 ];
+
+const countCell = (c, source, fallback) =>
+  c.minutes ? formatMinutes(source[c.key]) : source[c.key] ?? fallback;
 
 const AttendanceMonthly = () => {
   const { permissions } = useSelector((state) => state.auth);
@@ -239,7 +259,12 @@ const AttendanceMonthly = () => {
                         <tr>
                           <SortableTh sortKey="employee_name" label="الموظف" {...headerProps} />
                           <SortableTh sortKey="department" label="القسم" {...headerProps} />
-                          {COUNT_COLUMNS.map((c) => (
+                          {COUNT_COLUMNS.map((c) =>
+                            c.plain ? (
+                              <th key={c.key} scope="col" className="text-center">
+                                {c.label}
+                              </th>
+                            ) : (
                             <SortableTh
                               key={c.key}
                               sortKey={c.key}
@@ -247,7 +272,8 @@ const AttendanceMonthly = () => {
                               className="text-center"
                               {...headerProps}
                             />
-                          ))}
+                            )
+                          )}
                           <SortableTh
                             sortKey="total_work_hours"
                             label="ساعات العمل"
@@ -292,7 +318,7 @@ const AttendanceMonthly = () => {
                             <td>{row.department?.name || "—"}</td>
                             {COUNT_COLUMNS.map((c) => (
                               <td key={c.key} className="text-center">
-                                {row[c.key]}
+                                {countCell(c, row)}
                               </td>
                             ))}
                             <td className="text-center">
@@ -311,7 +337,7 @@ const AttendanceMonthly = () => {
                           <td colSpan={2}>الإجمالي ({totals.employees ?? rows.length} موظف)</td>
                           {COUNT_COLUMNS.map((c) => (
                             <td key={c.key} className="text-center">
-                              {totals[c.key] ?? 0}
+                              {countCell(c, totals, 0)}
                             </td>
                           ))}
                           <td className="text-center">

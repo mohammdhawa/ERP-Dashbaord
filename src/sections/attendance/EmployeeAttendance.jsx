@@ -15,6 +15,8 @@ import { formatAbsolute } from "../system/auditFormat";
 import CorrectCheckoutModal from "./actions/CorrectCheckoutModal";
 import CountedNote from "./CountedNote";
 import { refusedCheckInsLine } from "./rejectionText";
+import { calendarCellTitle } from "../scheduling/shiftDisplay.js";
+import { formatMinutes } from "./minutesText.js";
 import { todayInDamascus } from "./recordFilters";
 import ExcuseFormModal from "../leave/actions/ExcuseFormModal";
 import UndoExcuseModal from "../leave/actions/UndoExcuseModal";
@@ -380,6 +382,7 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                       <tr>
                         <SortableTh sortKey="date" label="اليوم" {...headerProps} />
                         <SortableTh sortKey="status" label="الحالة" {...headerProps} />
+                        <th scope="col">الوردية</th>
                         <th scope="col">الحضور</th>
                         <th scope="col">الانصراف</th>
                         <SortableTh
@@ -387,6 +390,10 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                           label="ساعات العمل"
                           {...headerProps}
                         />
+                        <th scope="col">تأخر</th>
+                        <th scope="col">انصراف مبكر</th>
+                        <th scope="col">عمل إضافي</th>
+                        <th scope="col">نقص ساعات</th>
                         <th scope="col">تفاصيل</th>
                         <th scope="col">إجراءات</th>
                       </tr>
@@ -416,6 +423,13 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                                 <div className="text-muted fs-12">{d.leave_type}</div>
                               )}
                             </td>
+                            <td>
+                              {d.shift ? (
+                                <span title={calendarCellTitle(d.shift)}>{d.shift.code}</span>
+                              ) : (
+                                dash
+                              )}
+                            </td>
                             <td>{time(d.check_in_time)}</td>
                             <td>{time(d.check_out_time)}</td>
                             <td>
@@ -425,6 +439,10 @@ const EmployeeAttendance = ({ employee, initialFrom, initialTo }) => {
                                 dash
                               )}
                             </td>
+                            <td>{formatMinutes(d.late_minutes)}</td>
+                            <td>{formatMinutes(d.early_departure_minutes)}</td>
+                            <td>{formatMinutes(d.overtime_minutes)}</td>
+                            <td>{formatMinutes(d.short_minutes)}</td>
                             <td>
                               <Details day={d} />
                             </td>

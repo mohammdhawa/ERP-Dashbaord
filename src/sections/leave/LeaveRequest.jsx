@@ -16,10 +16,12 @@ import ReassignModal from "../approvals/ReassignModal";
 import ReturnToWorkModal from "./actions/ReturnToWorkModal";
 import UndoExcuseModal from "./actions/UndoExcuseModal";
 import {
+  approverBalanceView,
   cancellationView,
   leaveActions,
   reassignableSteps,
   refreshAfterRefusal,
+  requesterRoleLine,
 } from "../approvals/approvalView";
 
 // طلب الإجازة — one screen for the approver, the requester and HR (API doc
@@ -237,6 +239,11 @@ const LeaveRequest = () => {
   // the answer, so the panel shows the message alone.
   const canRetry = error && error.status !== 403 && error.status !== 404;
 
+  // approver_view (API doc §16.4) reaches only someone on the chain: the job,
+  // the unit and the balance an approver decides on.
+  const roleLine = requesterRoleLine(leave?.approver_view);
+  const balance = approverBalanceView(leave?.approver_view);
+
   const hasActions =
     actions.act ||
     actions.reassign ||
@@ -283,6 +290,9 @@ const LeaveRequest = () => {
                           </small>
                         )}
                       </h5>
+                      {roleLine && (
+                        <div className="text-muted fs-12 mb-1">{roleLine}</div>
+                      )}
                       <div className="text-muted">
                         {leave.leave_type?.name_ar || dash}
                       </div>
@@ -410,6 +420,13 @@ const LeaveRequest = () => {
                       <Field label="عدد الأيام">
                         {leave.requested_days ?? dash}
                       </Field>
+                      {balance && (
+                        <Field label="الرصيد">
+                          <span className={balance.over ? "text-danger" : undefined}>
+                            {balance.text}
+                          </span>
+                        </Field>
+                      )}
                       <LongField label="السبب">{leave.reason || dash}</LongField>
 
                       {leave.decided_at && (

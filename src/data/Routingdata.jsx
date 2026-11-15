@@ -36,6 +36,9 @@ const ApprovalsInbox = lazy(() =>
 );
 const ApprovalsList = lazy(() => import("../sections/approvals/ApprovalsList"));
 const LeaveRequest = lazy(() => import("../sections/leave/LeaveRequest"));
+const ApprovalRequest = lazy(() =>
+  import("../sections/approvals/ApprovalRequest")
+);
 const LeaveTypes = lazy(() => import("../sections/leave/LeaveTypes"));
 const LeaveBalances = lazy(() => import("../sections/leave/LeaveBalances"));
 const LeaveRegister = lazy(() => import("../sections/leave/LeaveRegister"));
@@ -51,6 +54,12 @@ const AttendanceMonthly = lazy(() =>
 );
 const AbsentToday = lazy(() => import("../sections/attendance/AbsentToday"));
 const OnLeaveToday = lazy(() => import("../sections/attendance/OnLeaveToday"));
+const Shifts = lazy(() => import("../sections/scheduling/Shifts"));
+const Schedules = lazy(() => import("../sections/scheduling/Schedules"));
+const ScheduleCalendar = lazy(() =>
+  import("../sections/scheduling/ScheduleCalendar")
+);
+const ShiftSwaps = lazy(() => import("../sections/scheduling/ShiftSwaps"));
 
 // Route-level gating uses the permission strings from the catalogue;
 // ProtectedRoute passes when ANY of the listed permissions is held
@@ -209,5 +218,38 @@ export const RouteData = [
     path: `${import.meta.env.BASE_URL}hr/employees/import`,
     element: <EmployeeImport />,
     requiredPermissions: ["hr.employees.import"],
+  },
+  {
+    id: 24,
+    path: `${import.meta.env.BASE_URL}scheduling/shifts`,
+    element: <Shifts />,
+    requiredPermissions: ["scheduling.view"],
+  },
+  {
+    id: 25,
+    path: `${import.meta.env.BASE_URL}scheduling/schedules`,
+    element: <Schedules />,
+    requiredPermissions: ["scheduling.view"],
+  },
+  {
+    id: 26,
+    path: `${import.meta.env.BASE_URL}scheduling/calendar`,
+    element: <ScheduleCalendar />,
+    requiredPermissions: ["scheduling.view"],
+  },
+  {
+    id: 27,
+    path: `${import.meta.env.BASE_URL}scheduling/swaps`,
+    element: <ShiftSwaps />,
+    requiredPermissions: ["scheduling.view"],
+  },
+  {
+    id: 28,
+    // `approvals/all` stays its own static route: react-router ranks it above
+    // this dynamic one.
+    path: `${import.meta.env.BASE_URL}approvals/:id`,
+    element: <ApprovalRequest />,
+    // The server decides who may read it (on the chain, or approvals.view).
+    requiredPermissions: [],
   },
 ];

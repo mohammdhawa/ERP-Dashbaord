@@ -9,6 +9,18 @@ import {
   buildInboxParams,
 } from "./approvalsParams.js";
 
+test("buildInboxParams sends a valid subject_type and drops an unknown one", () => {
+  assert.equal(
+    buildInboxParams("pending", 1, 15, { subject_type: "shift_swap" })
+      .subject_type,
+    "shift_swap"
+  );
+  assert.equal(
+    "subject_type" in buildInboxParams("pending", 1, 15, { subject_type: "x" }),
+    false
+  );
+});
+
 test("the inbox has exactly two tabs", () => {
   assert.deepEqual(INBOX_TABS, ["pending", "decided"]);
 });

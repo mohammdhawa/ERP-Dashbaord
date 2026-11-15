@@ -51,7 +51,7 @@ const dash = <span className="text-muted">—</span>;
 // Where a row goes, as a full router path — or null when the subject has no
 // screen in this dashboard (anything but a leave request, today).
 const rowTarget = (row) => {
-  const path = subjectPath(row.subject);
+  const path = subjectPath(row.subject, row.approval_id);
   return path ? `${import.meta.env.BASE_URL}${path}` : null;
 };
 
